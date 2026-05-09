@@ -189,10 +189,17 @@ export class NavigationPanel {
     this.render(doc);
   }
 
-  /** Sync the collapsed set to the current maxLevel: every parent at
-   *  level ≥ maxLevel is collapsed, every shallower parent is expanded. */
-  private applyMaxLevelToCollapseState(): void {
+  /** Sync the collapsed set to a maxLevel: every parent at level ≥ N
+   *  is collapsed, every shallower parent is expanded.
+   *
+   *  When called with no argument, uses the current setting. When called
+   *  with an explicit level, uses that — needed by `setMaxLevel`, which
+   *  must update collapsed state for the new level *before* the settings
+   *  store change fires the render-on-subscribe.
+   */
+  private applyMaxLevelToCollapseState(level?: number): void {
     if (!this.currentDoc) return;
+    const maxLevel = level ?? this.maxLevel;
     const entries = collectHeadings(this.currentDoc);
     this.collapsed = new Set();
     for (let i = 0; i < entries.length; i++) {
@@ -201,7 +208,7 @@ export class NavigationPanel {
       const next = entries[i + 1];
       const hasChildren = next != null && next.level > entry.level;
       if (!hasChildren) continue;
-      if (entry.level >= this.maxLevel) {
+      if (entry.level >= maxLevel) {
         this.collapsed.add(entry.id);
       }
     }
@@ -304,9 +311,12 @@ export class NavigationPanel {
    */
   private setMaxLevel(level: number): void {
     if (level < 1 || level > 4) return;
+    // Order matters: update the collapsed state for the NEW level before
+    // writing to the settings store. The settings subscriber fires
+    // synchronously and triggers render — so collapsed needs to be
+    // up-to-date before that render happens.
+    this.applyMaxLevelToCollapseState(level);
     settings.set('navMaxLevel', level);
-    this.applyMaxLevelToCollapseState();
-    // updateLevelButtonsActive + render fire from the settings subscriber.
   }
 
   private updateLevelButtonsActive(): void {

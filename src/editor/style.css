@@ -12,7 +12,7 @@
 body {
   font-family: 'Calibri', 'Helvetica Neue', sans-serif;
   margin: 0;
-  background: #f3f3f3;
+  background: #fff;
   color: #222;
 }
 
@@ -25,31 +25,35 @@ body {
 }
 #app {
   margin-left: var(--nav-width);
-  padding: 1.5rem;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 header {
-  background: #fff;
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  background: #fafafa;
+  border-bottom: 1px solid #d0d0d0;
+  padding: 0.5rem 0.75rem;
+  flex: 0 0 auto;
 }
 
 header h1 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.2rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: inline-block;
+  margin-right: 0.75rem;
 }
 
 header p {
-  margin: 0.25rem 0;
-  font-size: 0.9rem;
-  color: #555;
+  margin: 0;
+  font-size: 0.8rem;
+  color: #666;
+  display: inline;
 }
 
 .hint {
-  font-size: 0.85rem;
+  display: none; /* dev hint; not worth the vertical space */
 }
 
 code {
@@ -60,19 +64,20 @@ code {
 }
 
 .controls {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-left: 0.75rem;
   align-items: center;
+  vertical-align: middle;
 }
 
 #settings-btn {
   background: #fff;
   border: 1px solid #c8c8c8;
   border-radius: 4px;
-  width: 2rem;
-  height: 2rem;
-  font-size: 1rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.9rem;
   cursor: pointer;
   padding: 0;
   line-height: 1;
@@ -84,10 +89,9 @@ code {
 
 #editor {
   background: #fff;
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
+  flex: 1 1 auto;
   min-height: 400px;
-  padding: 2rem;
+  padding: 0.75rem 1.25rem;
   font-family: 'Calibri', sans-serif;
   font-size: 11pt;
   line-height: 1.4;
