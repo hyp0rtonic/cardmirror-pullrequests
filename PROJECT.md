@@ -1,0 +1,105 @@
+# prosemirror-debate
+
+A ProseMirror-based text editor for competitive debate, designed to
+interoperate with **Advanced Verbatim** — the project owner's forked build
+of [Verbatim](https://github.com/ashtarcommunications/verbatim), the de facto
+Microsoft Word add-in used by US policy/LD/PF debaters.
+
+## Objectives
+
+1. **Edit Verbatim/Advanced-Verbatim documents** in a ProseMirror-based
+   editor that ships as both a desktop app (primary, offline-first) and a
+   web app (collaboration + accessibility for users without full
+   desktop machines).
+2. **Round-trip with full fidelity to Verbatim's semantics.** The
+   fungibility goal: a user of our editor on a Verbatim-using team is a
+   fully equal participant in the file ecosystem. Documents shipped from
+   our editor are visually and semantically indistinguishable from
+   Verbatim-produced docs to anyone receiving them. Aggressive cleanup of
+   non-Verbatim cruft on import is fine; losing anything Verbatim or
+   Advanced Verbatim treats as semantic is not.
+3. **Replicate a useful subset of Verbatim's functionality** — and where
+   possible, supersede it. Many of the user's existing companion tools
+   (Block Search, Fast Debate Paste, AI cites/quals) exist to work around
+   Word's limitations and naturally become editor features here.
+
+## Repo layout
+
+- `PROJECT.md` (this file) — project index and high-level orientation.
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — editor design decisions:
+  schema shape, three-layer rendering model, multi-doc workspace, read
+  mode, send-to-speech, search, transclusion, integration boundaries.
+- [`NOTES-verbatim.md`](./NOTES-verbatim.md) — Verbatim's data model,
+  style mechanics, real-world observations from working documents, and
+  the round-trip contract specifics.
+- [`NOTES-custom-macros.md`](./NOTES-custom-macros.md) — Advanced
+  Verbatim's custom macros, effect-level. What features the editor
+  needs to replicate (or supersede).
+- `reference-docs/verbatim/` — upstream clone of stock Verbatim, read-only.
+- `reference-docs/Debate.dotm` — the canonical Advanced Verbatim
+  template. Source of truth for `Analytic` / `Undertag` style specs.
+- `reference-docs/Custom-Verbatim-Styles-and-Macros/` — Advanced Verbatim
+  custom macro `.txt` exports.
+- `reference-docs/example docs/` — three real working documents from
+  the project owner (one Aff, one DA, one CP). Used to sanity-check the
+  schema and round-trip against actual practice rather than theory.
+
+## Reading order for a new contributor
+
+1. This file for orientation.
+2. `ARCHITECTURE.md` for design decisions.
+3. `NOTES-verbatim.md` for the docx data model.
+4. `NOTES-custom-macros.md` for the bucket-3 feature inventory.
+
+## Headline design decisions
+
+These are the load-bearing choices. Full reasoning lives in the
+referenced files.
+
+- **Typed-tree schema with cards as real nodes** (not emergent from
+  paragraph styles). Pocket > Hat > Block > Tag/Card is a real tree.
+  Card-as-object operations (select, move, query, drag) fall out for
+  free. — `ARCHITECTURE.md` §1.
+- **Top-level is a sequence, Pocket is optional.** Real `.docx` files
+  contain multiple "files" separated by empty Heading1s; some single
+  "files" omit Heading1 entirely. The schema embraces this. —
+  `ARCHITECTURE.md` §4.
+- **Scratchpad as escape hatch** for messy reality, with auto-quarantine
+  on import for regions that fail strict validation. —
+  `ARCHITECTURE.md` §4.
+- **Three-layer rendering**: schema (structure) ↔ display config (per-user
+  preferences, never touch docs) ↔ direct formatting (normal editing op,
+  ships with the doc). Decouples "how I want to see Tags" from "how Tags
+  render for everyone." — `ARCHITECTURE.md` §5.
+- **Web + desktop with shared core.** Desktop is the tournament-day
+  surface; web is for collaboration and accessibility. — `ARCHITECTURE.md`
+  §6.
+- **Multi-doc workspace is foundational, not retrofitted.** Required by
+  send-to-speech, search results, drag-between-panes, transclusion. —
+  `ARCHITECTURE.md` §7.
+- **Editor UI surfaces** — pageless web-view as default, Word-style
+  navigation panel for outline manipulation, faithful render fixtures
+  for Pocket/Emphasis boxes. — `ARCHITECTURE.md` §8.
+- **Read mode as a first-class peer to edit mode.** The reading surface
+  at the podium matters as much as the editing surface; ironclad against
+  accidental input. — `ARCHITECTURE.md` §9.
+- **Send-to-speech is the most architecturally demanding feature** and
+  drives the workspace + read-mode + cross-doc-coordinator foundation. —
+  `ARCHITECTURE.md` §10.
+- **Round-trip is the dominant correctness criterion.** Schema, importer,
+  and exporter are one tightly-coupled project. The Stylepox normalizer
+  is genuinely separable (and the user already maintains a working
+  version). — `ARCHITECTURE.md` §2-3.
+
+## Open questions deliberately deferred
+
+- Choice of editor framework wrapper (raw ProseMirror vs TipTap vs
+  others). Decide when we start writing code.
+- Choice of desktop framework (Tauri vs Electron). Decide when we start
+  writing code.
+- File storage model for the web edition (File System Access API vs
+  cloud-backed). Decide when web edition design firms up.
+- Pilcrow round-trip strategy. Slot exists; can stub until a real doc
+  with pilcrows shows up.
+- Real-time collab (transclusion option 1) infrastructure. Defer to
+  v2+; v1 ships option 3 (refresh on demand).

@@ -1,0 +1,26 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Node / future build artifacts (placeholders for when we have code)
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+*.log
+.env
+.env.local
+
+# Word lock files (when example docs are open in Word)
+~$*.docx
+~$*.dotm
+
+# Local extracted-template scratch (we extract Debate.dotm to /tmp/, but
+# guard against accidental in-repo extraction)
+/_extracted/
