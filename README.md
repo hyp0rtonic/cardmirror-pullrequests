@@ -40,7 +40,7 @@ npm run round-trip path/to/input.docx [path/to/output.docx]
 
 The output is fully native to Verbatim — same canonical style ids, same
 direct-formatting conventions. Stylepox and other non-Verbatim cruft is
-dropped on import (per [`ARCHITECTURE.md §3, §15`](./ARCHITECTURE.md)).
+dropped on import (per [`ARCHITECTURE.md §3, §16`](./ARCHITECTURE.md)).
 
 ## Public API
 

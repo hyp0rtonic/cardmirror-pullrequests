@@ -631,7 +631,132 @@ doc. Cross-doc drops respect the destination schema.
 Performance consideration for very long docs (1000+ cards): only
 compute drop targets near the drop point, not across the whole tree.
 
-## 14. Companion-tool integration boundaries
+## 14. Editing semantics (card-aware editing behavior)
+
+The schema (§4) gives us strong structural guarantees: a card has a
+required tag, undertags belong to the tag they follow, an analytic_unit
+has an analytic at its root, etc. Word doesn't enforce any of this —
+its editing model is "every paragraph is independent; styles are just
+labels." Most of the time the user's editing actions (Backspace, Enter,
+Delete, type-text, paste, drag) are unambiguous, but at node boundaries
+Word's loose semantics and our typed schema disagree. This section is
+the catalog of those disagreements and the rules we pick.
+
+The general design tension: **Word's behavior is what users have
+muscle memory for**, but it can produce schema-invalid intermediate
+states (a card with no tag, an undertag outside a card, a Heading-3
+that turns into a body paragraph mid-keystroke). We pick a rule per
+interaction; the editor enforces it via ProseMirror commands and
+keymap overrides. Where in doubt, prefer the rule that matches the
+*user's likely intent* over the rule that matches Word.
+
+This section is the source of truth for those rules. Decided rules
+live here; rationale (one-liners) goes to `DECISIONS.md` with a back-
+reference. Open questions stay marked `[open]` until polled and
+resolved.
+
+### Status legend
+
+- `[decided]` — rule is settled; rationale logged in `DECISIONS.md`.
+- `[open]` — actively gathering input from collaborators / project owner.
+- `[draft]` — proposed by the implementer, not yet polled.
+
+### 14.1 Open questions (under collaborator review)
+
+#### Q1: Backspace at the start of a tag `[open]`
+
+You are editing a tag and your cursor is at the beginning of the tag.
+You hit Backspace. In Word, this deletes the line break right before
+the tag, combining the tag with the paragraph before and turning the
+paragraph before into a tag.
+
+Options:
+
+1. **Prohibit.** You never want to hit Backspace at the beginning of a
+   tag and tag-ify the paragraph above it.
+2. **Permit only when the previous paragraph is blank.** You might
+   want to remove blank space before a card by backspacing the tag
+   into it, but would never want to back a tag into a non-blank
+   paragraph.
+3. **Permit, but the merge inverts: the tag adopts the style of the
+   previous paragraph** (rather than the previous paragraph becoming a
+   tag).
+4. **Word's behavior is correct as-is.**
+5. Other.
+
+#### Q2: Enter in the middle of a tag `[open]`
+
+You are editing a tag and your cursor is in the middle of the tag. You
+hit Return/Enter. In Word, this splits your one tag-styled paragraph
+into two tag-styled paragraphs at the cursor — creating an original
+paragraph 1 and a new paragraph 2.
+
+Options:
+
+1. **Prohibit.** You never want to split a tag into two tags this way.
+2. **Permit, but only paragraph 1 keeps tag styling.** Splitting a tag
+   this way would be because you want part of the tag to be normal
+   text below a tag (e.g., recovering from accidentally backspacing a
+   cite into a tag). If you want paragraph 2 to remain a tag, you'd
+   re-apply the tag style manually.
+3. **Permit, but only paragraph 2 keeps tag styling.** The only
+   reason to do this would be if you accidentally tag-ified a normal
+   paragraph (per Q1). You'd want the paragraph to return to normal
+   when you break the tag off of it.
+4. **Word's behavior is correct as-is.**
+5. Other.
+
+### 14.2 Question backlog (not yet drafted in poll form)
+
+Surfaced during the design conversation but not yet posed to
+collaborators. Each will become a `[open]` entry above (or a `[draft]`
+proposal) before the F-key style commands ship.
+
+**Mirror cases for the same actions:**
+
+- Forward Delete at the *end* of a tag (pulls following cite/body into the tag).
+- Enter at the *end* of a tag (what's the "next paragraph" style? cite? body? new tag?).
+- Enter at the *start* of a tag (insert blank above the card, split with empty tag, refuse).
+
+**Same matrix for other node types:**
+
+- Pocket / Hat / Block — same backspace-merge / enter-split / delete-forward questions.
+- Cite paragraph — backspace at start (merge into tag?), enter inside cite (split into two cites? break to body?), enter at end (new body? new cite?).
+- Undertag — backspace at start (merge into tag? into previous undertag?), enter at end (new undertag? escape into body? break out of card?).
+- Analytic / analytic_unit — same backspace/enter questions, plus enter at end of standalone analytic (new analytic_unit? body in same unit? plain paragraph?).
+- Card body — last paragraph, cursor at end, Delete forward: does it pull the next card's tag into the body (destroying the next card)?
+
+**Selection-spanning operations:**
+
+- Selection across a card boundary, then Delete: does the partially-cut card survive (schema-invalid)? Merge into the surviving card? Refuse / clamp to card boundary?
+- Paste of content containing its own headings: structure preserved? Flattened? Refused if it would break invariants?
+
+**Style-apply edge cases (relevant to F-key Phase 1):**
+
+- F7 Tag with cursor in a card body — split the card so the body becomes a new card's tag? Refuse? Wrap the paragraph in a new card?
+- F4 Pocket with cursor inside a card's tag — lift the tag out and decompose the card? Refuse?
+- F4–F7 with multi-paragraph selection — apply to every paragraph (Word's behavior)? Just the first? Refuse?
+- F12 Clear with cursor in a tag — strip the card wrap and downgrade to body? Just downgrade the tag (leaving the card invalid)? Refuse?
+- F8 Cite / F9 Underline / F10 Emphasis / F11 Highlight inside a heading — should heading paragraphs allow inline emphasis marks at all, or only body content?
+
+**Outline navigation:**
+
+- Tab / Shift-Tab on a heading — promote/demote (Pocket↔Hat↔Block↔Tag)? Demoting Block→Tag would need to wrap in a card.
+
+**Empty/degenerate states:**
+
+- User deletes all text inside a tag — does the empty tag persist (with the card)? Auto-collapse the card? Convert to body paragraph?
+- User deletes all text inside a Pocket/Hat/Block — does an empty heading persist?
+
+**Scratchpad:**
+
+- Do all the above rules change inside a scratchpad? The scratchpad is the schema escape hatch — Word's loose behavior may be the right answer everywhere inside it, even if we tighten things up in the regular doc body.
+
+### 14.3 Decided rules
+
+(none yet — entries will land here as `[decided]` with a back-reference to `DECISIONS.md`)
+
+## 15. Companion-tool integration boundaries
 
 The user maintains several companion tools today (referenced in
 `https://debate-decoded.ghost.io/leveling-up-verbatim/` and elsewhere).
@@ -668,7 +793,7 @@ already have (e.g., `MoveUp`/`MoveDown` are subsumed by drag-and-drop;
 `SelectHeadingAndContent` is subsumed by the navigation panel). The
 remaining commands map directly to schema transforms.
 
-## 15. Stylepox handling
+## 16. Stylepox handling
 
 Cleanup on import is *opt-in by configuration but defaults to on*.
 Documents we save out are stylepox-free by construction (the schema
@@ -679,7 +804,7 @@ or get dropped, depending on what they look like.
 The *legacy-remediation* path — cleaning a polluted file before
 adoption — stays as the existing standalone Stylepox Cleaner.
 
-## 16. Tournament reliability
+## 17. Tournament reliability
 
 The desktop edition is the production surface for tournament use.
 Hard requirements:
@@ -703,7 +828,7 @@ Hard requirements:
 The web edition is explicitly not for tournament use; its target is
 collaboration and accessibility for users without full desktop machines.
 
-## 17. Out of scope for v1
+## 18. Out of scope for v1
 
 - Multi-user real-time collaboration (transclusion option 1, live
   shared cards). Defers to a phase that has backend infrastructure.

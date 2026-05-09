@@ -96,7 +96,7 @@ total                                      132 tests, all passing
 
 ## Out of scope for this autonomous session
 
-(per `ARCHITECTURE.md §17`)
+(per `ARCHITECTURE.md §18`)
 
 - NodeViews + interactive editing UX polish (the editor only renders
   the schema; commands beyond base undo/redo/text-input aren't wired)
@@ -128,7 +128,7 @@ total                                      132 tests, all passing
   for tables is a v2+ feature.
 - **No image support yet.** Aff has 9 images, DA has 3, CP has 0. Same
   treatment as tables — silently dropped on import.
-- **No comments support yet.** Per ARCHITECTURE.md §17, comments
+- **No comments support yet.** Per ARCHITECTURE.md §18, comments
   preservation through round-trip without rendering is the goal; not
   implemented yet.
 - **No pilcrow round-trip yet.** Schema slot exists in design notes;
