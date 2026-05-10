@@ -54,6 +54,18 @@ export class Docx {
     this.zip.file(path, content);
   }
 
+  /** Read a part as raw bytes. */
+  async readBinary(path: string): Promise<Uint8Array | null> {
+    const file = this.zip.file(path);
+    if (!file) return null;
+    return file.async('uint8array');
+  }
+
+  /** Write or overwrite a binary part. */
+  writeBinary(path: string, bytes: Uint8Array): void {
+    this.zip.file(path, bytes);
+  }
+
   /** Get the raw zip for advanced operations. */
   raw(): JSZip {
     return this.zip;
@@ -84,6 +96,17 @@ const CONTENT_TYPES_XML = `${XML_PROLOG}
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Default Extension="jpg" ContentType="image/jpeg"/>
+  <Default Extension="jpeg" ContentType="image/jpeg"/>
+  <Default Extension="gif" ContentType="image/gif"/>
+  <Default Extension="bmp" ContentType="image/bmp"/>
+  <Default Extension="svg" ContentType="image/svg+xml"/>
+  <Default Extension="webp" ContentType="image/webp"/>
+  <Default Extension="tif" ContentType="image/tiff"/>
+  <Default Extension="tiff" ContentType="image/tiff"/>
+  <Default Extension="emf" ContentType="image/x-emf"/>
+  <Default Extension="wmf" ContentType="image/x-wmf"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 </Types>`;

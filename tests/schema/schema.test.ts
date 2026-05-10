@@ -6,7 +6,7 @@ describe('schema', () => {
     expect(schema).toBeDefined();
     for (const name of [
       'doc', 'pocket', 'hat', 'block', 'tag', 'analytic', 'undertag',
-      'cite_paragraph', 'card', 'card_body', 'paragraph',
+      'cite_paragraph', 'card', 'card_body', 'paragraph', 'image',
     ]) {
       expect(schema.nodes[name], `node "${name}" should be defined`).toBeDefined();
     }
@@ -182,6 +182,25 @@ describe('node construction', () => {
       schema.nodes['card_body']!.create(null, schema.text('Body')),
     ]);
     expect(card.child(1).type.name).toBe('analytic');
+  });
+
+  it('image is an inline atom that fits inside body paragraphs', () => {
+    const img = schema.nodes['image']!.createChecked({
+      data: 'iVBORw0KGgo=', // 1×1 PNG header bytes (truncated, fine for schema)
+      contentType: 'image/png',
+      widthEmu: 100000,
+      heightEmu: 100000,
+      alt: 'placeholder',
+    });
+    const body = schema.nodes['card_body']!.createChecked(null, [
+      schema.text('Before '),
+      img,
+      schema.text(' after'),
+    ]);
+    expect(body.childCount).toBe(3);
+    expect(body.child(1).type.name).toBe('image');
+    expect(body.child(1).attrs['contentType']).toBe('image/png');
+    expect(body.child(1).attrs['widthEmu']).toBe(100000);
   });
 
   it('analytic_unit absorbs body paragraphs', () => {

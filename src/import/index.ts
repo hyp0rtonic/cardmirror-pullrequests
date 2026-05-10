@@ -4,17 +4,56 @@
 
 import type { Node as PMNode } from 'prosemirror-model';
 import { Docx } from '../ooxml/docx.js';
-import { importDoc } from './importer.js';
+import { importDoc, type MediaPart, type MediaPartsMap } from './importer.js';
 
 export { importDoc } from './importer.js';
+export type { MediaPart, MediaPartsMap } from './importer.js';
+
+/** Map common image extensions to MIME types. */
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  // Windows metafile formats — common in Word docs (vector graphics
+  // pasted from Excel, PowerPoint, etc.).
+  emf: 'image/x-emf',
+  wmf: 'image/x-wmf',
+};
+
+function inferContentType(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  return IMAGE_CONTENT_TYPES[ext] ?? 'application/octet-stream';
+}
 
 /**
- * Read a .docx byte buffer and return a ProseMirror doc.
+ * Read a .docx byte buffer and return a ProseMirror doc. Media parts
+ * (images under word/media/) are extracted upfront and passed to the
+ * importer so inline pictures round-trip with their bytes embedded as
+ * base64 in the resulting `image` nodes.
  */
 export async function fromDocx(bytes: Uint8Array | ArrayBuffer): Promise<PMNode> {
   const docx = await Docx.load(bytes);
   const documentXml = await docx.readText('word/document.xml');
   if (!documentXml) throw new Error('docx is missing word/document.xml');
   const relsXml = await docx.readText('word/_rels/document.xml.rels');
-  return importDoc(documentXml, relsXml);
+
+  const mediaParts: MediaPartsMap = new Map();
+  for (const path of docx.paths()) {
+    if (!path.startsWith('word/media/')) continue;
+    const partBytes = await docx.readBinary(path);
+    if (!partBytes) continue;
+    const part: MediaPart = {
+      bytes: partBytes,
+      contentType: inferContentType(path),
+    };
+    mediaParts.set(path, part);
+  }
+
+  return importDoc(documentXml, relsXml, mediaParts);
 }

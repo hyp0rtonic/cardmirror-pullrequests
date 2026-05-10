@@ -22,6 +22,7 @@
 import type { Mark, Node as PMNode, NodeType } from 'prosemirror-model';
 import { schema } from '../schema/index.js';
 import { idFromBookmarkName, newHeadingId } from '../schema/ids.js';
+import { bytesToBase64 } from '../ooxml/base64.js';
 import {
   attrs as attrsOf,
   children as childrenOf,
@@ -46,19 +47,34 @@ interface ParaInfo {
   pStyle: string | null;
 }
 
-/** rId → URL map from word/_rels/document.xml.rels. */
+/** rId → relationship target map from word/_rels/document.xml.rels. */
 type RelMap = Record<string, string>;
+
+/** A media part loaded from the source docx, keyed by full zip path. */
+export interface MediaPart {
+  bytes: Uint8Array;
+  contentType: string;
+}
+
+/** Map of zip paths (e.g. 'word/media/image1.png') to image data. */
+export type MediaPartsMap = Map<string, MediaPart>;
 
 interface ImportContext {
   rels: RelMap;
   /** Track active hyperlink rId stack while walking inline content. */
   hyperlinkStack: string[];
+  /** Media parts from the source zip; null if not provided (drawings drop). */
+  mediaParts: MediaPartsMap | null;
 }
 
 /** Public entry: parse document.xml + rels into a schema doc. */
-export function importDoc(documentXml: string, relsXml: string | null = null): PMNode {
+export function importDoc(
+  documentXml: string,
+  relsXml: string | null = null,
+  mediaParts: MediaPartsMap | null = null,
+): PMNode {
   const rels = relsXml ? parseRels(relsXml) : {};
-  const ctx: ImportContext = { rels, hyperlinkStack: [] };
+  const ctx: ImportContext = { rels, hyperlinkStack: [], mediaParts };
 
   const root = parseXml(documentXml);
   const docEl = findChild(root, 'w:document');
@@ -189,7 +205,90 @@ function parseRun(rNode: XmlNode, ctx: ImportContext, out: PMNode[]): void {
         out.push(schema.text('\n', marks));
       } catch (_) { /* ignore */ }
     }
+    // Inline pictures: <w:drawing><wp:inline>… or floating
+    // <w:drawing><wp:anchor>…. Both wrap a picture referenced via
+    // r:embed on an <a:blip>. Without media-parts access we can't
+    // round-trip the image bytes, so the drawing is silently dropped
+    // as before.
+    else if ('w:drawing' in c) {
+      const imgNode = parseDrawing(c, ctx);
+      if (imgNode) out.push(imgNode);
+    }
   }
+}
+
+/**
+ * Walk a <w:drawing> element to find the image's blip embed (relId)
+ * and extent (dimensions in EMU), look up the media bytes via the
+ * provided rels + media-parts map, and produce an `image` schema node
+ * with the bytes embedded as base64.
+ *
+ * Returns null if any required piece is missing — the relId, the rel
+ * lookup, the media file in the zip, etc. The result is the same as
+ * the pre-existing behavior (drawing dropped) for any case we can't
+ * round-trip cleanly.
+ */
+function parseDrawing(drawingNode: XmlNode, ctx: ImportContext): PMNode | null {
+  if (!ctx.mediaParts) return null;
+
+  const blipEmbed = findFirstAttr(drawingNode, 'a:blip', 'r:embed');
+  if (!blipEmbed) return null;
+
+  // Resolve relId → target path (e.g., 'media/image1.png').
+  const target = ctx.rels[blipEmbed];
+  if (!target) return null;
+  // Rel targets are relative to word/document.xml; full zip path is
+  // 'word/' + target.
+  const zipPath = target.startsWith('/') ? target.slice(1) : `word/${target}`;
+  const part = ctx.mediaParts.get(zipPath);
+  if (!part) return null;
+
+  // Dimensions from <wp:extent cx="..." cy="..."/> (EMU).
+  const cx = parseInt(findFirstAttr(drawingNode, 'wp:extent', 'cx') ?? '0', 10);
+  const cy = parseInt(findFirstAttr(drawingNode, 'wp:extent', 'cy') ?? '0', 10);
+
+  const data = bytesToBase64(part.bytes);
+
+  try {
+    return schema.nodes['image']!.createChecked({
+      data,
+      contentType: part.contentType,
+      widthEmu: Number.isFinite(cx) && cx > 0 ? cx : 0,
+      heightEmu: Number.isFinite(cy) && cy > 0 ? cy : 0,
+      alt: '',
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find the first descendant of `root` matching `tagName`, return its
+ * value for attribute `attr`. Walks the fast-xml-parser tree shape
+ * (each node is an object whose tag-name key is its children array,
+ * with attributes under the ':@' key).
+ */
+function findFirstAttr(root: XmlNode, tagName: string, attr: string): string | null {
+  const stack: XmlNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    for (const key of Object.keys(node)) {
+      if (key === ':@') continue;
+      if (key === tagName) {
+        const a = attrsOf(node);
+        if (attr in a) return a[attr] ?? null;
+        // Also recurse into the matched node's children (the attribute
+        // might be on a descendant of the same tag name — defensive).
+      }
+      const children = (node as Record<string, unknown>)[key];
+      if (Array.isArray(children)) {
+        for (const c of children) {
+          if (c && typeof c === 'object') stack.push(c as XmlNode);
+        }
+      }
+    }
+  }
+  return null;
 }
 
 interface ParsedRPr {

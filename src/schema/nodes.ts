@@ -56,6 +56,91 @@ export const nodes: { [name: string]: NodeSpec } = {
   text: { group: 'inline' },
 
   /**
+   * Inline image. Round-trips to OOXML `<w:drawing><wp:inline>...`.
+   *
+   * The image bytes are stored as base64 in the `data` attr so the doc
+   * is self-contained and survives JSON round-trips through localStorage,
+   * collaboration sync, undo/redo, etc. without a separate manifest.
+   * `widthEmu` / `heightEmu` carry the original OOXML dimensions in
+   * English Metric Units (914400 EMU per inch); rendering converts to
+   * pixels at 96dpi.
+   *
+   * Atomic + draggable: ProseMirror treats the image as an indivisible
+   * inline glyph — cursor goes around it, not into it. Draggable lets
+   * users move it via drag-and-drop (when supporting that later).
+   */
+  image: {
+    inline: true,
+    group: 'inline',
+    atom: true,
+    draggable: true,
+    attrs: {
+      data: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+      contentType: {
+        default: 'image/png',
+        validate: (v: unknown) =>
+          typeof v === 'string' && /^image\//.test(v),
+      },
+      widthEmu: {
+        default: 0,
+        validate: (v: unknown) =>
+          typeof v === 'number' && Number.isFinite(v) && v >= 0,
+      },
+      heightEmu: {
+        default: 0,
+        validate: (v: unknown) =>
+          typeof v === 'number' && Number.isFinite(v) && v >= 0,
+      },
+      alt: {
+        default: '',
+        validate: (v: unknown) => typeof v === 'string',
+      },
+    },
+    parseDOM: [
+      {
+        tag: 'img[data-pmd-image]',
+        getAttrs: (dom: HTMLElement) => {
+          const src = dom.getAttribute('src') ?? '';
+          const m = src.match(/^data:([^;]+);base64,(.+)$/);
+          if (!m) return false;
+          const widthEmu = parseInt(dom.getAttribute('data-width-emu') ?? '0', 10);
+          const heightEmu = parseInt(dom.getAttribute('data-height-emu') ?? '0', 10);
+          return {
+            data: m[2],
+            contentType: m[1],
+            widthEmu: Number.isFinite(widthEmu) ? widthEmu : 0,
+            heightEmu: Number.isFinite(heightEmu) ? heightEmu : 0,
+            alt: dom.getAttribute('alt') ?? '',
+          };
+        },
+      },
+    ],
+    toDOM: (node) => {
+      const data = String(node.attrs['data'] ?? '');
+      const contentType = String(node.attrs['contentType'] ?? 'image/png');
+      const widthEmu = Number(node.attrs['widthEmu'] ?? 0);
+      const heightEmu = Number(node.attrs['heightEmu'] ?? 0);
+      // 914400 EMU per inch; 96 px per inch → 9525 EMU per pixel.
+      const widthPx = widthEmu > 0 ? Math.round(widthEmu / 9525) : 0;
+      const heightPx = heightEmu > 0 ? Math.round(heightEmu / 9525) : 0;
+      const attrs: Record<string, string> = {
+        'data-pmd-image': '',
+        src: data ? `data:${contentType};base64,${data}` : '',
+        alt: String(node.attrs['alt'] ?? ''),
+        'data-width-emu': String(widthEmu),
+        'data-height-emu': String(heightEmu),
+        style: 'max-width: 100%; height: auto;',
+      };
+      if (widthPx > 0) attrs['width'] = String(widthPx);
+      if (heightPx > 0) attrs['height'] = String(heightPx);
+      return ['img', attrs];
+    },
+  },
+
+  /**
    * Heading paragraphs — flat in document order, hierarchy via the
    * derived outline view, not schema containment.
    */

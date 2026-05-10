@@ -32,6 +32,7 @@ interface NodeCounts {
   analytic: number;
   undertag: number;
   paragraph: number;
+  image: number;
   totalParagraphs: number;
   totalTextLength: number;
 }
@@ -45,6 +46,7 @@ function countNodes(doc: PMNode): NodeCounts {
     analytic: 0,
     undertag: 0,
     paragraph: 0,
+    image: 0,
     totalParagraphs: 0,
     totalTextLength: 0,
   };
@@ -166,6 +168,10 @@ describe('round-trip: real example docs', () => {
 
       it('preserves total paragraph count through round-trip', () => {
         expect(roundTripCounts.totalParagraphs).toBe(importCounts.totalParagraphs);
+      });
+
+      it('preserves image count through round-trip', () => {
+        expect(roundTripCounts.image).toBe(importCounts.image);
       });
     });
   }

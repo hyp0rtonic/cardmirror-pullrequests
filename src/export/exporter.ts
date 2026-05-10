@@ -23,10 +23,23 @@ import {
   NODE_TO_PSTYLE,
 } from '../ooxml/styles.js';
 import { bookmarkNameForId } from '../schema/ids.js';
+import { base64ToBytes } from '../ooxml/base64.js';
 
 interface HyperlinkRel {
   rId: string;
   target: string;
+}
+
+interface ImageRel {
+  rId: string;
+  target: string;
+}
+
+/** A binary part the exporter wants written into the docx zip. */
+export interface ExportedMediaPart {
+  /** Full zip path, e.g. `word/media/image1.png`. */
+  path: string;
+  bytes: Uint8Array;
 }
 
 export interface ExportResult {
@@ -34,7 +47,22 @@ export interface ExportResult {
   documentXml: string;
   /** `word/_rels/document.xml.rels` content. */
   relsXml: string;
+  /** Image / binary parts that the docx zip writer must include. */
+  mediaParts: ExportedMediaPart[];
 }
+
+/** Map common image MIME types to file extensions. */
+const CONTENT_TYPE_EXTENSIONS: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/bmp': 'bmp',
+  'image/svg+xml': 'svg',
+  'image/webp': 'webp',
+  'image/tiff': 'tif',
+  'image/x-emf': 'emf',
+  'image/x-wmf': 'wmf',
+};
 
 const DOCUMENT_OPEN = `${XML_PROLOG}
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w14"><w:body>`;
@@ -62,7 +90,11 @@ class DocxExporter {
   private parts: string[] = [];
   private bookmarkCounter = 0;
   private rels: HyperlinkRel[] = [];
+  private imageRels: ImageRel[] = [];
+  private mediaParts: ExportedMediaPart[] = [];
   private nextRelId = 2; // rId1 is reserved for styles
+  private nextImageIdx = 1;
+  private nextDocPrId = 1;
 
   exportDoc(doc: PMNode): ExportResult {
     if (doc.type.name !== 'doc') {
@@ -76,6 +108,7 @@ class DocxExporter {
     return {
       documentXml: this.parts.join(''),
       relsXml: this.buildRelsXml(),
+      mediaParts: this.mediaParts,
     };
   }
 
@@ -119,9 +152,51 @@ class DocxExporter {
     paragraph.forEach((child) => {
       if (child.isText) {
         this.emitTextRun(child.text ?? '', child.marks);
+      } else if (child.type.name === 'image') {
+        this.emitImageRun(child);
       }
-      // Inline non-text nodes: none defined for v0; defensive no-op.
+      // Other inline non-text nodes: defensive no-op.
     });
+  }
+
+  private emitImageRun(node: PMNode): void {
+    const data = String(node.attrs['data'] ?? '');
+    if (!data) return;
+    const contentType = String(node.attrs['contentType'] ?? 'image/png');
+    const widthEmu = Math.max(0, Math.round(Number(node.attrs['widthEmu'] ?? 0)));
+    const heightEmu = Math.max(0, Math.round(Number(node.attrs['heightEmu'] ?? 0)));
+    const alt = String(node.attrs['alt'] ?? '');
+
+    // Generate the media part (binary write into the zip).
+    const ext = CONTENT_TYPE_EXTENSIONS[contentType] ?? 'bin';
+    const idx = this.nextImageIdx++;
+    const filename = `image${idx}.${ext}`;
+    const target = `media/${filename}`;
+    let bytes: Uint8Array;
+    try {
+      bytes = base64ToBytes(data);
+    } catch {
+      return;
+    }
+    this.mediaParts.push({ path: `word/${target}`, bytes });
+
+    // Register an image relationship.
+    const rId = this.registerImage(target);
+
+    // EMU dimensions: prefer provided; otherwise pick a sensible default
+    // (a 4-inch / 384-pixel-equivalent box) so Word doesn't render at 0×0.
+    const cx = widthEmu > 0 ? widthEmu : 3657600;
+    const cy = heightEmu > 0 ? heightEmu : 2743200;
+
+    const docPrId = this.nextDocPrId++;
+    const drawing = buildDrawingXml({ rId, cx, cy, docPrId, alt });
+    this.parts.push(`<w:r>${drawing}</w:r>`);
+  }
+
+  private registerImage(target: string): string {
+    const rId = `rId${this.nextRelId++}`;
+    this.imageRels.push({ rId, target });
+    return rId;
   }
 
   private emitTextRun(text: string, marks: readonly Mark[]): void {
@@ -239,8 +314,62 @@ class DocxExporter {
         `<Relationship Id="${rel.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${rel.target}" TargetMode="External"/>`,
       );
     }
+    for (const rel of this.imageRels) {
+      inner.push(
+        `<Relationship Id="${rel.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${rel.target}"/>`,
+      );
+    }
     return `${RELS_OPEN}${inner.join('')}${RELS_CLOSE}`;
   }
+}
+
+/**
+ * Build the OOXML drawing XML for an inline picture. Self-contains the
+ * required namespaces (wp, a, pic) so we don't have to hoist them onto
+ * <w:document>. Standard inline-picture shape — no effects, no
+ * positioning, no theme styling.
+ */
+function buildDrawingXml(opts: {
+  rId: string;
+  cx: number;
+  cy: number;
+  docPrId: number;
+  alt: string;
+}): string {
+  const { rId, cx, cy, docPrId, alt } = opts;
+  const altEsc = escText(alt);
+  const name = `Picture ${docPrId}`;
+  return (
+    '<w:drawing>' +
+      `<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">` +
+        `<wp:extent cx="${cx}" cy="${cy}"/>` +
+        '<wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+        `<wp:docPr id="${docPrId}" name="${escText(name)}" descr="${altEsc}"/>` +
+        '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+        '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+          '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+            '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+              '<pic:nvPicPr>' +
+                `<pic:cNvPr id="${docPrId}" name="${escText(name)}" descr="${altEsc}"/>` +
+                '<pic:cNvPicPr/>' +
+              '</pic:nvPicPr>' +
+              '<pic:blipFill>' +
+                `<a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${rId}"/>` +
+                '<a:stretch><a:fillRect/></a:stretch>' +
+              '</pic:blipFill>' +
+              '<pic:spPr>' +
+                '<a:xfrm>' +
+                  '<a:off x="0" y="0"/>' +
+                  `<a:ext cx="${cx}" cy="${cy}"/>` +
+                '</a:xfrm>' +
+                '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+              '</pic:spPr>' +
+            '</pic:pic>' +
+          '</a:graphicData>' +
+        '</a:graphic>' +
+      '</wp:inline>' +
+    '</w:drawing>'
+  );
 }
 
 /** Public API: schema doc → document.xml + rels. */
