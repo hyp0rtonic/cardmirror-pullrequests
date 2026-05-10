@@ -194,12 +194,25 @@ code {
 }
 
 #editor {
+  /* Per-style font sizes (in pt). Defaults match Verbatim's. Updated
+     at runtime from settings.displaySizes — see editor/index.ts. */
+  --pmd-size-normal: 11pt;
+  --pmd-size-pocket: 26pt;
+  --pmd-size-hat: 22pt;
+  --pmd-size-block: 16pt;
+  --pmd-size-tag: 13pt;
+  --pmd-size-analytic: 13pt;
+  --pmd-size-cite: 13pt;
+  --pmd-size-underline: 11pt;
+  --pmd-size-emphasis: 11pt;
+  --pmd-size-undertag: 12pt;
+
   background: #fff;
   flex: 1 1 auto;
   min-height: 400px;
   padding: 0.75rem 1.25rem;
   font-family: 'Calibri', sans-serif;
-  font-size: 11pt;
+  font-size: var(--pmd-size-normal);
   line-height: 1.4;
 }
 
@@ -215,7 +228,7 @@ code {
 
 /* Pocket = Heading 1 with paragraph borders all four sides (the box). */
 .pmd-pocket {
-  font-size: 26pt;
+  font-size: var(--pmd-size-pocket);
   font-weight: bold;
   text-align: center;
   border: 3px solid #333;
@@ -226,7 +239,7 @@ code {
 
 /* Hat = Heading 2, centered, double underline. */
 .pmd-hat {
-  font-size: 22pt;
+  font-size: var(--pmd-size-hat);
   font-weight: bold;
   text-align: center;
   text-decoration: underline double;
@@ -235,7 +248,7 @@ code {
 
 /* Block = Heading 3, centered, single underline. */
 .pmd-block {
-  font-size: 16pt;
+  font-size: var(--pmd-size-block);
   font-weight: bold;
   text-align: center;
   text-decoration: underline;
@@ -244,7 +257,7 @@ code {
 
 /* Tag = Heading 4, bold, larger. */
 .pmd-tag {
-  font-size: 13pt;
+  font-size: var(--pmd-size-tag);
   font-weight: bold;
   margin: 0.75rem 0 0.25rem 0;
 }
@@ -254,7 +267,7 @@ code {
    specificity than a bare `.pmd-analytic` rule and would otherwise
    strip the before-margin. */
 #editor .pmd-analytic {
-  font-size: 13pt;
+  font-size: var(--pmd-size-analytic);
   font-weight: bold;
   color: #1F3864;
   margin: 0.75rem 0 0.25rem 0;
@@ -271,6 +284,7 @@ code {
   margin: 0;
 }
 
+
 /* Card and analytic-unit — block-level draggable units. Transparent
    border holds layout; hover reveals the boundary. */
 .pmd-card,
@@ -284,12 +298,12 @@ code {
   border-left-color: #c0c0c0;
 }
 
-/* Undertag = green italic. */
+/* Undertag paragraph = green italic. */
 .pmd-undertag {
   font-style: italic;
   color: #385623;
   font-family: 'Times New Roman', serif;
-  font-size: 12pt;
+  font-size: var(--pmd-size-undertag);
 }
 
 /* ---------------------------------------------- Marks
@@ -302,13 +316,23 @@ code {
    parent's bold/13pt persists, and the character style just adds its
    distinguishing visual treatment (underline, box, color). */
 
-/* Style13ptBold (Cite): adds bold prominence. The "13pt" in the style
-   name is the canonical declared size, which kicks in only when the
-   parent is smaller (typical in cite paragraphs at 11pt). When inside
-   a heading already at ≥13pt, the heading's size dominates. */
+/* Named-style mark wrappers — typography only, no font-size by
+   default. They inherit size from the surrounding paragraph (so
+   underlined text in a Tag renders at the Tag's size, etc.). The
+   font-size-class plugin pins their size explicitly via scoped rules
+   below ONLY when their containing paragraph is shrunk, which keeps
+   visible content readable while letting the paragraph strut shrink.
+
+   Cite is the exception: it carries its own font-size unconditionally,
+   matching Verbatim's behavior where Cite always renders at 13pt. The
+   --pmd-size-* CSS variables are how Verbatim's per-style font-size
+   customization (Styles tab) plumbs in — settings.displaySizes ↔ CSS
+   variables ↔ rendered font-size. */
+
+/* Style13ptBold (Cite): bold + Verbatim's canonical 13pt. */
 .pmd-cite {
   font-weight: bold;
-  font-size: 13pt;
+  font-size: var(--pmd-size-cite);
 }
 
 /* StyleUnderline: just an underline. */
@@ -333,6 +357,30 @@ code {
 .pmd-analytic-mark {
   font-weight: bold;
   color: #1F3864;
+}
+
+/* When a body paragraph is shrunk by the font-size-class plugin (the
+   inline `font-size: Xpt` on the <p>), pin the named-style mark
+   wrappers to their declared sizes via the --pmd-size-* variables.
+   Without this, .pmd-underline et al. would inherit the small size
+   from the shrunk paragraph and visible content would shrink too. The
+   line-height: 1.4 restores comfortable spacing for readable runs even
+   though the surrounding (shrunk) paragraph uses a tighter value. */
+.pmd-fs-shrunk .pmd-underline {
+  font-size: var(--pmd-size-underline);
+  line-height: 1.4;
+}
+.pmd-fs-shrunk .pmd-emphasis {
+  font-size: var(--pmd-size-emphasis);
+  line-height: 1.4;
+}
+.pmd-fs-shrunk .pmd-undertag-mark {
+  font-size: var(--pmd-size-undertag);
+  line-height: 1.4;
+}
+.pmd-fs-shrunk .pmd-analytic-mark {
+  font-size: var(--pmd-size-analytic);
+  line-height: 1.4;
 }
 
 .pmd-highlight {
@@ -825,6 +873,40 @@ body.pmd-nav-resize-active {
 }
 
 /* Readers editor (settings) */
+.pmd-display-sizes-editor {
+  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.3rem 0.75rem;
+}
+
+.pmd-display-size-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pmd-display-size-label {
+  flex: 1 1 auto;
+  font-size: 0.85rem;
+}
+
+.pmd-display-size-input {
+  flex: 0 0 4rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  padding: 0.2rem 0.4rem;
+  text-align: right;
+}
+
+.pmd-display-size-unit {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: #666;
+}
+
 .pmd-readers-editor {
   margin-top: 0.5rem;
 }

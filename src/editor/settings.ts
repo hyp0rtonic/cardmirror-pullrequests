@@ -16,6 +16,48 @@ export interface ReaderConfig {
   wpm: number;
 }
 
+/**
+ * Per-style font sizes (in points). Mirrors Verbatim's Styles tab so
+ * users can adjust how each named style renders without touching the
+ * underlying doc — the §5 three-layer rendering model in action. Each
+ * field becomes a CSS custom property on `#editor` (e.g. `--pmd-size-
+ * cite: 13pt`); CSS rules consume the variables.
+ *
+ * Defaults match Verbatim's defaults for parity with current docs:
+ *   pocket=26, hat=22, block=16, tag=13, analytic=13, cite=13,
+ *   underline=11, emphasis=11, undertag=12, normal=11.
+ */
+export interface DisplaySizes {
+  normal: number;
+  pocket: number;
+  hat: number;
+  block: number;
+  tag: number;
+  analytic: number;
+  cite: number;
+  underline: number;
+  emphasis: number;
+  undertag: number;
+}
+
+export const DISPLAY_SIZE_KEYS: (keyof DisplaySizes)[] = [
+  'normal', 'pocket', 'hat', 'block', 'tag',
+  'analytic', 'cite', 'underline', 'emphasis', 'undertag',
+];
+
+const DEFAULT_DISPLAY_SIZES: DisplaySizes = {
+  normal: 11,
+  pocket: 26,
+  hat: 22,
+  block: 16,
+  tag: 13,
+  analytic: 13,
+  cite: 13,
+  underline: 11,
+  emphasis: 11,
+  undertag: 12,
+};
+
 /** Schema for all editor settings. Add new fields here with sensible defaults. */
 export interface Settings {
   /** Width of the navigation pane in pixels. */
@@ -40,6 +82,11 @@ export interface Settings {
    * also displayed in the bottom status bar live.
    */
   readers: ReaderConfig[];
+  /**
+   * Per-style font sizes (in points). See DisplaySizes for details.
+   * Each field becomes a CSS custom property on `#editor`.
+   */
+  displaySizes: DisplaySizes;
 }
 
 const DEFAULTS: Settings = {
@@ -53,6 +100,7 @@ const DEFAULTS: Settings = {
     { name: 'Reader 1', wpm: 200 },
     { name: 'Reader 2', wpm: 250 },
   ],
+  displaySizes: { ...DEFAULT_DISPLAY_SIZES },
 };
 
 /**
@@ -64,7 +112,7 @@ export interface SettingMeta {
   label: string;
   description?: string;
   /** Settings UI hint: how should this be rendered? */
-  kind: 'toggle' | 'number' | 'level' | 'readers';
+  kind: 'toggle' | 'number' | 'level' | 'readers' | 'displaySizes';
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -88,6 +136,13 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Each reader has a name and a words-per-minute rate. The first two are displayed live in the bottom bar; all show up in the Word Count Selection dialog. Add as many as you need.',
     kind: 'readers',
+  },
+  {
+    key: 'displaySizes',
+    label: 'Style font sizes (pt)',
+    description:
+      "Render size for each named style. Doesn't change the underlying doc — only how it looks here. Verbatim's defaults: Pocket 26, Hat 22, Block 16, Tag 13, Cite 13, Underline 11, Emphasis 11.",
+    kind: 'displaySizes',
   },
 ];
 
@@ -174,7 +229,21 @@ function sanitize(s: Settings): Settings {
     hideEmphasisBordersInReadMode: !!s.hideEmphasisBordersInReadMode,
     zoomPct: clamp(Math.round(s.zoomPct / 10) * 10, 50, 200),
     readers: sanitizeReaders(s.readers),
+    displaySizes: sanitizeDisplaySizes(s.displaySizes),
   };
+}
+
+function sanitizeDisplaySizes(raw: unknown): DisplaySizes {
+  const out = { ...DEFAULT_DISPLAY_SIZES };
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<Record<keyof DisplaySizes, unknown>>;
+  for (const key of DISPLAY_SIZE_KEYS) {
+    const v = Number(r[key]);
+    if (Number.isFinite(v) && v >= 1 && v <= 144) {
+      out[key] = Math.round(v * 2) / 2; // half-point precision
+    }
+  }
+  return out;
 }
 
 function sanitizeReaders(raw: unknown): ReaderConfig[] {

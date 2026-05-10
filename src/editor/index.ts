@@ -17,9 +17,10 @@ import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocx, toDocx } from '../index.js';
 import { NavigationPanel } from './nav-panel.js';
 import { openSettings } from './settings-ui.js';
-import { settings } from './settings.js';
+import { settings, DISPLAY_SIZE_KEYS, type DisplaySizes } from './settings.js';
 import { readModePlugin } from './read-mode-plugin.js';
 import { absorbPlugin } from './absorb-plugin.js';
+import { fontSizeClassPlugin } from './font-size-class-plugin.js';
 import { openWordCount } from './word-count-ui.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
 
@@ -64,15 +65,28 @@ function applyZoom(pct: number): void {
   zoomResetBtn.disabled = pct === 100;
 }
 
+/**
+ * Push displaySizes into CSS custom properties on `#editor`. CSS rules
+ * for each named style use `font-size: var(--pmd-size-<name>)`, so
+ * updating these variables retypes the whole editor.
+ */
+function applyDisplaySizes(sizes: DisplaySizes): void {
+  for (const key of DISPLAY_SIZE_KEYS) {
+    editorEl.style.setProperty(`--pmd-size-${key}`, `${sizes[key]}pt`);
+  }
+}
+
 // Apply read-mode visual state and editing lockdown whenever the
 // setting changes (and once now to handle the persisted value).
 settings.subscribe((s) => {
   applyReadMode(s.readMode);
   applyZoom(s.zoomPct);
+  applyDisplaySizes(s.displaySizes);
   refreshWordCount();
 });
 applyReadMode(settings.get('readMode'));
 applyZoom(settings.get('zoomPct'));
+applyDisplaySizes(settings.get('displaySizes'));
 
 function refreshWordCount(): void {
   if (!view) {
@@ -164,6 +178,7 @@ function mountView(doc: PMNode): void {
       keymap(baseKeymap),
       readModePlugin,
       absorbPlugin,
+      fontSizeClassPlugin,
     ],
   });
   view = new EditorView(editorEl, {

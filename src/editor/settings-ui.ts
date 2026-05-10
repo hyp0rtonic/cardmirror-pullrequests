@@ -7,7 +7,28 @@
  * settings store immediately.
  */
 
-import { SETTING_METADATA, settings, type SettingMeta, type ReaderConfig } from './settings.js';
+import {
+  SETTING_METADATA,
+  settings,
+  DISPLAY_SIZE_KEYS,
+  type SettingMeta,
+  type ReaderConfig,
+  type DisplaySizes,
+} from './settings.js';
+
+/** Human-readable label for each display-size key. */
+const DISPLAY_SIZE_LABELS: Record<keyof DisplaySizes, string> = {
+  normal: 'Normal (body)',
+  pocket: 'Pocket',
+  hat: 'Hat',
+  block: 'Block',
+  tag: 'Tag',
+  analytic: 'Analytic',
+  cite: 'Cite',
+  underline: 'Underline',
+  emphasis: 'Emphasis',
+  undertag: 'Undertag',
+};
 
 class SettingsModal {
   private overlay: HTMLDivElement;
@@ -113,11 +134,74 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildReadersEditor());
       return row;
+    } else if (meta.kind === 'displaySizes') {
+      row.appendChild(text);
+      row.appendChild(buildDisplaySizesEditor());
+      return row;
     }
 
     row.appendChild(label);
     return row;
   }
+}
+
+function buildDisplaySizesEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-display-sizes-editor';
+
+  function commit(next: DisplaySizes): void {
+    settings.set('displaySizes', next);
+  }
+
+  function render(): void {
+    wrap.innerHTML = '';
+    const sizes = settings.get('displaySizes');
+    for (const key of DISPLAY_SIZE_KEYS) {
+      const row = document.createElement('div');
+      row.className = 'pmd-display-size-row';
+
+      const label = document.createElement('label');
+      label.className = 'pmd-display-size-label';
+      label.textContent = DISPLAY_SIZE_LABELS[key];
+      row.appendChild(label);
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.className = 'pmd-display-size-input';
+      input.min = '1';
+      input.max = '144';
+      input.step = '0.5';
+      input.value = String(sizes[key]);
+      input.addEventListener('change', () => {
+        const v = parseFloat(input.value);
+        if (!Number.isFinite(v) || v <= 0) {
+          input.value = String(sizes[key]);
+          return;
+        }
+        commit({ ...settings.get('displaySizes'), [key]: v });
+      });
+      row.appendChild(input);
+
+      const unit = document.createElement('span');
+      unit.className = 'pmd-display-size-unit';
+      unit.textContent = 'pt';
+      row.appendChild(unit);
+
+      wrap.appendChild(row);
+    }
+  }
+
+  const unsubscribe = settings.subscribe((s) => {
+    void s;
+    render();
+  });
+  render();
+
+  wrap.addEventListener('DOMNodeRemoved', () => {
+    unsubscribe();
+  });
+
+  return wrap;
 }
 
 function buildReadersEditor(): HTMLElement {
