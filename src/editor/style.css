@@ -580,6 +580,59 @@ body.pmd-nav-resize-active {
   border-left-color: #b0b0b0;
 }
 
+/* Source item dimming during drag. */
+.pmd-nav-item-dragging {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Drop indicator: a thin gap between nav entries when a drag is
+   active. The hovered slot is highlighted. */
+.pmd-nav-drop-indicator {
+  height: 4px;
+  margin: 0;
+  pointer-events: none;
+  position: relative;
+}
+
+.pmd-nav-drop-indicator-active::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 1px;
+  height: 2px;
+  background: #2867d8;
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(40, 103, 216, 0.25);
+}
+
+/* Pickup pill: floats at the cursor while dragging. */
+.pmd-nav-pickup-pill {
+  position: fixed;
+  z-index: 10000;
+  background: #2867d8;
+  color: #fff;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Vacuum-in effect: pill scales up briefly on appear. */
+  animation: pmd-pickup-pill-in 120ms ease-out;
+}
+
+@keyframes pmd-pickup-pill-in {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
 .pmd-nav-chevron {
   flex: 0 0 auto;
   display: inline-block;

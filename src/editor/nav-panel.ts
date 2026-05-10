@@ -15,6 +15,7 @@ import type { EditorView } from 'prosemirror-view';
 import { type Node as PMNode, DOMSerializer } from 'prosemirror-model';
 import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { settings } from './settings.js';
+import { dragController, type DragItem } from './drag-controller.js';
 
 interface HeadingEntry {
   /** Schema node type name. */
@@ -67,6 +68,24 @@ export class NavigationPanel {
   private collapsed: Set<string> = new Set();
   private levelButtons: HTMLButtonElement[] = [];
   private unsubscribeSettings: (() => void) | null = null;
+
+  // ---- Drag-and-drop state ----
+  private liEntries: Map<HTMLLIElement, HeadingEntry> = new Map();
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragStartLi: HTMLLIElement | null = null;
+  private dragStartEntry: HeadingEntry | null = null;
+  private dragHandlersAttached = false;
+  private pickupPill: HTMLElement | null = null;
+  private dropIndicators: HTMLElement[] = [];
+  /** Heading IDs we expanded automatically during the active drag.
+   *  Restored on drop / cancel. */
+  private autoExpanded: Set<string> = new Set();
+  private autoExpandTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoExpandTarget: string | null = null;
+  private boundOnDragMove = (e: PointerEvent) => this.onDragMove(e);
+  private boundOnDragUp = (e: PointerEvent) => this.onDragUp(e);
+  private boundOnDragKey = (e: KeyboardEvent) => this.onDragKey(e);
 
   private get maxLevel(): number {
     return settings.get('navMaxLevel');
@@ -217,6 +236,7 @@ export class NavigationPanel {
     // in the example corpus) this is fine; if profiling shows it's hot,
     // diff against the previous render.
     this.listEl.innerHTML = '';
+    this.liEntries.clear();
 
     if (entries.length === 0) {
       this.listEl.style.display = 'none';
@@ -278,7 +298,10 @@ export class NavigationPanel {
         li.appendChild(citePreview);
       }
 
-      li.addEventListener('click', () => this.jumpTo(entry));
+      // Pointer-based handler: distinguishes click (jump-to) from
+      // drag (move heading). dblclick still fires natively from the
+      // browser on two consecutive low-movement pointerdown/up cycles.
+      li.addEventListener('pointerdown', (e) => this.onLiPointerDown(e, entry, li));
       li.addEventListener('dblclick', () => {
         if (hasChildren) this.toggleCollapsed(entry);
       });
@@ -287,6 +310,7 @@ export class NavigationPanel {
         this.openContextMenu(e.clientX, e.clientY, entry);
       });
 
+      this.liEntries.set(li, entry);
       this.listEl.appendChild(li);
 
       if (hasChildren && collapsed) {
@@ -303,6 +327,313 @@ export class NavigationPanel {
       this.collapsed.add(entry.id);
     }
     if (this.currentDoc) this.render(this.currentDoc);
+  }
+
+  // ---------------------------------------------- Drag-and-drop ----
+
+  private onLiPointerDown(
+    e: PointerEvent,
+    entry: HeadingEntry,
+    li: HTMLLIElement,
+  ): void {
+    if (e.button !== 0) return; // primary button only
+    // Read mode disables drag (and editing in general).
+    if (settings.get('readMode')) return;
+    // Ignore clicks that originated on the chevron — it has its own
+    // handler and shouldn't initiate a drag.
+    const target = e.target as HTMLElement;
+    if (target.closest('.pmd-nav-chevron')) return;
+
+    this.dragStartX = e.clientX;
+    this.dragStartY = e.clientY;
+    this.dragStartLi = li;
+    this.dragStartEntry = entry;
+
+    if (!this.dragHandlersAttached) {
+      document.addEventListener('pointermove', this.boundOnDragMove);
+      document.addEventListener('pointerup', this.boundOnDragUp);
+      document.addEventListener('keydown', this.boundOnDragKey);
+      this.dragHandlersAttached = true;
+    }
+  }
+
+  private onDragMove(e: PointerEvent): void {
+    if (!this.dragStartEntry) return;
+
+    if (!dragController.isActive()) {
+      const dx = e.clientX - this.dragStartX;
+      const dy = e.clientY - this.dragStartY;
+      // 5px threshold — below this, count as a click, not a drag.
+      if (dx * dx + dy * dy < 25) return;
+      this.startDrag();
+    }
+
+    if (!dragController.isActive()) return;
+
+    dragController.setPointer(e.clientX, e.clientY);
+    this.updatePickupPill(e.clientX, e.clientY);
+    this.updateDropTarget(e.clientX, e.clientY);
+    this.maybeAutoExpand(e.clientX, e.clientY);
+    this.maybeAutoScroll(e.clientY);
+  }
+
+  private onDragUp(e: PointerEvent): void {
+    void e;
+    if (dragController.isActive()) {
+      dragController.commit(); // commit no-ops if no hover target
+    } else if (this.dragStartEntry) {
+      // No drag occurred; treat as click → jump to entry.
+      this.jumpTo(this.dragStartEntry);
+    }
+    this.cleanupDrag();
+  }
+
+  private onDragKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && dragController.isActive()) {
+      e.preventDefault();
+      dragController.cancel();
+      this.cleanupDrag();
+    }
+  }
+
+  private startDrag(): void {
+    const entry = this.dragStartEntry;
+    if (!entry || !this.view) return;
+
+    const range = this.computeHeadingRange(entry);
+    if (!range) return;
+
+    const item: DragItem = {
+      from: range.from,
+      to: range.to,
+      id: entry.id,
+      type: entry.type,
+      level: entry.level,
+      label: entry.text,
+    };
+
+    dragController.begin({ view: this.view, items: [item] });
+
+    this.renderDropIndicators(entry.level);
+    this.createPickupPill([item]);
+
+    if (this.dragStartLi) {
+      this.dragStartLi.classList.add('pmd-nav-item-dragging');
+    }
+  }
+
+  private cleanupDrag(): void {
+    // Restore any auto-expanded entries — if the drop landed inside
+    // one, it's already implicitly "expanded" because the user clearly
+    // wanted to drop there, but we re-collapse anyway since the user
+    // didn't explicitly toggle. This is a deliberate simple-default;
+    // can refine later if it proves annoying.
+    if (this.autoExpanded.size > 0) {
+      for (const id of this.autoExpanded) {
+        this.collapsed.add(id);
+      }
+      this.autoExpanded.clear();
+    }
+
+    this.removeDropIndicators();
+    this.removePickupPill();
+    if (this.dragStartLi) {
+      this.dragStartLi.classList.remove('pmd-nav-item-dragging');
+    }
+    this.cancelAutoExpand();
+
+    if (this.dragHandlersAttached) {
+      document.removeEventListener('pointermove', this.boundOnDragMove);
+      document.removeEventListener('pointerup', this.boundOnDragUp);
+      document.removeEventListener('keydown', this.boundOnDragKey);
+      this.dragHandlersAttached = false;
+    }
+    this.dragStartLi = null;
+    this.dragStartEntry = null;
+
+    // After a drop the underlying doc has changed; force-refresh from
+    // the view's current state instead of waiting for the debounced
+    // heavy-update tick. Prevents a jarring 200ms lag between drop and
+    // the nav-panel reflecting the new ordering.
+    const doc = this.view ? this.view.state.doc : this.currentDoc;
+    if (doc) {
+      this.currentDoc = doc;
+      this.render(doc);
+    }
+  }
+
+  private renderDropIndicators(draggedLevel: number): void {
+    this.removeDropIndicators();
+    if (!this.view) return;
+    const doc = this.view.state.doc;
+
+    const items = Array.from(this.listEl.children).filter(
+      (el): el is HTMLLIElement => el instanceof HTMLLIElement,
+    );
+
+    for (const li of items) {
+      const entry = this.liEntries.get(li);
+      if (!entry) continue;
+      // Per the §14 design rule: drop slots exist only between siblings
+      // of level <= dragged level. Skip deeper entries.
+      if (entry.level > draggedLevel) continue;
+
+      const range = this.computeHeadingRange(entry);
+      if (!range) continue;
+
+      const indicator = document.createElement('div');
+      indicator.className = 'pmd-nav-drop-indicator';
+      indicator.dataset['insertPos'] = String(range.from);
+      this.listEl.insertBefore(indicator, li);
+      this.dropIndicators.push(indicator);
+    }
+
+    // End-of-doc slot: always valid.
+    const endIndicator = document.createElement('div');
+    endIndicator.className = 'pmd-nav-drop-indicator';
+    endIndicator.dataset['insertPos'] = String(doc.content.size);
+    this.listEl.appendChild(endIndicator);
+    this.dropIndicators.push(endIndicator);
+  }
+
+  private removeDropIndicators(): void {
+    for (const el of this.dropIndicators) el.remove();
+    this.dropIndicators = [];
+  }
+
+  private updateDropTarget(clientX: number, clientY: number): void {
+    if (!this.view) return;
+    const session = dragController.getSession();
+    if (!session) return;
+
+    let best: { el: HTMLElement; dy: number; insertPos: number } | null = null;
+
+    for (const indicator of this.dropIndicators) {
+      const insertPos = parseInt(indicator.dataset['insertPos'] ?? '-1', 10);
+      // Suppress drop-on-self: don't accept a target that's inside any
+      // dragged item's source range.
+      const onSelf = session.items.some(
+        (it) => insertPos >= it.from && insertPos <= it.to,
+      );
+      if (onSelf) {
+        indicator.classList.remove('pmd-nav-drop-indicator-active');
+        continue;
+      }
+
+      const rect = indicator.getBoundingClientRect();
+      // Roughly: same horizontal column, vertically nearest center.
+      const inX = clientX >= rect.left - 8 && clientX <= rect.right + 8;
+      if (!inX) continue;
+      const center = (rect.top + rect.bottom) / 2;
+      const dy = Math.abs(clientY - center);
+      if (dy > 24) continue; // tolerance window
+      if (!best || dy < best.dy) {
+        best = { el: indicator, dy, insertPos };
+      }
+    }
+
+    for (const indicator of this.dropIndicators) {
+      indicator.classList.toggle(
+        'pmd-nav-drop-indicator-active',
+        best ? indicator === best.el : false,
+      );
+    }
+
+    dragController.setHoverTarget(
+      best ? { view: this.view, insertPos: best.insertPos } : null,
+    );
+  }
+
+  private maybeAutoExpand(clientX: number, clientY: number): void {
+    const session = dragController.getSession();
+    if (!session || session.items.length === 0) return;
+    const draggedLevel = session.items[0]!.level;
+
+    const target = document.elementFromPoint(clientX, clientY);
+    const li = target?.closest('.pmd-nav-item') as HTMLLIElement | null;
+    if (!li) {
+      this.cancelAutoExpand();
+      return;
+    }
+    const entry = this.liEntries.get(li);
+    if (!entry || !entry.id) {
+      this.cancelAutoExpand();
+      return;
+    }
+    // Only auto-expand collapsed entries that are SHALLOWER than the
+    // dragged level — the user is drilling into a parent to find a
+    // drop target inside.
+    if (entry.level >= draggedLevel) {
+      this.cancelAutoExpand();
+      return;
+    }
+    if (!this.collapsed.has(entry.id)) {
+      this.cancelAutoExpand();
+      return;
+    }
+
+    if (this.autoExpandTarget === entry.id) return; // already pending
+
+    this.cancelAutoExpand();
+    this.autoExpandTarget = entry.id;
+    this.autoExpandTimer = setTimeout(() => {
+      this.autoExpandTimer = null;
+      if (this.autoExpandTarget !== entry.id) return;
+      if (!this.collapsed.has(entry.id!)) return;
+      this.collapsed.delete(entry.id!);
+      this.autoExpanded.add(entry.id!);
+      if (this.currentDoc) {
+        this.render(this.currentDoc);
+        this.renderDropIndicators(draggedLevel);
+      }
+    }, 400);
+  }
+
+  private cancelAutoExpand(): void {
+    if (this.autoExpandTimer) {
+      clearTimeout(this.autoExpandTimer);
+      this.autoExpandTimer = null;
+    }
+    this.autoExpandTarget = null;
+  }
+
+  private maybeAutoScroll(clientY: number): void {
+    // Auto-scroll the inner list when the pointer is near top or
+    // bottom of the visible scroll area.
+    const rect = this.listEl.getBoundingClientRect();
+    const margin = 30;
+    if (clientY < rect.top + margin) {
+      this.listEl.scrollBy({ top: -10, behavior: 'auto' });
+    } else if (clientY > rect.bottom - margin) {
+      this.listEl.scrollBy({ top: 10, behavior: 'auto' });
+    }
+  }
+
+  private createPickupPill(items: DragItem[]): void {
+    this.removePickupPill();
+    const pill = document.createElement('div');
+    pill.className = 'pmd-nav-pickup-pill';
+    if (items.length === 1) {
+      const label = items[0]!.label.trim() || `(empty ${items[0]!.type})`;
+      pill.textContent = label.length > 40 ? label.slice(0, 38) + '…' : label;
+    } else {
+      pill.textContent = `${items.length} headings`;
+    }
+    document.body.appendChild(pill);
+    this.pickupPill = pill;
+  }
+
+  private updatePickupPill(x: number, y: number): void {
+    if (!this.pickupPill) return;
+    this.pickupPill.style.left = `${x + 12}px`;
+    this.pickupPill.style.top = `${y + 12}px`;
+  }
+
+  private removePickupPill(): void {
+    if (this.pickupPill) {
+      this.pickupPill.remove();
+      this.pickupPill = null;
+    }
   }
 
   /**
