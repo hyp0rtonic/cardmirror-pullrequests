@@ -132,18 +132,22 @@ class EditorDragSurface implements DragSurface {
   hitTest(clientX: number, clientY: number): { el: HTMLElement; insertPos: number; dy: number } | null {
     if (!this.host) return null;
     const hostRect = this.host.getBoundingClientRect();
-    if (
-      clientX < hostRect.left ||
-      clientX > hostRect.right ||
-      clientY < hostRect.top - 16 ||
-      clientY > hostRect.bottom + 16
-    ) {
+    // Horizontal gate only — vertically the pointer can fall past the
+    // last indicator (mostly-empty doc, dragging into the open space
+    // below) and we still want to snap to the bottom.
+    if (clientX < hostRect.left || clientX > hostRect.right) {
+      return null;
+    }
+    // Generous vertical clamp so we don't claim drops far outside the
+    // editor's visible area (e.g., user dragging over a totally
+    // unrelated page region above or below).
+    if (clientY < hostRect.top - 64 || clientY > hostRect.bottom + 64) {
       return null;
     }
 
     const session = dragController.getSession();
-    let best: IndicatorRecord | null = null;
-    let bestDy = Infinity;
+    type Cand = { el: HTMLElement; insertPos: number; centerY: number; dy: number };
+    const valid: Cand[] = [];
     for (const r of this.indicators) {
       if (session) {
         const onSelf = session.items.some(
@@ -153,14 +157,34 @@ class EditorDragSurface implements DragSurface {
       }
       const rect = r.el.getBoundingClientRect();
       const centerY = rect.top + rect.height / 2;
-      const dy = Math.abs(clientY - centerY);
-      if (dy < bestDy) {
-        bestDy = dy;
-        best = r;
-      }
+      valid.push({ el: r.el, insertPos: r.insertPos, centerY, dy: Math.abs(clientY - centerY) });
     }
-    if (!best || bestDy > 32) return null;
-    return { el: best.el, insertPos: best.insertPos, dy: bestDy };
+    if (valid.length === 0) return null;
+
+    // Preferred: closest indicator within 32px band.
+    let best: Cand | null = null;
+    for (const v of valid) {
+      if (v.dy > 32) continue;
+      if (!best || v.dy < best.dy) best = v;
+    }
+    if (best) return { el: best.el, insertPos: best.insertPos, dy: best.dy };
+
+    // Fall-through: pointer is above the topmost or below the
+    // bottommost indicator (e.g., empty page space at the bottom).
+    // Snap to the closest extreme.
+    let topMost = valid[0]!;
+    let bottomMost = valid[0]!;
+    for (const v of valid) {
+      if (v.centerY < topMost.centerY) topMost = v;
+      if (v.centerY > bottomMost.centerY) bottomMost = v;
+    }
+    if (clientY > bottomMost.centerY) {
+      return { el: bottomMost.el, insertPos: bottomMost.insertPos, dy: bottomMost.dy };
+    }
+    if (clientY < topMost.centerY) {
+      return { el: topMost.el, insertPos: topMost.insertPos, dy: topMost.dy };
+    }
+    return null;
   }
 
   highlight(el: HTMLElement | null): void {

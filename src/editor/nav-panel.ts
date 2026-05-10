@@ -237,7 +237,16 @@ export class NavigationPanel {
   ): { el: HTMLElement; insertPos: number; dy: number } | null {
     const session = dragController.getSession();
     if (!session) return null;
-    let best: { el: HTMLElement; insertPos: number; dy: number } | null = null;
+
+    // Horizontal gate: pointer must be inside the nav panel column.
+    // (Use the panel root rather than each indicator's rect so a
+    // pointer past the bottom indicator — where the indicator might
+    // be very narrow — still registers.)
+    const rootRect = this.root.getBoundingClientRect();
+    if (clientX < rootRect.left - 8 || clientX > rootRect.right + 8) return null;
+
+    type Cand = { el: HTMLElement; insertPos: number; centerY: number; dy: number };
+    const valid: Cand[] = [];
     for (const indicator of this.dropIndicators) {
       const insertPos = parseInt(indicator.dataset['insertPos'] ?? '-1', 10);
       const onSelf = session.items.some(
@@ -245,13 +254,36 @@ export class NavigationPanel {
       );
       if (onSelf) continue;
       const rect = indicator.getBoundingClientRect();
-      if (clientX < rect.left - 8 || clientX > rect.right + 8) continue;
-      const center = (rect.top + rect.bottom) / 2;
-      const dy = Math.abs(clientY - center);
-      if (dy > 24) continue;
-      if (!best || dy < best.dy) best = { el: indicator, insertPos, dy };
+      const centerY = (rect.top + rect.bottom) / 2;
+      valid.push({ el: indicator, insertPos, centerY, dy: Math.abs(clientY - centerY) });
     }
-    return best;
+    if (valid.length === 0) return null;
+
+    // Preferred: closest indicator within a 24px band.
+    let best: Cand | null = null;
+    for (const v of valid) {
+      if (v.dy > 24) continue;
+      if (!best || v.dy < best.dy) best = v;
+    }
+    if (best) return { el: best.el, insertPos: best.insertPos, dy: best.dy };
+
+    // Fall-through: pointer is above the topmost or below the
+    // bottommost indicator. Snap to that extreme so dragging into
+    // the empty space at the top or bottom of the panel still lands
+    // a target.
+    let topMost = valid[0]!;
+    let bottomMost = valid[0]!;
+    for (const v of valid) {
+      if (v.centerY < topMost.centerY) topMost = v;
+      if (v.centerY > bottomMost.centerY) bottomMost = v;
+    }
+    if (clientY > bottomMost.centerY) {
+      return { el: bottomMost.el, insertPos: bottomMost.insertPos, dy: bottomMost.dy };
+    }
+    if (clientY < topMost.centerY) {
+      return { el: topMost.el, insertPos: topMost.insertPos, dy: topMost.dy };
+    }
+    return null;
   }
 
   private highlightDropIndicator(el: HTMLElement | null): void {
