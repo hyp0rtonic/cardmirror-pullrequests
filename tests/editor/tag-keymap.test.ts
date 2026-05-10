@@ -185,9 +185,33 @@ describe('backspaceAtTagStart', () => {
     expect(next).toBe(null);
   });
 
-  it('removes the entire previous card when its only-tag is blank', () => {
+  it('merges with previous tag when both are non-blank', () => {
+    const doc = makeDoc([cardTagOnly('First'), cardTagOnly('Second')]);
+    const state = stateWithCursor(doc, findTagStart(doc, 1));
+    const next = apply(state, backspaceAtTagStart);
+    expect(next).not.toBe(null);
+    expect(next!.doc.childCount).toBe(1);
+    expect(next!.doc.child(0).firstChild!.textContent).toBe('FirstSecond');
+  });
+
+  it('merges previous tag-only card with current card body intact', () => {
     const doc = makeDoc([
-      cardTagOnly(''), // empty tag, only child
+      cardTagOnly('First'),
+      cardTagBody('Second', 'body text'),
+    ]);
+    const state = stateWithCursor(doc, findTagStart(doc, 1));
+    const next = apply(state, backspaceAtTagStart);
+    expect(next).not.toBe(null);
+    expect(next!.doc.childCount).toBe(1);
+    const card = next!.doc.child(0);
+    expect(card.firstChild!.textContent).toBe('FirstSecond');
+    expect(card.lastChild!.type.name).toBe('card_body');
+    expect(card.lastChild!.textContent).toBe('body text');
+  });
+
+  it('merge of empty previous tag still works (degenerate of merge case)', () => {
+    const doc = makeDoc([
+      cardTagOnly(''),
       cardTagOnly('Second'),
     ]);
     const state = stateWithCursor(doc, findTagStart(doc, 1));
@@ -225,6 +249,21 @@ describe('deleteAtTagEnd', () => {
     const merged = next!.doc.child(0);
     expect(merged.type.name).toBe('card');
     expect(merged.firstChild!.textContent).toBe('FirstSecond');
+  });
+
+  it('preserves the next card body when merging via forward-delete', () => {
+    const doc = makeDoc([
+      cardTagOnly('First'),
+      cardTagBody('Second', 'body text'),
+    ]);
+    const state = stateWithCursor(doc, findTagEnd(doc));
+    const next = apply(state, deleteAtTagEnd);
+    expect(next).not.toBe(null);
+    expect(next!.doc.childCount).toBe(1);
+    const card = next!.doc.child(0);
+    expect(card.firstChild!.textContent).toBe('FirstSecond');
+    expect(card.lastChild!.type.name).toBe('card_body');
+    expect(card.lastChild!.textContent).toBe('body text');
   });
 
   it('prohibits when next paragraph is a card_body (non-tag)', () => {
@@ -331,13 +370,39 @@ describe('enterAtTagEnd', () => {
     expect(sel.$from.parent.type.name).toBe('card_body');
   });
 
-  it('appends card_body even when card already has a body', () => {
+  it('inserts new body BEFORE existing body, not after', () => {
     const doc = makeDoc([cardTagBody('Tag', 'existing body')]);
     const state = stateWithCursor(doc, findTagEnd(doc));
     const next = apply(state, enterAtTagEnd);
     expect(next).not.toBe(null);
     const card = next!.doc.child(0);
-    expect(card.childCount).toBe(3); // tag + existing body + new body
+    expect(card.childCount).toBe(3); // tag + new (empty) body + existing body
+    expect(card.child(0).type.name).toBe('tag');
+    expect(card.child(1).type.name).toBe('card_body');
+    expect(card.child(1).textContent).toBe(''); // the new empty one
+    expect(card.child(2).type.name).toBe('card_body');
+    expect(card.child(2).textContent).toBe('existing body'); // pre-existing
+  });
+
+  it('inserts new body after the cite when cite is present', () => {
+    const doc = makeDoc([
+      schema.nodes['card']!.createChecked(null, [
+        tag('Tag'),
+        schema.nodes['cite_paragraph']!.create(null, schema.text('Author 2024')),
+        schema.nodes['card_body']!.create(null, schema.text('body')),
+      ]),
+    ]);
+    const state = stateWithCursor(doc, findTagEnd(doc));
+    const next = apply(state, enterAtTagEnd);
+    expect(next).not.toBe(null);
+    const card = next!.doc.child(0);
+    expect(card.childCount).toBe(4);
+    expect(card.child(0).type.name).toBe('tag');
+    expect(card.child(1).type.name).toBe('cite_paragraph');
+    expect(card.child(2).type.name).toBe('card_body');
+    expect(card.child(2).textContent).toBe(''); // new empty body, after cite
+    expect(card.child(3).type.name).toBe('card_body');
+    expect(card.child(3).textContent).toBe('body'); // pre-existing
   });
 });
 

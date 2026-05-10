@@ -26,8 +26,8 @@
  * overrides needed.
  */
 
-import { TextSelection, type Command } from 'prosemirror-state';
-import type { Node as PMNode } from 'prosemirror-model';
+import { TextSelection, type Command, type EditorState, type Transaction } from 'prosemirror-state';
+import { Fragment, type Node as PMNode } from 'prosemirror-model';
 import { schema } from '../schema/index.js';
 import { newHeadingId } from '../schema/ids.js';
 
@@ -181,10 +181,84 @@ function findNextParagraph(
 }
 
 /**
- * Backspace at the start of a tag/analytic. Permitted only when the
- * preceding paragraph is blank; deletes the blank paragraph (and the
- * containing card if removing the paragraph would orphan it).
- * Otherwise swallows the event so default Backspace doesn't fire.
+ * Merge two adjacent tag/analytic-headed containers. The first
+ * (`prev`) survives; the second (`next`) dissolves. The merged head
+ * receives the concatenated content of both heads; the prev container
+ * also absorbs any non-head children of next (cite, body, undertags).
+ * Cursor lands at the merge point — the boundary between the two
+ * heads' content within the merged head.
+ *
+ * Caller responsibilities:
+ *   - prev container's head is the only child (childCount === 1).
+ *   - prev and next containers are the same type (both `card` or
+ *     both `analytic_unit`); enforced via cheap type-name compare.
+ *   - prev/next are immediately adjacent in the doc.
+ */
+function mergeAdjacentTagContainers(
+  state: EditorState,
+  prevContainerFrom: number,
+  nextContainerFrom: number,
+): Transaction | null {
+  const $prev = state.doc.resolve(prevContainerFrom);
+  const prevContainer = $prev.nodeAfter;
+  const $next = state.doc.resolve(nextContainerFrom);
+  const nextContainer = $next.nodeAfter;
+  if (!prevContainer || !nextContainer) return null;
+  if (prevContainer.type.name !== nextContainer.type.name) return null;
+  if (!CARD_NODE_TYPES.has(prevContainer.type.name)) return null;
+
+  const prevHead = prevContainer.firstChild;
+  const nextHead = nextContainer.firstChild;
+  if (!prevHead || !nextHead) return null;
+  if (!HEAD_NODE_TYPES.has(prevHead.type.name)) return null;
+  if (!HEAD_NODE_TYPES.has(nextHead.type.name)) return null;
+  if (prevHead.type.name !== nextHead.type.name) return null;
+  if (prevContainer.childCount !== 1) return null;
+
+  // Children of `next` to migrate into `prev` (everything except next's head).
+  const survivors: PMNode[] = [];
+  for (let i = 1; i < nextContainer.childCount; i++) {
+    survivors.push(nextContainer.child(i));
+  }
+
+  const prevHeadContentEnd = prevContainerFrom + 1 + 1 + prevHead.content.size; // inside head, end of content
+  const nextContainerTo = nextContainerFrom + nextContainer.nodeSize;
+  const prevContainerContentEnd = prevContainerFrom + prevContainer.nodeSize - 1; // inside prev, before close
+
+  let tr = state.tr;
+  // 1. Append next head's inline content to prev head's content.
+  tr = tr.replaceWith(prevHeadContentEnd, prevHeadContentEnd, nextHead.content);
+  // The merge point is here, before the mapping shifts.
+  const mergePoint = prevHeadContentEnd;
+
+  // 2. Append next's other children (body, cite, undertags) to prev container.
+  if (survivors.length > 0) {
+    const insertPos = tr.mapping.map(prevContainerContentEnd);
+    tr = tr.replaceWith(insertPos, insertPos, Fragment.fromArray(survivors));
+  }
+
+  // 3. Delete the (now duplicated) next container.
+  const mappedNextFrom = tr.mapping.map(nextContainerFrom);
+  const mappedNextTo = tr.mapping.map(nextContainerTo);
+  tr = tr.delete(mappedNextFrom, mappedNextTo);
+
+  // 4. Cursor at merge point (mapped through all the changes).
+  const mappedMergePoint = tr.mapping.map(mergePoint);
+  tr = tr.setSelection(TextSelection.create(tr.doc, mappedMergePoint));
+
+  return tr;
+}
+
+/**
+ * Backspace at the start of a tag/analytic. Three cases:
+ *   - Previous paragraph is also a tag/analytic (head of a head-only
+ *     previous container) — merge the two containers via
+ *     `mergeAdjacentTagContainers`. Card body of the next container
+ *     is preserved on the surviving (prev) container.
+ *   - Previous paragraph is blank (whitespace-only) — delete it.
+ *     If it's the lone head of a previous container, drop the whole
+ *     container so we don't leave an orphan.
+ *   - Anything else — prohibit (swallow the event).
  */
 export const backspaceAtTagStart: Command = (state, dispatch) => {
   const ctx = getTagContext(state);
@@ -193,6 +267,18 @@ export const backspaceAtTagStart: Command = (state, dispatch) => {
 
   const prev = findPrevParagraph(state.doc, ctx.containerFrom);
   if (!prev) return false; // no previous paragraph — let default handle (no-op typically)
+
+  // Tag-into-tag merge case.
+  if (prev.isContainerHead && HEAD_NODE_TYPES.has(prev.node.type.name)) {
+    if (!dispatch) return true;
+    const $beforeContainer = state.doc.resolve(ctx.containerFrom);
+    const prevContainer = $beforeContainer.nodeBefore!;
+    const prevContainerFrom = ctx.containerFrom - prevContainer.nodeSize;
+    const tr = mergeAdjacentTagContainers(state, prevContainerFrom, ctx.containerFrom);
+    if (!tr) return true; // merge precondition failed — prohibit
+    dispatch(tr.scrollIntoView());
+    return true;
+  }
 
   if (!isBlank(prev.node)) {
     // Prohibit the merge. Swallow so default Backspace can't run.
@@ -221,9 +307,8 @@ export const backspaceAtTagStart: Command = (state, dispatch) => {
 /**
  * Forward Delete at the end of a tag/analytic. Permitted only when
  * the next paragraph is also a tag/analytic; merges the two heads
- * into one (deletes the boundary plus the second container's wrapper,
- * folding its content into the current). Otherwise swallows the
- * event.
+ * into one and migrates the next container's body/cite/undertags
+ * into the surviving container. Otherwise swallows the event.
  */
 export const deleteAtTagEnd: Command = (state, dispatch) => {
   const ctx = getTagContext(state);
@@ -248,29 +333,8 @@ export const deleteAtTagEnd: Command = (state, dispatch) => {
 
   if (!dispatch) return true;
 
-  // Merge: append the next head's text content to the current head,
-  // then delete the next container entirely. The resulting card
-  // retains the current container's content.
-  const nextContainerFrom = ctx.containerTo;
-  const $afterContainer = state.doc.resolve(nextContainerFrom);
-  const nextContainer = $afterContainer.nodeAfter!;
-  const nextContainerTo = nextContainerFrom + nextContainer.nodeSize;
-
-  let tr = state.tr;
-  // Insert the next head's inline content at the end of the current head.
-  tr = tr.replaceWith(
-    ctx.headTo - 1, // position just inside the head's close (end of head content)
-    ctx.headTo - 1,
-    next.node.content,
-  );
-  // Delete the entire next container (mapped through the insert above).
-  const mappedNextFrom = tr.mapping.map(nextContainerFrom);
-  const mappedNextTo = tr.mapping.map(nextContainerTo);
-  tr = tr.delete(mappedNextFrom, mappedNextTo);
-  // Selection: cursor stays at the merge point (end of the original
-  // head's pre-merge content).
-  const cursor = ctx.headTo - 1;
-  tr = tr.setSelection(TextSelection.create(tr.doc, cursor));
+  const tr = mergeAdjacentTagContainers(state, ctx.containerFrom, ctx.containerTo);
+  if (!tr) return true;
   dispatch(tr.scrollIntoView());
   return true;
 };
@@ -328,13 +392,25 @@ export const enterMidTag: Command = (state, dispatch) => {
  * Enter at the end of a tag/analytic. Creates a new card_body inside
  * the current container and moves the cursor into it.
  *
- * The card_body is appended at the end of the container's existing
- * content. For a freshly-typed card with no other content yet, the
- * new card_body lands immediately after the head (typical workflow).
- * For a card that already has cite/body, the new card_body lands at
- * the end of the body sequence — less ideal placement-wise, but
- * keeps the schema valid.
+ * Insertion point: the earliest schema-valid position for a card_body
+ * in the container — i.e., right after the head + any undertags +
+ * the optional cite/analytic, but BEFORE any existing card_body. For
+ * a fresh card with just a tag, the new body lands directly after
+ * the tag. For a card with [tag, body], the new body lands between
+ * tag and body so the cursor stays "right below the tag" rather than
+ * jumping past the existing body.
+ *
+ * Schema content is `tag undertag* (cite_paragraph | analytic)?
+ * card_body*` — card_body must come after any cite/undertag, so the
+ * earliest legal position is past those.
  */
+const PRE_CARD_BODY_TYPES = new Set([
+  'tag',
+  'analytic',
+  'undertag',
+  'cite_paragraph',
+]);
+
 export const enterAtTagEnd: Command = (state, dispatch) => {
   const ctx = getTagContext(state);
   if (!ctx) return false;
@@ -346,9 +422,19 @@ export const enterAtTagEnd: Command = (state, dispatch) => {
   const empty = cardBodyType.createAndFill();
   if (!empty) return false;
 
+  // Walk the container's children to find the first one that's NOT a
+  // pre-card-body sibling. Insert there.
+  let insertPos = ctx.containerFrom + 1; // start of container content
+  for (let i = 0; i < ctx.container.childCount; i++) {
+    const child = ctx.container.child(i);
+    if (PRE_CARD_BODY_TYPES.has(child.type.name)) {
+      insertPos += child.nodeSize;
+    } else {
+      break;
+    }
+  }
+
   let tr = state.tr;
-  // Insert at the end of the container's content (just before its close).
-  const insertPos = ctx.containerTo - 1;
   tr = tr.insert(insertPos, empty);
   // Cursor: inside the new card_body (one step past its open).
   const newBodyStart = insertPos + 1;
