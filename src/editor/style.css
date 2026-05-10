@@ -586,6 +586,18 @@ body.pmd-nav-resize-active {
   pointer-events: none;
 }
 
+/* Multi-select highlighting (Phase 2). Selected entries get a
+   subtle blue tint; the active item shows a slightly stronger left
+   border to distinguish it. */
+.pmd-nav-item.pmd-nav-item-selected {
+  background: #eaf2ff;
+  border-left-color: #2867d8;
+}
+
+.pmd-nav-item.pmd-nav-item-selected:hover {
+  background: #d8e7ff;
+}
+
 /* Drop indicator: a thin gap between nav entries when a drag is
    active. The hovered slot is highlighted. */
 .pmd-nav-drop-indicator {

@@ -86,15 +86,15 @@ describe('buildMoveTransaction', () => {
     expect(movedCard.lastChild!.textContent).toBe('body1');
   });
 
-  it('returns null when target is inside the source range (drop on self)', () => {
+  it('returns null when target is strictly inside the source range', () => {
     const card1 = cardWith('First');
     const card2 = cardWith('Second');
     const doc = makeDoc(card1, card2);
     const state = EditorState.create({ doc, schema });
 
-    // Drag card1; target somewhere inside it.
+    // Drag card1; target somewhere strictly inside it.
     const item = dragItemForRange(0, card1.nodeSize, 'card', 4);
-    const insidePos = 1; // inside card1's content
+    const insidePos = 2; // inside card1's content (interior, not boundary)
     const tr = buildMoveTransaction(state, [item], insidePos);
     expect(tr).toBeNull();
   });
@@ -146,17 +146,94 @@ describe('buildMoveTransaction', () => {
     expect(newDoc.child(3).firstChild!.textContent).toBe('A-card');
   });
 
-  it('returns null for multi-item input (Phase 2 not yet supported)', () => {
-    const card1 = cardWith('First');
-    const card2 = cardWith('Second');
-    const doc = makeDoc(card1, card2);
+  it('returns null for empty input', () => {
+    const doc = makeDoc(cardWith('First'));
+    const state = EditorState.create({ doc, schema });
+    const tr = buildMoveTransaction(state, [], 0);
+    expect(tr).toBeNull();
+  });
+
+  it('moves multiple cards preserving original document order', () => {
+    // Doc: [A][B][C][D]. Drag A and C, drop at end.
+    // Expected: [B][D][A][C].
+    const cardA = cardWith('A');
+    const cardB = cardWith('B');
+    const cardC = cardWith('C');
+    const cardD = cardWith('D');
+    const doc = makeDoc(cardA, cardB, cardC, cardD);
     const state = EditorState.create({ doc, schema });
 
+    const aFrom = 0;
+    const aTo = cardA.nodeSize;
+    const cFrom = aTo + cardB.nodeSize;
+    const cTo = cFrom + cardC.nodeSize;
+
     const items: DragItem[] = [
-      dragItemForRange(0, card1.nodeSize, 'card', 4),
-      dragItemForRange(card1.nodeSize, card1.nodeSize + card2.nodeSize, 'card', 4),
+      dragItemForRange(aFrom, aTo, 'card', 4),
+      dragItemForRange(cFrom, cTo, 'card', 4),
     ];
     const tr = buildMoveTransaction(state, items, doc.content.size);
+    expect(tr).not.toBeNull();
+    const newDoc = tr!.doc;
+    expect(newDoc.childCount).toBe(4);
+    expect(newDoc.child(0).firstChild!.textContent).toBe('B');
+    expect(newDoc.child(1).firstChild!.textContent).toBe('D');
+    expect(newDoc.child(2).firstChild!.textContent).toBe('A');
+    expect(newDoc.child(3).firstChild!.textContent).toBe('C');
+  });
+
+  it('multi-item drop between two unmoved cards preserves relative order', () => {
+    // Doc: [A][B][C][D][E]. Drag B and D, drop between C and (gap).
+    // The "between C and D's original position" depends on how we
+    // interpret target. Use insertPos = end of C. Expected:
+    // [A][C][B][D][E].
+    const cardA = cardWith('A');
+    const cardB = cardWith('B');
+    const cardC = cardWith('C');
+    const cardD = cardWith('D');
+    const cardE = cardWith('E');
+    const doc = makeDoc(cardA, cardB, cardC, cardD, cardE);
+    const state = EditorState.create({ doc, schema });
+
+    const bFrom = cardA.nodeSize;
+    const bTo = bFrom + cardB.nodeSize;
+    const dFrom = bTo + cardC.nodeSize;
+    const dTo = dFrom + cardD.nodeSize;
+    const targetPos = dFrom; // end of C / start of D
+
+    const items: DragItem[] = [
+      dragItemForRange(bFrom, bTo, 'card', 4),
+      dragItemForRange(dFrom, dTo, 'card', 4),
+    ];
+    const tr = buildMoveTransaction(state, items, targetPos);
+    expect(tr).not.toBeNull();
+    const newDoc = tr!.doc;
+    expect(newDoc.childCount).toBe(5);
+    expect(newDoc.child(0).firstChild!.textContent).toBe('A');
+    expect(newDoc.child(1).firstChild!.textContent).toBe('C');
+    expect(newDoc.child(2).firstChild!.textContent).toBe('B');
+    expect(newDoc.child(3).firstChild!.textContent).toBe('D');
+    expect(newDoc.child(4).firstChild!.textContent).toBe('E');
+  });
+
+  it('multi-item drop is rejected if target is inside any source range', () => {
+    const cardA = cardWith('A');
+    const cardB = cardWith('B');
+    const cardC = cardWith('C');
+    const doc = makeDoc(cardA, cardB, cardC);
+    const state = EditorState.create({ doc, schema });
+
+    const bFrom = cardA.nodeSize;
+    const bTo = bFrom + cardB.nodeSize;
+    const cFrom = bTo;
+    const cTo = cFrom + cardC.nodeSize;
+
+    const items: DragItem[] = [
+      dragItemForRange(bFrom, bTo, 'card', 4),
+      dragItemForRange(cFrom, cTo, 'card', 4),
+    ];
+    // Target inside B's range.
+    const tr = buildMoveTransaction(state, items, bFrom + 1);
     expect(tr).toBeNull();
   });
 });

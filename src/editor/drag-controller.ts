@@ -107,8 +107,9 @@ class DragControllerImpl {
     const { view: srcView, items } = this.session;
     const { view: tgtView, insertPos } = this.hoverTarget;
 
-    // Phase 1: single-item, same-view only.
-    if (items.length !== 1 || srcView !== tgtView) {
+    // Phase 1+2: any number of items, same view only. Cross-view
+    // (Phase 3) is added later.
+    if (items.length === 0 || srcView !== tgtView) {
       this.cancel();
       return false;
     }
@@ -159,23 +160,44 @@ export const dragController = new DragControllerImpl();
  * self, or `insertPos` falls inside one of the dragged items'
  * source ranges).
  *
- * Phase 1: single-item only. Multi-item support (Phase 2) will sort
- * items by `from` descending for cuts and re-insert in original
- * document order.
+ * Multi-item: items are inserted at the target in their original
+ * document order. Cuts happen in reverse-document order so earlier
+ * cuts don't shift later sources' positions before we read their
+ * content. Slice extraction happens before any deletion to avoid
+ * reading from a mutated doc.
  */
 export function buildMoveTransaction(
   state: EditorState,
   items: DragItem[],
   insertPos: number,
 ): Transaction | null {
-  if (items.length !== 1) return null;
-  const item = items[0]!;
-  if (insertPos >= item.from && insertPos <= item.to) return null;
+  if (items.length === 0) return null;
+  // Reject if target is strictly inside any source range. Boundary
+  // positions (= from or = to) are valid drop slots — for multi-item
+  // drag, an unmoved sibling's boundary is the natural drop point
+  // adjacent to a moved item.
+  for (const item of items) {
+    if (insertPos > item.from && insertPos < item.to) return null;
+  }
 
-  const slice = state.doc.slice(item.from, item.to);
+  // Capture content before mutating (need original doc positions).
+  const ascending = [...items].sort((a, b) => a.from - b.from);
+  const slices = ascending.map((item) => state.doc.slice(item.from, item.to));
+
+  // Cut in reverse-document order so earlier-position cuts don't
+  // invalidate later items' positions.
   const tr = state.tr;
-  tr.delete(item.from, item.to);
-  const mappedTarget = tr.mapping.map(insertPos);
-  tr.insert(mappedTarget, slice.content);
+  const descending = [...items].sort((a, b) => b.from - a.from);
+  for (const item of descending) {
+    tr.delete(item.from, item.to);
+  }
+
+  // Map the target through every cut, then insert items in original
+  // document order, advancing the local target by each insertion.
+  let target = tr.mapping.map(insertPos);
+  for (const slice of slices) {
+    tr.insert(target, slice.content);
+    target += slice.content.size;
+  }
   return tr;
 }

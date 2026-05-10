@@ -69,6 +69,21 @@ export class NavigationPanel {
   private levelButtons: HTMLButtonElement[] = [];
   private unsubscribeSettings: (() => void) | null = null;
 
+  // ---- Selection state (multi-select) ----
+  private selectedIds: Set<string> = new Set();
+  private selectionAnchorId: string | null = null;
+  /** Type of currently selected entries; selection is type-locked. */
+  private selectionType: string | null = null;
+  /** When the user plain-clicks on an entry that's part of a multi-
+   *  selection, defer the "replace selection with just this entry"
+   *  action to pointerup-without-drag (so the drag uses the multi).
+   */
+  private deferredClickFinalize: HeadingEntry | null = null;
+  /** Modifier state captured at pointerdown — drives whether
+   *  pointerup-without-drag does a jumpTo (plain click) or just
+   *  finalizes selection (Ctrl/Shift click). */
+  private pointerDownModifier: 'none' | 'shift' | 'meta' = 'none';
+
   // ---- Drag-and-drop state ----
   private liEntries: Map<HTMLLIElement, HeadingEntry> = new Map();
   private dragStartX = 0;
@@ -79,7 +94,7 @@ export class NavigationPanel {
   private pickupPill: HTMLElement | null = null;
   private dropIndicators: HTMLElement[] = [];
   /** Heading IDs we expanded automatically during the active drag.
-   *  Restored on drop / cancel. */
+   *  Restored on drag-off / cancel. */
   private autoExpanded: Set<string> = new Set();
   private autoExpandTimer: ReturnType<typeof setTimeout> | null = null;
   private autoExpandTarget: string | null = null;
@@ -269,6 +284,9 @@ export class NavigationPanel {
       li.title = TYPE_LABEL[entry.type] ?? entry.type;
       if (entry.id) li.dataset['id'] = entry.id;
       li.dataset['pos'] = String(entry.pos);
+      if (entry.id != null && this.selectedIds.has(entry.id)) {
+        li.classList.add('pmd-nav-item-selected');
+      }
 
       const chevron = document.createElement('span');
       chevron.className = 'pmd-nav-chevron';
@@ -337,12 +355,41 @@ export class NavigationPanel {
     li: HTMLLIElement,
   ): void {
     if (e.button !== 0) return; // primary button only
-    // Read mode disables drag (and editing in general).
-    if (settings.get('readMode')) return;
     // Ignore clicks that originated on the chevron — it has its own
     // handler and shouldn't initiate a drag.
     const target = e.target as HTMLElement;
     if (target.closest('.pmd-nav-chevron')) return;
+
+    // Capture modifier state so pointerup-without-drag knows whether
+    // it's a plain click (jumpTo) or a Ctrl/Shift click (selection-only).
+    this.pointerDownModifier = e.shiftKey
+      ? 'shift'
+      : e.metaKey || e.ctrlKey
+        ? 'meta'
+        : 'none';
+
+    // Apply the selection update for Shift/Ctrl right away.
+    // Plain clicks defer the "replace selection with this entry" if
+    // the entry is part of a multi-selection — drag should use the
+    // existing multi, but a plain click without drag should single-
+    // select.
+    this.deferredClickFinalize = null;
+    if (this.pointerDownModifier === 'shift') {
+      this.handleShiftClick(entry);
+    } else if (this.pointerDownModifier === 'meta') {
+      this.handleCtrlClick(entry);
+    } else {
+      // plain
+      if (
+        entry.id != null &&
+        this.selectedIds.has(entry.id) &&
+        this.selectedIds.size > 1
+      ) {
+        this.deferredClickFinalize = entry;
+      } else {
+        this.selectSingle(entry);
+      }
+    }
 
     this.dragStartX = e.clientX;
     this.dragStartY = e.clientY;
@@ -357,6 +404,98 @@ export class NavigationPanel {
     }
   }
 
+  // ---- Selection helpers ----
+
+  private selectSingle(entry: HeadingEntry): void {
+    if (entry.id == null) {
+      this.clearSelection();
+      return;
+    }
+    const wasSize = this.selectedIds.size;
+    const onlyMember = wasSize === 1 && this.selectedIds.has(entry.id);
+    this.selectedIds = new Set([entry.id]);
+    this.selectionAnchorId = entry.id;
+    this.selectionType = entry.type;
+    if (!onlyMember) this.applySelectionClasses();
+  }
+
+  private clearSelection(): void {
+    if (this.selectedIds.size === 0 && this.selectionAnchorId === null) return;
+    this.selectedIds.clear();
+    this.selectionAnchorId = null;
+    this.selectionType = null;
+    this.applySelectionClasses();
+  }
+
+  private handleShiftClick(entry: HeadingEntry): void {
+    if (entry.id == null) return;
+    if (!this.currentDoc) {
+      this.selectSingle(entry);
+      return;
+    }
+    if (!this.selectionAnchorId || !this.selectionType) {
+      this.selectSingle(entry);
+      return;
+    }
+    const all = collectHeadings(this.currentDoc);
+    const aIdx = all.findIndex((e) => e.id === this.selectionAnchorId);
+    const bIdx = all.findIndex((e) => e.id === entry.id);
+    if (aIdx < 0 || bIdx < 0) {
+      this.selectSingle(entry);
+      return;
+    }
+    const lo = Math.min(aIdx, bIdx);
+    const hi = Math.max(aIdx, bIdx);
+    const next = new Set<string>();
+    // Filter the range to the anchor's type — per the §4 / Phase 2
+    // rule, mixed-type ranges quietly resolve to the type that
+    // matches the existing anchor.
+    for (let i = lo; i <= hi; i++) {
+      const e = all[i]!;
+      if (e.id != null && e.type === this.selectionType) next.add(e.id);
+    }
+    this.selectedIds = next;
+    // Anchor stays where it was so subsequent shift-clicks keep
+    // ranging from the same starting point.
+    this.applySelectionClasses();
+  }
+
+  private handleCtrlClick(entry: HeadingEntry): void {
+    if (entry.id == null) return;
+    // Empty selection or type mismatch → replace with just this entry.
+    if (
+      this.selectedIds.size === 0 ||
+      (this.selectionType !== null && this.selectionType !== entry.type)
+    ) {
+      this.selectSingle(entry);
+      return;
+    }
+    // Toggle entry in/out.
+    if (this.selectedIds.has(entry.id)) {
+      this.selectedIds.delete(entry.id);
+      if (this.selectedIds.size === 0) {
+        this.selectionAnchorId = null;
+        this.selectionType = null;
+      } else if (this.selectionAnchorId === entry.id) {
+        // Anchor was the deselected entry; pick another to be the new
+        // anchor (the next remaining one).
+        this.selectionAnchorId = this.selectedIds.values().next().value ?? null;
+      }
+    } else {
+      this.selectedIds.add(entry.id);
+      this.selectionAnchorId = entry.id;
+      this.selectionType = entry.type;
+    }
+    this.applySelectionClasses();
+  }
+
+  private applySelectionClasses(): void {
+    for (const [li, entry] of this.liEntries) {
+      const selected = entry.id != null && this.selectedIds.has(entry.id);
+      li.classList.toggle('pmd-nav-item-selected', selected);
+    }
+  }
+
   private onDragMove(e: PointerEvent): void {
     if (!this.dragStartEntry) return;
 
@@ -365,6 +504,8 @@ export class NavigationPanel {
       const dy = e.clientY - this.dragStartY;
       // 5px threshold — below this, count as a click, not a drag.
       if (dx * dx + dy * dy < 25) return;
+      // Read mode disables drag (but lets clicks still navigate).
+      if (settings.get('readMode')) return;
       this.startDrag();
     }
 
@@ -384,11 +525,23 @@ export class NavigationPanel {
     void e;
     let committed = false;
     if (dragController.isActive()) {
-      committed = dragController.commit(); // commit no-ops if no hover target
+      committed = dragController.commit(); // no-ops if no hover target
     } else if (this.dragStartEntry) {
-      // No drag occurred; treat as click → jump to entry.
-      this.jumpTo(this.dragStartEntry);
+      // No drag occurred. Finalize the click action:
+      // - Plain click on a multi-selected entry (deferred): single-select
+      //   it, then jump to it.
+      // - Plain click otherwise: jump to the entry (selection already
+      //   updated at pointerdown).
+      // - Ctrl/Shift click: selection was already updated; don't navigate.
+      if (this.pointerDownModifier === 'none') {
+        if (this.deferredClickFinalize) {
+          this.selectSingle(this.deferredClickFinalize);
+        }
+        this.jumpTo(this.dragStartEntry);
+      }
     }
+    this.deferredClickFinalize = null;
+    this.pointerDownModifier = 'none';
     this.cleanupDrag(committed);
   }
 
@@ -401,28 +554,60 @@ export class NavigationPanel {
   }
 
   private startDrag(): void {
-    const entry = this.dragStartEntry;
-    if (!entry || !this.view) return;
+    const startEntry = this.dragStartEntry;
+    if (!startEntry || !this.view) return;
 
-    const range = this.computeHeadingRange(entry);
-    if (!range) return;
+    // Decide which entries to drag: the multi-selection (if the drag
+    // origin is part of one) or just the start entry.
+    let entriesToDrag: HeadingEntry[];
+    if (
+      startEntry.id != null &&
+      this.selectedIds.has(startEntry.id) &&
+      this.selectedIds.size > 1 &&
+      this.currentDoc
+    ) {
+      // Multi-drag: walk all entries in document order and keep the
+      // selected ones. This preserves their original relative order
+      // in the source-items list.
+      const all = collectHeadings(this.currentDoc);
+      entriesToDrag = all.filter(
+        (e) => e.id != null && this.selectedIds.has(e.id),
+      );
+    } else {
+      entriesToDrag = [startEntry];
+    }
 
-    const item: DragItem = {
-      from: range.from,
-      to: range.to,
-      id: entry.id,
-      type: entry.type,
-      level: entry.level,
-      label: entry.text,
-    };
+    const items: DragItem[] = [];
+    for (const e of entriesToDrag) {
+      const range = this.computeHeadingRange(e);
+      if (!range) continue;
+      items.push({
+        from: range.from,
+        to: range.to,
+        id: e.id,
+        type: e.type,
+        level: e.level,
+        label: e.text,
+      });
+    }
+    if (items.length === 0) return;
 
-    dragController.begin({ view: this.view, items: [item] });
+    dragController.begin({ view: this.view, items });
 
-    this.renderDropIndicators(entry.level);
-    this.createPickupPill([item]);
+    // Drop targets are filtered by the dragged level. With multi-
+    // select all items have the same type (and thus the same level),
+    // so any of them works.
+    this.renderDropIndicators(items[0]!.level);
+    this.createPickupPill(items);
 
-    if (this.dragStartLi) {
-      this.dragStartLi.classList.add('pmd-nav-item-dragging');
+    // Mark all dragged source <li>s.
+    const idsBeingDragged = new Set(
+      items.map((it) => it.id).filter((id): id is string => id != null),
+    );
+    for (const [li, entry] of this.liEntries) {
+      if (entry.id != null && idsBeingDragged.has(entry.id)) {
+        li.classList.add('pmd-nav-item-dragging');
+      }
     }
   }
 
@@ -445,9 +630,11 @@ export class NavigationPanel {
 
     this.removeDropIndicators();
     this.removePickupPill();
-    if (this.dragStartLi) {
-      this.dragStartLi.classList.remove('pmd-nav-item-dragging');
-    }
+    // Clear dragging class from every <li> that had it (multi-drag
+    // can mark several at once).
+    this.listEl
+      .querySelectorAll('.pmd-nav-item-dragging')
+      .forEach((el) => el.classList.remove('pmd-nav-item-dragging'));
     this.cancelAutoExpand();
 
     if (this.dragHandlersAttached) {
@@ -533,10 +720,11 @@ export class NavigationPanel {
 
     for (const indicator of this.dropIndicators) {
       const insertPos = parseInt(indicator.dataset['insertPos'] ?? '-1', 10);
-      // Suppress drop-on-self: don't accept a target that's inside any
-      // dragged item's source range.
+      // Suppress drop-on-self: a strict-interior position inside any
+      // source range. Boundary positions (= item.from / item.to) are
+      // valid drop slots — they're meaningful for multi-item drag.
       const onSelf = session.items.some(
-        (it) => insertPos >= it.from && insertPos <= it.to,
+        (it) => insertPos > it.from && insertPos < it.to,
       );
       if (onSelf) {
         indicator.classList.remove('pmd-nav-drop-indicator-active');
@@ -681,7 +869,9 @@ export class NavigationPanel {
       const label = items[0]!.label.trim() || `(empty ${items[0]!.type})`;
       pill.textContent = label.length > 40 ? label.slice(0, 38) + '…' : label;
     } else {
-      pill.textContent = `${items.length} headings`;
+      const t = items[0]!.type;
+      const typeLabel = TYPE_LABEL[t] ?? t;
+      pill.textContent = `${items.length} ${typeLabel}s`;
     }
     document.body.appendChild(pill);
     this.pickupPill = pill;
