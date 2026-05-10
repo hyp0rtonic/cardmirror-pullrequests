@@ -223,11 +223,11 @@ function buildTypographyEditor(): HTMLElement {
 
   wrap.appendChild(flagRow('citeUnderlined', 'Cite: underlined'));
   wrap.appendChild(flagRow('underlineBold', 'Underline: bold'));
+  wrap.appendChild(flagRow('undertagItalic', 'Undertag: italic'));
+  wrap.appendChild(flagRow('undertagBold', 'Undertag: bold'));
   wrap.appendChild(flagRow('emphasisBold', 'Emphasis: bold'));
   wrap.appendChild(flagRow('emphasisItalic', 'Emphasis: italic'));
   wrap.appendChild(flagRow('emphasisBox', 'Emphasis: boxed'));
-  wrap.appendChild(flagRow('undertagItalic', 'Undertag: italic'));
-  wrap.appendChild(flagRow('undertagBold', 'Undertag: bold'));
 
   const sizeRow = document.createElement('label');
   sizeRow.className = 'pmd-typography-size-row';
@@ -266,8 +266,9 @@ function buildTypographyEditor(): HTMLElement {
     // Sync checkboxes
     const checkboxes = wrap.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
     const flagKeys: (keyof DisplayTypography)[] = [
-      'citeUnderlined', 'underlineBold', 'emphasisBold', 'emphasisItalic', 'emphasisBox',
+      'citeUnderlined', 'underlineBold',
       'undertagItalic', 'undertagBold',
+      'emphasisBold', 'emphasisItalic', 'emphasisBox',
     ];
     flagKeys.forEach((k, i) => {
       const cb = checkboxes[i];
