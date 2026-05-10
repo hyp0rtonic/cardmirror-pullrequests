@@ -659,48 +659,7 @@ resolved.
 
 ### 14.1 Open questions (under collaborator review)
 
-#### Q1: Backspace at the start of a tag `[open]`
-
-You are editing a tag and your cursor is at the beginning of the tag.
-You hit Backspace. In Word, this deletes the line break right before
-the tag, combining the tag with the paragraph before and turning the
-paragraph before into a tag.
-
-Options:
-
-1. **Prohibit.** You never want to hit Backspace at the beginning of a
-   tag and tag-ify the paragraph above it.
-2. **Permit only when the previous paragraph is blank.** You might
-   want to remove blank space before a card by backspacing the tag
-   into it, but would never want to back a tag into a non-blank
-   paragraph.
-3. **Permit, but the merge inverts: the tag adopts the style of the
-   previous paragraph** (rather than the previous paragraph becoming a
-   tag).
-4. **Word's behavior is correct as-is.**
-5. Other.
-
-#### Q2: Enter in the middle of a tag `[open]`
-
-You are editing a tag and your cursor is in the middle of the tag. You
-hit Return/Enter. In Word, this splits your one tag-styled paragraph
-into two tag-styled paragraphs at the cursor — creating an original
-paragraph 1 and a new paragraph 2.
-
-Options:
-
-1. **Prohibit.** You never want to split a tag into two tags this way.
-2. **Permit, but only paragraph 1 keeps tag styling.** Splitting a tag
-   this way would be because you want part of the tag to be normal
-   text below a tag (e.g., recovering from accidentally backspacing a
-   cite into a tag). If you want paragraph 2 to remain a tag, you'd
-   re-apply the tag style manually.
-3. **Permit, but only paragraph 2 keeps tag styling.** The only
-   reason to do this would be if you accidentally tag-ified a normal
-   paragraph (per Q1). You'd want the paragraph to return to normal
-   when you break the tag off of it.
-4. **Word's behavior is correct as-is.**
-5. Other.
+(none currently — see §14.3 for decided rules)
 
 ### 14.2 Question backlog (not yet drafted in poll form)
 
@@ -710,17 +669,12 @@ proposal) before the F-key style commands ship.
 
 **Mirror cases for the same actions:**
 
-- Forward Delete at the *end* of a tag (pulls following cite/body into the tag).
-- Enter at the *end* of a tag (what's the "next paragraph" style? cite? body? new tag?).
-- Enter at the *start* of a tag (insert blank above the card, split with empty tag, refuse).
+- Card body — last paragraph, cursor at end, Delete forward: does it pull the next card's tag into the body (destroying the next card)?
 
 **Same matrix for other node types:**
 
-- Pocket / Hat / Block — same backspace-merge / enter-split / delete-forward questions.
 - Cite paragraph — backspace at start (merge into tag?), enter inside cite (split into two cites? break to body?), enter at end (new body? new cite?).
 - Undertag — backspace at start (merge into tag? into previous undertag?), enter at end (new undertag? escape into body? break out of card?).
-- Analytic / analytic_unit — same backspace/enter questions, plus enter at end of standalone analytic (new analytic_unit? body in same unit? plain paragraph?).
-- Card body — last paragraph, cursor at end, Delete forward: does it pull the next card's tag into the body (destroying the next card)?
 
 **Selection-spanning operations:**
 
@@ -768,6 +722,58 @@ tag is grouped into the card as `card_body` until the next heading).
 
 Rationale: see `DECISIONS.md` 2026-05-09 "Paragraph absorption rule for
 loose paragraphs after a card."
+
+#### Tag boundary editing `[decided]`
+
+The rules below all apply equivalently to `analytic` (in an
+`analytic_unit`). Pocket / Hat / Block use ProseMirror's default
+behavior — no overrides needed.
+
+A paragraph counts as **blank** for these rules if its `textContent`
+trimmed is empty (whitespace-only paragraphs included). The "previous
+paragraph" of a tag is whatever appears immediately before the tag's
+containing card in document order — this includes the last `card_body`
+of a preceding card, since that's the candidate for being a blank
+trailing line that the user might want to delete.
+
+##### Backspace at the start of a tag `[decided]`
+
+Permitted only when the preceding paragraph is blank — delete the
+blank paragraph; the tag stays intact and the cursor remains at the
+start of the tag. Otherwise, prohibited (no-op). The rule applies
+regardless of whether the blank paragraph is at doc level or is a
+trailing card_body inside the previous card.
+
+##### Enter in the middle of a tag `[decided]`
+
+Word's default behavior: split the tag at the cursor; the pre-cursor
+text becomes a new tag-shaped card inserted before the original; the
+post-cursor text remains in the original card with all its existing
+content (cite, body, etc.). Both halves keep tag styling. Cursor lands
+at the start of the post-cursor (continuation) tag.
+
+##### Forward Delete at the end of a tag `[decided]`
+
+Permitted only when the next paragraph in document order is also a
+tag. Merges the two tags into one; the resulting card retains the
+later card's content (cite/body/etc.). When the next paragraph is
+anything else (cite, body, undertag, heading), the operation is
+prohibited.
+
+##### Enter at the end of a tag `[decided]`
+
+Creates a new card_body (Normal style) and moves the cursor into it.
+The card_body is inserted at the schema-correct position within the
+current card.
+
+##### Enter at the start of a tag `[decided]`
+
+Splits with an empty tag before the original — i.e., a new empty card
+(empty tag, no body) is inserted before the current card; the original
+card's content is unchanged; the cursor remains at the start of the
+original tag.
+
+Rationale: see `DECISIONS.md` 2026-05-10 "Tag boundary editing rules."
 
 ## 15. Companion-tool integration boundaries
 

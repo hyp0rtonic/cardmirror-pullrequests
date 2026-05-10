@@ -285,3 +285,35 @@ mid-edit.
 Starter doc updated: the demo "loose paragraph" was moved to between
 the Block heading and the first card, so it sits in a position the
 absorption rule preserves rather than auto-absorbing on first edit.
+
+## 2026-05-10: Tag boundary editing rules
+
+Settles ARCHITECTURE.md §14's open questions on Backspace / Delete /
+Enter at tag boundaries. Per the project owner's collaborator-poll
+answers:
+
+- **Backspace at start of tag**: permitted only when the preceding
+  paragraph is blank (whitespace-only). The blank paragraph is deleted;
+  the tag is preserved. "Previous paragraph" includes the trailing
+  card_body of a preceding card — those count too.
+- **Enter mid-tag**: Word's default split-into-two-tags behavior is
+  correct. In our schema this means a new card is inserted before the
+  current card with just the pre-cursor tag content; the original card
+  retains the post-cursor text plus all existing cite/body/undertags.
+- **Forward Delete at end of tag**: permitted only when the next
+  paragraph is also a tag (i.e., merging adjacent tag-only cards). All
+  other forward-delete cases at the tag boundary are prohibited.
+- **Enter at end of tag**: creates a Normal-styled paragraph (in
+  schema terms, a card_body) appended at the schema-correct position;
+  cursor lands in the new card_body. Note: this overrides Verbatim's
+  Tag→Cite styleNext default — pressing Enter at end of tag goes to a
+  body, not a cite.
+- **Enter at start of tag**: a new empty card is inserted before the
+  current card; the original is unchanged.
+
+The same rules apply to `analytic` inside an `analytic_unit`. Pocket,
+Hat, Block use ProseMirror's default behavior unchanged — no card
+boundary to enforce, so the loose semantics are fine.
+
+Implementation will land separately as keymap commands; this entry
+records only the policy.
