@@ -21,6 +21,7 @@
 import type { EditorView } from 'prosemirror-view';
 import { collectHeadings, computeHeadingRange, TYPE_TO_LEVEL } from './headings.js';
 import { dragController, type DragItem, type DragSurface } from './drag-controller.js';
+import { settings } from './settings.js';
 
 interface IndicatorRecord {
   el: HTMLElement;
@@ -201,6 +202,11 @@ class EditorDragSurface implements DragSurface {
     const view = this.view;
     const host = this.host;
     const hostRect = host.getBoundingClientRect();
+    // #editor uses CSS `zoom`, so `style.top` set on an indicator is
+    // interpreted in the host's unzoomed CSS pixels (then multiplied by
+    // zoom at render time). The viewport-distance from coordsAtPos /
+    // getBoundingClientRect has to be divided back out.
+    const zoom = this.getEditorZoom();
 
     const seen = new Set<number>();
     const place = (insertPos: number, anchorY: number): void => {
@@ -208,7 +214,7 @@ class EditorDragSurface implements DragSurface {
       seen.add(insertPos);
       const indicator = document.createElement('div');
       indicator.className = 'pmd-editor-drop-indicator';
-      indicator.style.top = `${anchorY - hostRect.top + host.scrollTop}px`;
+      indicator.style.top = `${(anchorY - hostRect.top) / zoom + host.scrollTop}px`;
       host.appendChild(indicator);
       this.indicators.push({ el: indicator, insertPos });
     };
@@ -468,8 +474,9 @@ class EditorDragSurface implements DragSurface {
       const fromCoords = this.view.coordsAtPos(from);
       const toCoords = this.view.coordsAtPos(Math.max(from, to - 1));
       const hostRect = this.host.getBoundingClientRect();
-      const top = fromCoords.top - hostRect.top + this.host.scrollTop;
-      const bottom = toCoords.bottom - hostRect.top + this.host.scrollTop;
+      const zoom = this.getEditorZoom();
+      const top = (fromCoords.top - hostRect.top) / zoom + this.host.scrollTop;
+      const bottom = (toCoords.bottom - hostRect.top) / zoom + this.host.scrollTop;
       const box = document.createElement('div');
       box.className = 'pmd-editor-pickup-highlight';
       box.style.top = `${top}px`;
@@ -479,6 +486,11 @@ class EditorDragSurface implements DragSurface {
     } catch {
       /* skip — coordsAtPos can throw mid-update */
     }
+  }
+
+  private getEditorZoom(): number {
+    const pct = settings.get('zoomPct');
+    return pct > 0 ? pct / 100 : 1;
   }
 
   private removeHighlight(): void {
