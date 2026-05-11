@@ -176,12 +176,13 @@ body {
 }
 
 /* Cite panel — sits to the right of the formatting panel, separated
-   by the same divider. Set up as a 2-row grid (column-flow) so it
-   matches the formatting panel's height and so the Cite button aligns
-   with the panel's top row; future buttons will fill the rest. */
+   by the same divider. 2-row grid (column-flow) so it matches the
+   formatting panel's height and lines up its top row. Two columns:
+   col 1 = Cite/Underline, col 2 = Emphasis (with the second slot
+   reserved for future inline-mark buttons). */
 .ribbon-cite-panel {
   display: grid;
-  grid-template-columns: auto;
+  grid-template-columns: auto auto;
   grid-template-rows: 1.45rem 1.45rem;
   grid-auto-flow: column;
   gap: 2px 3px;
@@ -264,6 +265,27 @@ body {
 
 #ribbon .ribbon-cite-panel.style-preview .formatting-panel-underline {
   text-decoration: underline;
+}
+
+/* Emphasis preview: always underlined (matches .pmd-emphasis); the
+   bold / italic / box decorations are gated on the same display-
+   typography flags the editor uses, mirrored onto documentElement. */
+#ribbon .ribbon-cite-panel.style-preview .formatting-panel-emphasis {
+  text-decoration: underline;
+  font-weight: normal;
+  font-style: normal;
+}
+
+.pmd-emphasis-bold #ribbon .ribbon-cite-panel.style-preview .formatting-panel-emphasis {
+  font-weight: bold;
+}
+
+.pmd-emphasis-italic #ribbon .ribbon-cite-panel.style-preview .formatting-panel-emphasis {
+  font-style: italic;
+}
+
+.pmd-emphasis-box #ribbon .ribbon-cite-panel.style-preview .formatting-panel-emphasis {
+  border: var(--pmd-emphasis-box-size, 1pt) solid var(--pmd-c-emphasis-box);
 }
 
 #app {

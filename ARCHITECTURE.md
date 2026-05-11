@@ -715,9 +715,11 @@ from the cite-classifier — see the rule below.)
 
 - F12 Clear with cursor in a tag — strip the card wrap and downgrade
   to body? Just downgrade the tag (leaving the card invalid)? Refuse?
-- F9 Underline / F10 Emphasis / F11 Highlight inside a heading —
-  should heading paragraphs allow inline emphasis marks at all, or
-  only body content?
+- F11 Highlight inside a heading — should heading paragraphs allow
+  highlight at all, or only body content? (F9 Underline is settled:
+  structural textblocks get `underline_direct` rather than the named
+  style. F10 Emphasis is settled: skipped inside structural blocks,
+  same as F8 Cite.)
 
 **Outline navigation:**
 
@@ -972,12 +974,27 @@ through one overrides surface):
   pocket, hat, block, undertag). Toggle off only when every selected
   character is already underlined (either mark counts); partial state
   adds underline to the not-yet-underlined characters. Empty
-  selection: toggle the run the cursor is on (the text node it sits
-  inside); at a boundary between two distinct runs, no-op. Adding
+  selection: expand to the **word at the cursor** — the maximal run
+  of non-whitespace characters in the cursor's textblock — and toggle
+  that. Mark boundaries do not break a word: two text nodes with no
+  whitespace between are one word. No-op when the cursor is in
+  whitespace, in an empty textblock, or on an inline leaf. Adding
   `underline_mark` to body text strips any conflicting `cite_mark` /
   `emphasis_mark` in the range — body text holds at most one of
   cite / underline / emphasis. Mod-U is a registered alias of F9
   for the future settings UI; only F9 surfaces in the ribbon chrome.
+- **F10 — apply Emphasis character style.** Same shape as F8 in most
+  respects — applies `emphasis_mark` to text in the selection, skips
+  structural blocks (tag, analytic, pocket, hat, block, undertag),
+  apply-only (idempotent). Schema `excludes` on `emphasis_mark` auto-
+  strip any `cite_mark` / `underline_mark` in the range. Differs from
+  F8 on empty selection: F10 expands to the word at the cursor (same
+  whitespace-delimited "word" as F9), where F8 just no-ops. The
+  asymmetry matches typical usage — cites are phrases the user
+  deliberately selects, emphasis is often a single word and the
+  cursor-on-word gesture is convenient. F8 and F10 share
+  `applyBodyMark()` internally; the differing empty-selection
+  behavior is parameterized via `expandToWordWhenEmpty`.
 - **Alt-F8 — Copy previous cite.** Reframed from Verbatim's
   `CopyPreviousCite`. Source: cite_paragraphs whose end is before the
   cursor in the cursor's enclosing card; falls back to the most
@@ -989,17 +1006,18 @@ through one overrides surface):
   spawning, no splitting.
 
 **Ribbon UI:** the formatting panel (3×2 grid of structural-style
-buttons) and the cite panel (single Cite button) are settings-driven:
-a `formattingPanelMode` dropdown chooses *labels / shortcuts / both /
+buttons) and the cite panel (2×2 grid for inline marks: Cite, Underline,
+Emphasis, plus one reserved slot) are settings-driven: a
+`formattingPanelMode` dropdown chooses *labels / shortcuts / both /
 hidden*, and a `formattingPanelPreview` toggle controls whether the
 buttons preview the styles they apply (bold / underline / color / box,
 following per-style typography flags). Tooltips display the active
 keyboard binding using the platform's modifier glyphs.
 
-**Empty Verbatim ribbon slots:** Verbatim's F10 (Emphasis), F11
-(Highlight Yellow), F12 (Clear Formatting) and the Shrink / Condense /
-Cleanup families aren't shipped yet. The same registry surface will
-hold them when they land.
+**Empty Verbatim ribbon slots:** Verbatim's F11 (Highlight Yellow),
+F12 (Clear Formatting) and the Shrink / Condense / Cleanup families
+aren't shipped yet. The same registry surface will hold them when they
+land.
 
 ## 16. Stylepox handling
 

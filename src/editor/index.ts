@@ -86,7 +86,11 @@ zoomResetBtn.addEventListener('click', () => setZoom(100));
 // same commands as the F4–F7 / Mod-F7 keymap. Display mode and visual
 // preview are both driven by settings (formattingPanelMode and
 // formattingPanelPreview).
-type FormattingPanelId = StructuralRibbonCommandId | 'applyCite' | 'applyUnderline';
+type FormattingPanelId =
+  | StructuralRibbonCommandId
+  | 'applyCite'
+  | 'applyUnderline'
+  | 'applyEmphasis';
 const FORMATTING_PANEL_BUTTONS: Record<FormattingPanelId, string> = {
   setPocket: 'style-pocket-btn',
   setHat: 'style-hat-btn',
@@ -96,6 +100,7 @@ const FORMATTING_PANEL_BUTTONS: Record<FormattingPanelId, string> = {
   setUndertag: 'style-undertag-btn',
   applyCite: 'cite-btn',
   applyUnderline: 'underline-btn',
+  applyEmphasis: 'emphasis-btn',
 };
 const FORMATTING_PANEL_SHORT_LABEL: Record<FormattingPanelId, string> = {
   setPocket: 'Pocket',
@@ -106,6 +111,7 @@ const FORMATTING_PANEL_SHORT_LABEL: Record<FormattingPanelId, string> = {
   setUndertag: 'Undertag',
   applyCite: 'Cite',
   applyUnderline: 'Underline',
+  applyEmphasis: 'Emphasis',
 };
 const formattingPanelEl = document.getElementById('formatting-panel') as HTMLElement | null;
 const citePanelEl = document.getElementById('cite-panel') as HTMLElement | null;
@@ -190,12 +196,16 @@ function applyDisplayTypography(t: DisplayTypography): void {
   editorEl.classList.toggle('pmd-undertag-italic', t.undertagItalic);
   editorEl.classList.toggle('pmd-undertag-bold', t.undertagBold);
   editorEl.style.setProperty('--pmd-emphasis-box-size', `${t.emphasisBoxSize}pt`);
-  // Mirror the undertag/cite flags to documentElement so the ribbon's
-  // formatting-panel preview (which lives outside #editor) can react
-  // to the same settings.
+  // Mirror the undertag/cite/emphasis flags to documentElement so the
+  // ribbon's formatting-panel preview (which lives outside #editor)
+  // can react to the same settings.
   document.documentElement.classList.toggle('pmd-undertag-italic', t.undertagItalic);
   document.documentElement.classList.toggle('pmd-undertag-bold', t.undertagBold);
   document.documentElement.classList.toggle('pmd-cite-underlined', t.citeUnderlined);
+  document.documentElement.classList.toggle('pmd-emphasis-bold', t.emphasisBold);
+  document.documentElement.classList.toggle('pmd-emphasis-italic', t.emphasisItalic);
+  document.documentElement.classList.toggle('pmd-emphasis-box', t.emphasisBox);
+  document.documentElement.style.setProperty('--pmd-emphasis-box-size', `${t.emphasisBoxSize}pt`);
 }
 
 /**

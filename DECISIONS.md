@@ -655,8 +655,8 @@ schema construction just stores whatever marks are passed in.
 Effects of the change:
 
 - **Active commands** (`tr.addMark` for the chosen mark) auto-strip
-  the other two in the affected range. F8 / F9 / future F10 don't
-  need their own `removeMark` calls for the other named-style marks.
+  the other two in the affected range. F8 / F9 / F10 don't need
+  their own `removeMark` calls for the other named-style marks.
 - **Passive coexistence** (somehow both marks end up on the same
   character without going through a policy command — e.g., legacy
   Verbatim docs that paired rStyle="Cite" with direct `<w:u/>`)
@@ -688,3 +688,70 @@ new code:
   in the same container, losing the undertag wrapper. That's the
   natural "I'm done with this annotation, merge it into the body
   above" gesture; we leave the default in place.
+
+## 2026-05-10: F10 — Apply Emphasis as F8's twin
+
+`applyEmphasis` (F10) is structured as a twin of `applyCite` (F8):
+both call a shared `applyBodyMark()` helper differing only in the
+mark name, both apply-not-toggle, both skip the same set of
+structural blocks (`tag`, `analytic`, `pocket`, `hat`, `block`,
+`undertag`), both are no-ops on collapsed selections. The two F-keys
+land on different named-style marks, but the policy and the code
+path are identical.
+
+Apply-only (not toggle) is the deliberate choice — same as F8 — so a
+selection that touches a mix of emphasized and plain text ends up
+uniformly emphasized rather than flipping based on the first
+character's state. Removing emphasis isn't a separate hotkey; the
+user gets there via F9 (which strips emphasis via schema excludes)
+or by re-applying the same style and then changing it to something
+else. F12 Clear Formatting (not yet shipped) is the eventual
+"remove all named styles" gesture.
+
+Adding emphasis to cite-marked or underline-marked text strips the
+prior mark because `emphasis_mark.excludes` lists all three
+named-style marks. So in body context the "one of cite / underline /
+emphasis" invariant holds without F10 needing any explicit
+`removeMark` calls — same mechanism that already governs F8 / F9.
+
+Ribbon button: Emphasis sits in the cite panel next to Underline.
+The panel is now a 2×2 grid with one slot reserved for the next
+inline-mark command (likely F11 Highlight). Preview styling on the
+button mirrors the editor's emphasis rendering: always underlined,
+with `bold` / `italic` / `box` decorations gated on the same
+`displayTypography.emphasisBold/Italic/Box` flags the editor uses,
+mirrored onto `documentElement` so the rule reaches the ribbon
+chrome (which lives outside `#editor`).
+
+## 2026-05-10: F9 / F10 empty-selection "run" = whitespace-bounded word
+
+(Correcting the initial F9 implementation, which read "run" as
+ProseMirror text node.)
+
+With no selection, F9 and F10 expand to the **word at the cursor** —
+the maximal run of non-whitespace characters within the cursor's
+textblock. ProseMirror mark boundaries do not break a word: "plain"
++ "bold" (two text nodes, different marks, no whitespace between)
+acts as one word "plainbold". Inline leaves (images, etc.) count
+as word boundaries.
+
+No-op cases:
+- Cursor in whitespace with whitespace on both sides (mid-gap on a
+  double-space sequence).
+- Cursor in an empty textblock.
+- For F10 specifically: cursor in a structural block (tag /
+  analytic / pocket / hat / block / undertag) — same skip rule that
+  governs F10 on a non-empty selection. F9 has no skip rule (it
+  works in structural blocks too, just with `underline_direct`).
+
+F8 cite intentionally does *not* get this treatment — cites are
+multi-word phrases the user deliberately selects, so empty-selection
+stays a no-op. F9 toggle and F10 emphasis are commonly applied to a
+single word and cursor-on-word is the natural gesture.
+
+Implementation: a shared `wordRangeAtCursor(state)` helper builds a
+per-position whitespace map for the cursor's textblock and scans
+outward from `parentOffset` until it hits a boundary. `applyBodyMark`
+gained an `expandToWordWhenEmpty` flag (true for F10, false for F8);
+F9's empty-selection branch calls the helper directly because its
+toggle logic isn't a body-only operation.

@@ -451,34 +451,105 @@ function dissolveContainerToHeading(
  * cite_paragraph so the user can continue from there.
  */
 /**
- * F8 — apply the `cite_mark` mark to text in the selection, but only
- * to characters that live inside body-like textblocks. Structural
- * textblocks (tag / analytic / pocket / hat / block) and undertags
- * are skipped so a selection that spans them only marks the body
- * portions; the structural slots are left untouched.
+ * F8 / F10 — apply a body-only named-style mark (`cite_mark` /
+ * `emphasis_mark`) to text in the selection. Both share the same
+ * shape: structural textblocks (tag / analytic / pocket / hat / block)
+ * and undertags are skipped, so a selection that spans them only marks
+ * the body portions and the structural slots are left untouched.
  *
  * No-op when the selection is collapsed.
  *
  * Apply-only (not toggle): re-running on the same range is idempotent.
+ * Schema `excludes` on these marks auto-strips conflicting
+ * cite/underline/emphasis in the range when `tr.addMark` is called.
  */
-const CITE_SKIP_BLOCKS = new Set(['tag', 'analytic', 'pocket', 'hat', 'block', 'undertag']);
+const NAMED_STYLE_SKIP_BLOCKS = new Set(['tag', 'analytic', 'pocket', 'hat', 'block', 'undertag']);
 
-export function applyCite(): Command {
+/**
+ * Word at the (collapsed) cursor — "continuous text uninterrupted by
+ * whitespace" within the cursor's textblock. Returns null if the
+ * selection isn't collapsed, the cursor isn't in a textblock, or the
+ * cursor sits at a whitespace position with whitespace on both sides
+ * (no word to act on).
+ *
+ * Inline leaves (images, etc.) count as word boundaries — a word
+ * can't span a non-text inline node. Mark boundaries are *not* word
+ * boundaries: "plain" + "bold" with no space between produces the
+ * single word "plainbold" even though they're two text nodes.
+ */
+function wordRangeAtCursor(state: EditorState): { from: number; to: number } | null {
+  const sel = state.selection;
+  if (!sel.empty) return null;
+  const $from = sel.$from;
+  const parent = $from.parent;
+  if (!parent.isTextblock) return null;
+  const size = parent.content.size;
+  if (size === 0) return null;
+
+  // Per-position whitespace map. Each position 0..size-1 corresponds
+  // to one character slot in the textblock (text node chars + inline
+  // leaves at 1 slot each). isWS[i] = true means position i is a word
+  // boundary (whitespace char or non-text leaf).
+  const isWS = new Array<boolean>(size);
+  let p = 0;
+  parent.forEach((child) => {
+    if (child.isText) {
+      const t = child.text ?? '';
+      for (let i = 0; i < t.length; i++) {
+        isWS[p + i] = /\s/.test(t[i] ?? '');
+      }
+      p += t.length;
+    } else {
+      // Inline leaf — break the word.
+      for (let i = 0; i < child.nodeSize; i++) {
+        isWS[p + i] = true;
+      }
+      p += child.nodeSize;
+    }
+  });
+
+  const offset = $from.parentOffset;
+  let left = offset;
+  while (left > 0 && !isWS[left - 1]) left--;
+  let right = offset;
+  while (right < size && !isWS[right]) right++;
+  if (left === right) return null;
+
+  const tbStart = $from.start();
+  return { from: tbStart + left, to: tbStart + right };
+}
+
+function applyBodyMark(
+  markName: 'cite_mark' | 'emphasis_mark',
+  opts: { expandToWordWhenEmpty?: boolean } = {},
+): Command {
   return (state, dispatch) => {
     const sel = state.selection;
-    if (sel.empty) return false;
-    const citeType = schema.marks['cite_mark'];
-    if (!citeType) return false;
+    let from = sel.from;
+    let to = sel.to;
+    if (sel.empty) {
+      if (!opts.expandToWordWhenEmpty) return false;
+      const word = wordRangeAtCursor(state);
+      if (!word) return false;
+      from = word.from;
+      to = word.to;
+    }
 
-    // Collect ranges first; only dispatch if we'd actually mark anything.
+    const markType = schema.marks[markName];
+    if (!markType) return false;
+
+    // Collect ranges first; only dispatch if we'd actually mark
+    // anything. Structural-block skip is enforced by the nodesBetween
+    // callback — a word at the cursor inside a tag/undertag yields
+    // an empty range list and returns false.
     const ranges: { from: number; to: number }[] = [];
-    state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+    state.doc.nodesBetween(from, to, (node, pos) => {
       if (!node.isTextblock) return true;
-      if (CITE_SKIP_BLOCKS.has(node.type.name)) return false;
+      if (NAMED_STYLE_SKIP_BLOCKS.has(node.type.name)) return false;
       const tbStart = pos + 1;
       const tbEnd = pos + node.nodeSize - 1;
-      const applyFrom = Math.max(tbStart, sel.from);
-      const applyTo = Math.min(tbEnd, sel.to);
+      const applyFrom = Math.max(tbStart, from);
+      const applyTo = Math.min(tbEnd, to);
       if (applyFrom < applyTo) ranges.push({ from: applyFrom, to: applyTo });
       return false;
     });
@@ -486,11 +557,19 @@ export function applyCite(): Command {
     if (!dispatch) return true;
 
     const tr = state.tr;
-    const mark = citeType.create();
+    const mark = markType.create();
     for (const r of ranges) tr.addMark(r.from, r.to, mark);
     dispatch(tr);
     return true;
   };
+}
+
+export function applyCite(): Command {
+  return applyBodyMark('cite_mark');
+}
+
+export function applyEmphasis(): Command {
+  return applyBodyMark('emphasis_mark', { expandToWordWhenEmpty: true });
 }
 
 /**
@@ -502,10 +581,12 @@ export function applyCite(): Command {
  * textblocks — tag / analytic / pocket / hat / block / undertag).
  * "Underlined" for toggle purposes means either mark is present.
  *
- * Empty selection: if the cursor is on a single run (a text node
- * adjacent to the cursor, with no rival text node on the other
- * side), toggle that run. At a boundary between two distinct runs,
- * or with no adjacent text (empty paragraph, between blocks), no-op.
+ * Empty selection: expand to the word at the cursor — the maximal
+ * run of non-whitespace characters within the cursor's textblock —
+ * and toggle that. No-op when the cursor is in whitespace, in an
+ * empty textblock, or on a non-text leaf (no word to act on). Mark
+ * boundaries do NOT break a word: "plain" + "bold" (two text nodes,
+ * different marks, no whitespace between) acts as one word.
  *
  * Non-empty selection: walk the selection's text nodes. If every
  * character is already underlined, strip both underline marks
@@ -525,34 +606,10 @@ export function applyUnderline(): Command {
     let runStart = from;
     let runEnd = to;
     if (empty) {
-      const $from = state.selection.$from;
-      if ($from.textOffset > 0) {
-        // Cursor is strictly inside a single text node — that's the run.
-        const text = $from.parent.maybeChild($from.index());
-        if (!text || !text.isText) return false;
-        runStart = $from.pos - $from.textOffset;
-        runEnd = runStart + text.nodeSize;
-      } else {
-        // Cursor at a child boundary inside the parent textblock.
-        const before = $from.nodeBefore;
-        const after = $from.nodeAfter;
-        const beforeIsText = !!before && before.isText;
-        const afterIsText = !!after && after.isText;
-        if (beforeIsText && afterIsText) return false; // boundary between two distinct runs
-        const onRun: PMNode | null = beforeIsText
-          ? before
-          : afterIsText
-          ? after
-          : null;
-        if (!onRun) return false;
-        if (beforeIsText) {
-          runEnd = $from.pos;
-          runStart = runEnd - onRun.nodeSize;
-        } else {
-          runStart = $from.pos;
-          runEnd = runStart + onRun.nodeSize;
-        }
-      }
+      const word = wordRangeAtCursor(state);
+      if (!word) return false;
+      runStart = word.from;
+      runEnd = word.to;
     }
 
     // Are all characters in [runStart, runEnd] already underlined?
@@ -960,6 +1017,7 @@ export type RibbonCommandId =
   | 'toggleItalic'
   | 'applyCite'
   | 'applyUnderline'
+  | 'applyEmphasis'
   | 'copyPreviousCite';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
@@ -977,6 +1035,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'toggleItalic',
   'applyCite',
   'applyUnderline',
+  'applyEmphasis',
   'copyPreviousCite',
 ];
 
@@ -991,6 +1050,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleItalic: 'Italic',
   applyCite: 'Apply Cite style',
   applyUnderline: 'Toggle Underline',
+  applyEmphasis: 'Apply Emphasis style',
   copyPreviousCite: 'Copy previous cite',
 };
 
@@ -1013,6 +1073,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   toggleItalic: 'Mod-i',
   applyCite: 'F8',
   applyUnderline: ['F9', 'Mod-u'],
+  applyEmphasis: 'F10',
   copyPreviousCite: 'Alt-F8',
 };
 
@@ -1027,6 +1088,7 @@ const COMMAND_FACTORIES: Record<RibbonCommandId, () => Command> = {
   toggleItalic: () => toggleMark(schema.marks['italic']!),
   applyCite: () => applyCite(),
   applyUnderline: () => applyUnderline(),
+  applyEmphasis: () => applyEmphasis(),
   copyPreviousCite: () => copyPreviousCite(),
 };
 

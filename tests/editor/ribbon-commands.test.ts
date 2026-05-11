@@ -12,6 +12,7 @@ import {
   setAnalytic,
   setUndertag,
   applyCite,
+  applyEmphasis,
   copyPreviousCite,
   buildRibbonKeymap,
   DEFAULT_RIBBON_KEYS,
@@ -1400,14 +1401,14 @@ describe('applyUnderline (F9 / Mod-U)', () => {
     expect(everyHasMark(next!.doc, 'Stein 24', 'underline_mark')).toBe(true);
   });
 
-  it('empty selection on a run inside a card_body: toggles underline_mark on the run', () => {
+  it('empty selection on a word inside a card_body: toggles underline_mark on the word', () => {
     const doc = makeDoc([
       cardWithChildren(tag('T'), cardBody('hello')),
     ]);
     // Cursor at middle of "hello".
     let pos = -1;
     doc.descendants((n, p) => {
-      if (n.isText && n.text === 'hello') pos = p + 2; // inside the run
+      if (n.isText && n.text === 'hello') pos = p + 2; // inside the word
       return true;
     });
     const base = EditorState.create({ doc });
@@ -1416,7 +1417,35 @@ describe('applyUnderline (F9 / Mod-U)', () => {
     expect(everyHasMark(next!.doc, 'hello', 'underline_mark')).toBe(true);
   });
 
-  it('empty selection at boundary between two runs: no-op', () => {
+  it('empty selection inside multi-word body: only the word at cursor is underlined', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('hello world')),
+    ]);
+    // Cursor in middle of "world".
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hello world') pos = p + 8; // inside "world"
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const next = apply(state, applyUnderline());
+    // "world" carries underline_mark, "hello " does not.
+    let helloMarked = false;
+    let worldMarked = false;
+    next!.doc.descendants((n) => {
+      if (!n.isText) return;
+      const u = n.marks.some((m) => m.type.name === 'underline_mark');
+      if ((n.text ?? '').includes('hello')) helloMarked = u || helloMarked;
+      if (n.text === 'world') worldMarked = u;
+    });
+    expect(worldMarked).toBe(true);
+    expect(helloMarked).toBe(false);
+  });
+
+  it('empty selection at PM text-node boundary within a word: toggles full word across the boundary', () => {
+    // "plain" + "bold" — two text nodes with different marks, no
+    // whitespace between. By the word rule, this is ONE word "plainbold".
     const doc = makeDoc([
       cardWithChildren(
         tag('T'),
@@ -1426,10 +1455,30 @@ describe('applyUnderline (F9 / Mod-U)', () => {
         ]),
       ),
     ]);
-    // Cursor at the boundary between "plain" and "bold".
     let pos = -1;
     doc.descendants((n, p) => {
-      if (n.isText && n.text === 'plain') pos = p + n.nodeSize;
+      if (n.isText && n.text === 'plain') pos = p + n.nodeSize; // boundary
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const next = apply(state, applyUnderline());
+    expect(next).not.toBeNull();
+    expect(everyHasMark(next!.doc, 'plain', 'underline_mark')).toBe(true);
+    expect(everyHasMark(next!.doc, 'bold', 'underline_mark')).toBe(true);
+  });
+
+  it('empty selection in whitespace between two words: no-op', () => {
+    // With a single space "hello world" there's no "in the whitespace"
+    // position — offset 5 has 'o' to the left, offset 6 has 'w' to the
+    // right, both pick a word. A double-space gap with the cursor
+    // between the two spaces has whitespace on both sides.
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('a  b')),
+    ]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'a  b') pos = p + 2; // between the two spaces
       return true;
     });
     const base = EditorState.create({ doc });
@@ -1442,5 +1491,284 @@ describe('applyUnderline (F9 / Mod-U)', () => {
     const base = EditorState.create({ doc });
     const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, 1)));
     expect(apply(state, applyUnderline())).toBeNull();
+  });
+});
+
+// ---- applyEmphasis (F10) ----
+
+function emphMarkOnText(doc: import('prosemirror-model').Node, search: string): boolean {
+  let allMarked = true;
+  let found = false;
+  doc.descendants((n) => {
+    if (!n.isText) return;
+    if ((n.text ?? '').includes(search)) {
+      found = true;
+      if (!n.marks.some((m) => m.type.name === 'emphasis_mark')) allMarked = false;
+    }
+  });
+  return found && allMarked;
+}
+
+describe('applyEmphasis (F10)', () => {
+  it('empty selection inside a word in body: applies emphasis to that word', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('hello world')),
+    ]);
+    // Cursor in the middle of "hello".
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hello world') pos = p + 2;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const next = apply(state, applyEmphasis());
+    expect(next).not.toBeNull();
+    // "hello" emphasized; " world" not.
+    let helloMarked = false;
+    let worldMarked = false;
+    next!.doc.descendants((n) => {
+      if (!n.isText) return;
+      const e = n.marks.some((m) => m.type.name === 'emphasis_mark');
+      if (n.text === 'hello') helloMarked = e;
+      if ((n.text ?? '').includes('world')) worldMarked = e || worldMarked;
+    });
+    expect(helloMarked).toBe(true);
+    expect(worldMarked).toBe(false);
+  });
+
+  it('empty selection at PM text-node boundary within a word: emphasizes full word', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(null, [
+          schema.text('plain'),
+          schema.text('bold', [schema.marks['bold']!.create()]),
+        ]),
+      ),
+    ]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'plain') pos = p + n.nodeSize;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const next = apply(state, applyEmphasis());
+    expect(emphMarkOnText(next!.doc, 'plain')).toBe(true);
+    expect(emphMarkOnText(next!.doc, 'bold')).toBe(true);
+  });
+
+  it('empty selection in whitespace: no-op', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('a  b')),
+    ]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'a  b') pos = p + 2; // between the two spaces
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(apply(state, applyEmphasis())).toBeNull();
+  });
+
+  it('empty selection in a tag (structural): no-op', () => {
+    const doc = makeDoc([cardWithChildren(tag('TheTag'))]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'TheTag') pos = p + 2;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(apply(state, applyEmphasis())).toBeNull();
+  });
+
+  it('empty selection in an undertag (skip): no-op', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), undertag('an undertag')),
+    ]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'an undertag') pos = p + 4;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(apply(state, applyEmphasis())).toBeNull();
+  });
+
+  it('empty selection in an empty paragraph: no-op', () => {
+    const doc = makeDoc([paragraph('')]);
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, 1)));
+    expect(apply(state, applyEmphasis())).toBeNull();
+  });
+
+  it('applies emphasis_mark to text in a body paragraph', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('hello world')),
+    ]);
+    let bodyStart = -1;
+    doc.descendants((n, p) => {
+      if (bodyStart === -1 && n.type.name === 'card_body') bodyStart = p + 1;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, bodyStart, bodyStart + 11)),
+    );
+    const next = apply(state, applyEmphasis());
+    expect(next).not.toBeNull();
+    expect(emphMarkOnText(next!.doc, 'hello world')).toBe(true);
+  });
+
+  it('spanning a tag in the middle: marks the bodies, skips the tag', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T1'), cardBody('first body')),
+      cardWithChildren(tag('T2'), cardBody('second body')),
+    ]);
+    let firstStart = -1;
+    let secondEnd = -1;
+    doc.descendants((n, p) => {
+      if (n.isText) {
+        if (firstStart === -1 && n.text === 'first body') firstStart = p;
+        if (n.text === 'second body') secondEnd = p + n.nodeSize;
+      }
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, firstStart, secondEnd)),
+    );
+    const next = apply(state, applyEmphasis());
+    expect(next).not.toBeNull();
+    expect(emphMarkOnText(next!.doc, 'first body')).toBe(true);
+    expect(emphMarkOnText(next!.doc, 'second body')).toBe(true);
+    expect(emphMarkOnText(next!.doc, 'T1')).toBe(false);
+    expect(emphMarkOnText(next!.doc, 'T2')).toBe(false);
+  });
+
+  it('skips undertags', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        cardBody('body 1'),
+        undertag('an undertag'),
+        cardBody('body 2'),
+      ),
+    ]);
+    let from = -1;
+    let to = -1;
+    doc.descendants((n, p) => {
+      if (n.isText) {
+        if (from === -1 && n.text === 'body 1') from = p;
+        if (n.text === 'body 2') to = p + n.nodeSize;
+      }
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, from, to)),
+    );
+    const next = apply(state, applyEmphasis());
+    expect(emphMarkOnText(next!.doc, 'body 1')).toBe(true);
+    expect(emphMarkOnText(next!.doc, 'body 2')).toBe(true);
+    expect(emphMarkOnText(next!.doc, 'an undertag')).toBe(false);
+  });
+
+  it('selection entirely inside a tag is a no-op (nothing marked)', () => {
+    const doc = makeDoc([cardWithChildren(tag('a tag'))]);
+    let from = -1;
+    let to = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'a tag') {
+        from = p;
+        to = p + n.nodeSize;
+      }
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, from, to)),
+    );
+    expect(apply(state, applyEmphasis())).toBeNull();
+  });
+
+  it('applied to cite-marked text: schema excludes strips cite, leaves emphasis', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['cite_paragraph']!.create(
+          null,
+          schema.text('Stein 24', [schema.marks['cite_mark']!.create()]),
+        ),
+      ),
+    ]);
+    let from = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'Stein 24') from = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, from, from + 8)),
+    );
+    const next = apply(state, applyEmphasis());
+    expect(hasMark(next!.doc, 'Stein 24', 'cite_mark')).toBe(false);
+    expect(emphMarkOnText(next!.doc, 'Stein 24')).toBe(true);
+  });
+
+  it('applied to underlined text: schema excludes strips underline, leaves emphasis', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(
+          null,
+          schema.text('important', [schema.marks['underline_mark']!.create()]),
+        ),
+      ),
+    ]);
+    let from = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'important') from = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, from, from + 9)),
+    );
+    const next = apply(state, applyEmphasis());
+    expect(hasMark(next!.doc, 'important', 'underline_mark')).toBe(false);
+    expect(emphMarkOnText(next!.doc, 'important')).toBe(true);
+  });
+
+  it('apply-only: re-running on already-emphasized text leaves the mark in place', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(
+          null,
+          schema.text('hi', [schema.marks['emphasis_mark']!.create()]),
+        ),
+      ),
+    ]);
+    let from = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hi') from = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, from, from + 2)),
+    );
+    const next = apply(state, applyEmphasis());
+    // Idempotent — mark still present.
+    expect(emphMarkOnText(next!.doc, 'hi')).toBe(true);
+  });
+
+  it('default key binding: F10 → applyEmphasis', () => {
+    expect(DEFAULT_RIBBON_KEYS['applyEmphasis']).toBe('F10');
   });
 });
