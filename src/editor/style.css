@@ -144,17 +144,24 @@ body {
 }
 
 /* Stacked pair of icon buttons (e.g., Open / Export). Each button
-   half-height of the stack so two fit within the ribbon. */
+   matches one row of the formatting / cite / color panels so the
+   open button's top + bottom align with the panels' top row, and
+   the export button's top + bottom align with the panels' bottom
+   row. 1.45rem row height + 2px inter-row gap = the same rhythm. */
 .ribbon-button-stack {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.ribbon-button-stack button {
-  height: 1.65rem;
+/* Prefix with `#ribbon` so this rule beats the generic
+   `#ribbon button` (ID + element) specificity — without the prefix
+   the height and font-size were silently inherited and the stack
+   buttons rendered at 1.7rem / 0.95rem. */
+#ribbon .ribbon-button-stack button {
+  height: 1.45rem;
   width: 2rem;
-  font-size: 0.95rem;
+  font-size: 0.78rem;
 }
 
 /* Formatting panel — Verbatim-style apply-paragraph-style buttons.
@@ -193,6 +200,168 @@ body {
 }
 
 .ribbon-cite-panel.hidden { display: none; }
+
+/* Color panel — three split buttons for Highlight / Background /
+   Font Color. 2×2 grid with column-major flow:
+     Col 1 row 1: Highlight    Col 2 row 1: Font color
+     Col 1 row 2: Shading      Col 2 row 2: (reserved)
+   Matches the cite panel's stacked layout so the whole ribbon-left
+   section reads as a series of equal-height stacked groups. */
+.ribbon-color-panel {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: 1.45rem 1.45rem;
+  grid-auto-flow: column;
+  gap: 2px 4px;
+  align-content: center;
+  padding-left: 0.5rem;
+  margin-left: 0.25rem;
+  border-left: 1px solid var(--pmd-c-border-soft);
+}
+.ribbon-color-panel.hidden { display: none; }
+
+.ribbon-color-control {
+  display: inline-flex;
+  align-items: stretch;
+  height: 1.45rem;
+}
+
+/* All .ribbon-color-control button selectors are prefixed with
+   `#ribbon` so they outrank the generic `#ribbon button` rule
+   (ID + element specificity). Without the prefix, height / width /
+   border / background were silently inherited and the color panel
+   buttons rendered at 1.7rem with the wrong chrome. */
+#ribbon .ribbon-color-control button {
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  /* Override the generic `#ribbon button { width/height: 1.7rem }`
+     defaults — the color-panel buttons get their dimensions from
+     `.ribbon-color-control` (stretch to its 1.45rem height) plus
+     per-variant widths below. */
+  height: auto;
+  width: auto;
+}
+#ribbon .ribbon-color-control button:hover {
+  background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06));
+  border-color: var(--pmd-c-border-soft);
+}
+#ribbon .ribbon-color-control button:focus-visible {
+  outline: 2px solid var(--pmd-c-focus, #4a90e2);
+  outline-offset: -2px;
+}
+
+#ribbon .ribbon-color-main {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  gap: 0;
+  padding: 0;
+}
+.ribbon-color-glyph {
+  font-size: 0.78rem;
+  line-height: 1;
+}
+#fontcolor-glyph {
+  font-family: 'Calibri', serif;
+  font-weight: bold;
+  font-size: 0.78rem;
+}
+.ribbon-color-bar {
+  display: block;
+  width: 0.9rem;
+  height: 2px;
+  background: var(--pmd-c-color-bar, #ccc);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  margin-top: 1px;
+}
+
+/* Arrow is intentionally narrower than the main button — visually
+   subordinate — but wide enough to be a comfortable click target. */
+#ribbon .ribbon-color-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  font-size: 0.65rem;
+  color: var(--pmd-c-text-secondary, #666);
+}
+
+/* Active paintbrush state — the main button reads as "the brush is
+   currently armed" with a clear pressed-gray look. */
+#ribbon .ribbon-color-main.pmd-paintbrush-active {
+  background: rgba(0, 0, 0, 0.15);
+  border-color: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+#ribbon .ribbon-color-main.pmd-paintbrush-active + .ribbon-color-arrow {
+  /* Match the gray so the whole split-button reads as "armed". */
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Paintbrush cursor on the editor while a paintbrush mode is on.
+   `cell` reads as a select-tool / "I'm dragging to act on a region"
+   gesture; same cursor for all three modes since the active button
+   already communicates which mark gets applied. The class is added
+   to view.dom (the .ProseMirror element). */
+.ProseMirror.pmd-paintbrush-highlight,
+.ProseMirror.pmd-paintbrush-shading,
+.ProseMirror.pmd-paintbrush-fontcolor {
+  cursor: cell;
+}
+
+/* Color picker popup — a small grid of swatches that appears under
+   the arrow button. Positioned absolutely via JS so it sits flush
+   with the control. */
+.pmd-color-picker {
+  position: absolute;
+  z-index: 1000;
+  background: var(--pmd-c-bg, #fff);
+  border: 1px solid var(--pmd-c-border, #999);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  border-radius: 3px;
+  user-select: none;
+}
+.pmd-color-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1.4rem);
+  gap: 2px;
+}
+.pmd-color-swatch {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  padding: 0;
+  background-clip: padding-box;
+  position: relative;
+}
+.pmd-color-swatch:hover {
+  outline: 1px solid var(--pmd-c-focus, #4a90e2);
+  outline-offset: 1px;
+}
+.pmd-color-swatch.pmd-swatch-none {
+  /* Diagonal red bar to indicate "no color" / "automatic". */
+  background:
+    linear-gradient(to top right,
+      transparent calc(50% - 1px),
+      #d00 calc(50% - 1px),
+      #d00 calc(50% + 1px),
+      transparent calc(50% + 1px)),
+    #fff;
+}
+.pmd-color-picker-label {
+  font-size: 0.75rem;
+  color: var(--pmd-c-text-secondary, #666);
+  margin-top: 4px;
+  padding: 0 2px;
+}
 
 .ribbon-formatting-panel.hidden { display: none; }
 
@@ -644,14 +813,29 @@ code {
   line-height: 1.4;
 }
 
+/* Word's 15 named highlight colors with the OOXML-canonical saturated
+   RGBs. Round-trip fidelity over visual softness — what the user sees
+   matches what Word renders. The mark spec also accepts "none" (no
+   color), which maps to no background. */
 .pmd-highlight {
-  background: var(--pmd-c-highlight-default); /* default; data-highlight overrides */
+  background: var(--pmd-c-highlight-default); /* yellow default, overridden by data-highlight below */
 }
-.pmd-highlight[data-highlight="green"]   { background: #88ff88; }
-.pmd-highlight[data-highlight="cyan"]    { background: #88ffff; }
-.pmd-highlight[data-highlight="magenta"] { background: #ff88ff; }
-.pmd-highlight[data-highlight="blue"]    { background: #88aaff; }
-.pmd-highlight[data-highlight="red"]     { background: #ff8888; }
+.pmd-highlight[data-highlight="yellow"]      { background: #ffff00; color: #000; }
+.pmd-highlight[data-highlight="green"]       { background: #00ff00; color: #000; }
+.pmd-highlight[data-highlight="cyan"]        { background: #00ffff; color: #000; }
+.pmd-highlight[data-highlight="magenta"]     { background: #ff00ff; color: #000; }
+.pmd-highlight[data-highlight="blue"]        { background: #0000ff; color: #fff; }
+.pmd-highlight[data-highlight="red"]         { background: #ff0000; color: #000; }
+.pmd-highlight[data-highlight="darkBlue"]    { background: #000080; color: #fff; }
+.pmd-highlight[data-highlight="darkCyan"]    { background: #008080; color: #fff; }
+.pmd-highlight[data-highlight="darkGreen"]   { background: #008000; color: #fff; }
+.pmd-highlight[data-highlight="darkMagenta"] { background: #800080; color: #fff; }
+.pmd-highlight[data-highlight="darkRed"]     { background: #800000; color: #fff; }
+.pmd-highlight[data-highlight="darkYellow"]  { background: #808000; color: #fff; }
+.pmd-highlight[data-highlight="darkGray"]    { background: #808080; color: #fff; }
+.pmd-highlight[data-highlight="lightGray"]   { background: #c0c0c0; color: #000; }
+.pmd-highlight[data-highlight="black"]       { background: #000000; color: #fff; }
+.pmd-highlight[data-highlight="none"]        { background: transparent; }
 
 /* ProseMirror selection visibility */
 .ProseMirror:focus { outline: none; }

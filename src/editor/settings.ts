@@ -8,6 +8,8 @@
  * config can layer on later as its own module without colliding.
  */
 
+import { isWordHighlightName, isHex6 } from './color-palette.js';
+
 const STORAGE_KEY = 'pmd-settings';
 
 /** Reader profile for read-time estimates: name + words-per-minute. */
@@ -172,6 +174,27 @@ export interface Settings {
    * plain text. Has no effect when formattingPanelMode is 'hidden'.
    */
   formattingPanelPreview: boolean;
+  /**
+   * Last highlight color picked from the ribbon dropdown. One of the
+   * 15 Word named highlight colors (`yellow`, `green`, `darkRed`, …).
+   * Used as the active color when F11 toggles highlight on; persisted
+   * so the editor remembers each user's preferred color.
+   */
+  lastHighlightColor: string;
+  /**
+   * Last shading color picked from the ribbon dropdown. 6-char hex
+   * (no leading `#`). Default is Verbatim's D2D2D2 protected-highlight
+   * grey. Used as the active color when Ctrl-F11 toggles shading on.
+   */
+  lastShadingColor: string;
+  /**
+   * Last font color picked from the ribbon dropdown. 6-char hex
+   * (no leading `#`), or null for "Automatic" (no font_color mark).
+   * When null, the Automatic option in the dropdown is the active
+   * selection; applying font color removes the mark entirely instead
+   * of writing a black explicitly.
+   */
+  lastFontColor: string | null;
 }
 
 export type FormattingPanelMode = 'labels' | 'shortcuts' | 'both' | 'hidden';
@@ -195,6 +218,9 @@ const DEFAULTS: Settings = {
   lineHeight: 1.4,
   formattingPanelMode: 'labels',
   formattingPanelPreview: true,
+  lastHighlightColor: 'yellow',
+  lastShadingColor: 'C0C0C0',
+  lastFontColor: null,
 };
 
 /**
@@ -389,6 +415,18 @@ function sanitize(s: Settings): Settings {
       s.formattingPanelPreview === undefined
         ? DEFAULTS.formattingPanelPreview
         : !!s.formattingPanelPreview,
+    lastHighlightColor: isWordHighlightName(String(s.lastHighlightColor ?? ''))
+      ? String(s.lastHighlightColor)
+      : DEFAULTS.lastHighlightColor,
+    lastShadingColor: isHex6(s.lastShadingColor)
+      ? String(s.lastShadingColor).toUpperCase()
+      : DEFAULTS.lastShadingColor,
+    lastFontColor:
+      s.lastFontColor === null || s.lastFontColor === undefined
+        ? DEFAULTS.lastFontColor
+        : isHex6(s.lastFontColor)
+        ? String(s.lastFontColor).toUpperCase()
+        : DEFAULTS.lastFontColor,
   };
 }
 

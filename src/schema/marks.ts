@@ -133,6 +133,42 @@ export const marks: { [name: string]: MarkSpec } = {
     ],
   },
 
+  /**
+   * Shading — `<w:shd w:fill="…"/>`, an RGB background that survives
+   * Word's "remove highlighting" (which only strips `<w:highlight>`).
+   * Verbatim's `HighlightToBackgroundColor` uses this as "protected
+   * highlight" (canonically D2D2D2 grey). Defined BEFORE `highlight`
+   * so highlight nests inside shading in the DOM — when both marks
+   * coexist on the same run, highlight's background wins visually.
+   */
+  shading: {
+    inclusive: true,
+    attrs: {
+      // Hex RGB, no leading "#"
+      color: {
+        default: 'D2D2D2',
+        validate: (v: unknown) =>
+          typeof v === 'string' && /^[0-9a-fA-F]{6}$/.test(v),
+      },
+    },
+    parseDOM: [
+      {
+        tag: 'span[data-shading]',
+        getAttrs: (dom: HTMLElement) => ({
+          color: dom.getAttribute('data-shading') ?? 'D2D2D2',
+        }),
+      },
+    ],
+    toDOM: (mark) => [
+      'span',
+      {
+        style: `background-color: #${String(mark.attrs['color'] ?? 'D2D2D2')}`,
+        'data-shading': String(mark.attrs['color'] ?? 'D2D2D2'),
+      },
+      0,
+    ],
+  },
+
   highlight: {
     inclusive: true,
     attrs: {
@@ -262,31 +298,4 @@ export const marks: { [name: string]: MarkSpec } = {
     ],
   },
 
-  shading: {
-    inclusive: true,
-    attrs: {
-      // Hex RGB, no leading "#"
-      color: {
-        default: 'D2D2D2',
-        validate: (v: unknown) =>
-          typeof v === 'string' && /^[0-9a-fA-F]{6}$/.test(v),
-      },
-    },
-    parseDOM: [
-      {
-        tag: 'span[data-shading]',
-        getAttrs: (dom: HTMLElement) => ({
-          color: dom.getAttribute('data-shading') ?? 'D2D2D2',
-        }),
-      },
-    ],
-    toDOM: (mark) => [
-      'span',
-      {
-        style: `background-color: #${String(mark.attrs['color'] ?? 'D2D2D2')}`,
-        'data-shading': String(mark.attrs['color'] ?? 'D2D2D2'),
-      },
-      0,
-    ],
-  },
 };

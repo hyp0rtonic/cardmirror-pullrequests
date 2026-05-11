@@ -755,3 +755,145 @@ outward from `parentOffset` until it hits a boundary. `applyBodyMark`
 gained an `expandToWordWhenEmpty` flag (true for F10, false for F8);
 F9's empty-selection branch calls the helper directly because its
 toggle logic isn't a body-only operation.
+
+## 2026-05-10: F11 Highlight + Mod-F11 Shading — independent toggles, shared palette
+
+Highlight (F11) and shading / background-color (Mod-F11) are two
+related but independent inline marks. `highlight` round-trips as
+`<w:highlight w:val="…"/>` (a Word-named color), `shading` round-
+trips as `<w:shd w:fill="…"/>` (an RGB hex). They differ in
+durability — Word's "Remove Highlighting" strips `highlight` but
+leaves `shading`, which is what makes shading useful as "protected
+highlight" (the role Verbatim's `HighlightToBackgroundColor` plays
+with its D2D2D2 grey).
+
+### Toggle semantics
+
+Both are **color-agnostic** toggles: if every character in the
+selection carries the mark in question (any color), the toggle
+strips it. Otherwise the active color (from
+`settings.lastHighlightColor` / `settings.lastShadingColor`) is
+applied across the whole range, replacing any existing color in
+already-marked characters. The dropdown swatch picker is the way
+to *change* color on a uniform selection — picking a swatch
+persists it AND repaints in one click. F11 alone never repaints in
+place; it's strictly on/off.
+
+Empty selection: **no-op**. Unlike F9 / F10, F11 / Mod-F11 do not
+expand to a word at the cursor — highlights and shading are most
+commonly applied to phrases longer than a word, and selecting first
+is the natural gesture. No structural-block skip either — tags,
+analytics, headings, undertags can all carry highlight / shading
+because these marks are runtime annotations, not semantic styles.
+
+### Visual stacking — highlight wins over shading
+
+Both marks produce a background color. When both are present on the
+same character, the user wants to see the highlight color (the
+"loud" annotation), not the shading. This is enforced by **schema
+mark order**: in `marks.ts`, `shading` is defined before `highlight`.
+ProseMirror sorts marks by `MarkType.rank` (definition order), and
+the later mark becomes the inner DOM wrapper — so highlight nests
+inside shading and its `background-color` paints on top.
+
+`Mark.setFrom` normalizes mark sets to rank order regardless of
+insertion order, so this property holds even for marks added in
+arbitrary sequence (importer, paste, command, etc.).
+
+### Color palette
+
+A single source of truth: `src/editor/color-palette.ts` defines
+`WORD_HIGHLIGHT_COLORS` — Word's 15 named highlight colors with
+their canonical RGBs (e.g. `yellow` → `FFFF00`). All three pickers
+draw from this single list; the top-left swatch is consistently the
+strip/automatic option (No highlight / No background / Automatic),
+followed by the 15 colors.
+
+Verbatim's `HighlightToBackgroundColor` produces shading at RGB
+`D2D2D2`, which is *close to* but not identical to Word's `lightGray`
+("Gray 25%") at `C0C0C0`. We considered keeping a separate Protected
+swatch but cut it — the visual difference is ~7% lightness, and
+existing `D2D2D2` shading in imported docs renders at its exact hex
+because the schema preserves the actual `color` attr. Round-trip
+stays lossless; only newly-applied shading uses Word's standard
+`C0C0C0`.
+
+CSS previously rendered only 6 highlight colors as muted shades.
+Now all 15 use Word's saturated RGBs so what the editor renders
+matches what Word renders — round-trip fidelity over visual softness.
+Text color flips to white on the dark backgrounds (darkBlue,
+darkRed, etc.) for readability; that's a render-time decision and
+doesn't write a `font_color` mark.
+
+### Color persistence
+
+Each control's last-picked color persists via the settings store
+(`lastHighlightColor` / `lastShadingColor` / `lastFontColor`),
+sanitized on load and synced to localStorage on change. Defaults:
+`yellow` / `C0C0C0` / `null` (Automatic). The picker swatch and
+the bar indicator under each main button both reflect the active
+value through a settings subscription.
+
+### Paintbrush mode (Word-style sticky highlighter)
+
+Clicking a main color button with **no selection** activates a
+sticky paintbrush mode for that mark. Three Word-mirroring traits:
+
+1. **Cursor + button signal.** Editor cursor switches to `cell` (via
+   a `.pmd-paintbrush-{mode}` class on `view.dom` — the `.ProseMirror`
+   element). Active button reads as grayed-out / pressed with an
+   inset shadow. Together these tell the user "the brush is armed".
+2. **Selection collapses after each apply** ("lift the brush"). The
+   `mouseup` handler captures the paint transaction via a dispatch
+   interceptor, appends a `setSelection` collapsing to the end of the
+   painted range, and dispatches once. So the user sees what they
+   just painted without the selection-blue overlay covering it, and
+   undo treats apply + collapse as one operation.
+3. **Toggle on uniform repaint** (highlight + shading only). The
+   paintbrush calls `applyHighlight` / `applyShading` (the toggle
+   commands), not `set*Color` — so dragging over an already-marked
+   range strips the mark. Color-agnostic: any uniform mark, regardless
+   of color, gets stripped. Font color paintbrush stays `setFontColor`
+   because font color isn't binary on/off; the "Automatic" swatch
+   persists as `null` so paintbrush-font-color with Automatic active
+   becomes the strip-paint gesture for font color.
+
+Mode persists across applications until **Escape** or **clicking the
+same button again**. Clicking a different color button **switches**
+the paintbrush type (state is a single slot — only one paintbrush
+can be active).
+
+Implementation in `color-panel.ts`:
+- Module-local `activePaintbrush: 'highlight' | 'shading' | 'fontcolor' | null`.
+- Document-level `mouseup` listener that's gated on
+  `view.dom.contains(target)` so clicks on other ribbon buttons
+  don't trigger paintbrush apply.
+- Document-level `keydown` for Escape.
+- `syncPaintbrushUI()` adds / removes `.pmd-paintbrush-{mode}` on
+  the editor element and `.pmd-paintbrush-active` on the relevant
+  button (adjacent-sibling selector tints the arrow too).
+- `applyAndCollapseSelection(view, cmd)` captures the cmd's
+  transaction, appends the selection collapse, and dispatches.
+
+Paintbrush is **button-only** — F11 / Mod-F11 hotkeys remain pure
+toggles that no-op on empty selection. Rationale: the keyboard
+gesture is for "I've made a selection, now toggle this on/off". The
+mouse gesture is for "I'm about to drag-select something to color".
+Two distinct mental models, two distinct entry points.
+
+### Command wiring
+
+`applyHighlight` and `applyShading` take a `() => string` for the
+active color (rather than capturing a snapshot), so the keymap
+binding reads the latest value at keypress time. `buildRibbonKeymap`
+and `getRibbonCommand` accept an optional `RibbonContext` —
+`{ highlightColor, shadingColor }` — defaulting to `'yellow'` /
+`'D2D2D2'` so existing tests don't need to wire settings (the
+default-context value is intentionally Verbatim's historical
+grey so tests reading default behavior stay stable).
+
+### Why not a font color hotkey?
+
+Word doesn't bind one and debate use is heavily black-by-default,
+so font color is dropdown-only for now. Easy to add later if the
+user wants e.g. Ctrl-Shift-C bound to "apply current font color".

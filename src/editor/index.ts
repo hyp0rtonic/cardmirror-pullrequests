@@ -48,8 +48,10 @@ import {
   primaryKeyFor,
   RIBBON_COMMAND_LABELS,
   type StructuralRibbonCommandId,
+  type RibbonContext,
 } from './ribbon-commands.js';
 import { openWordCount } from './word-count-ui.js';
+import { wireColorPanel } from './color-panel.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
 
 const editorEl = document.getElementById('editor')!;
@@ -71,6 +73,14 @@ const zoomPct = document.getElementById('zoom-pct')!;
 // ReferenceError on initial call.
 let view: EditorView | null = null;
 let currentDoc: PMNode = makeStarterDoc();
+
+// Live context for the ribbon's color-aware commands. F11 / Mod-F11
+// read these getters at keypress time so the active highlight /
+// shading color reflects whatever the user most recently picked.
+const ribbonContext: RibbonContext = {
+  highlightColor: () => settings.get('lastHighlightColor'),
+  shadingColor: () => settings.get('lastShadingColor'),
+};
 
 openBtn.addEventListener('click', () => dropzone.click());
 settingsBtn.addEventListener('click', () => openSettings());
@@ -115,6 +125,7 @@ const FORMATTING_PANEL_SHORT_LABEL: Record<FormattingPanelId, string> = {
 };
 const formattingPanelEl = document.getElementById('formatting-panel') as HTMLElement | null;
 const citePanelEl = document.getElementById('cite-panel') as HTMLElement | null;
+const colorPanelEl = document.getElementById('color-panel') as HTMLElement | null;
 const formattingPanelBtnRefs: { id: FormattingPanelId; btn: HTMLButtonElement }[] = [];
 for (const [id, btnId] of Object.entries(FORMATTING_PANEL_BUTTONS) as [FormattingPanelId, string][]) {
   const btn = document.getElementById(btnId) as HTMLButtonElement | null;
@@ -142,6 +153,9 @@ function applyFormattingPanel(mode: FormattingPanelMode, preview: boolean): void
   if (citePanelEl) {
     citePanelEl.classList.toggle('hidden', mode === 'hidden');
     citePanelEl.classList.toggle('style-preview', preview);
+  }
+  if (colorPanelEl) {
+    colorPanelEl.classList.toggle('hidden', mode === 'hidden');
   }
   for (const { id, btn } of formattingPanelBtnRefs) {
     const keyDisplay = formatKeyForDisplay(primaryKeyFor(id));
@@ -261,6 +275,11 @@ applyBodyFont(settings.get('bodyFont'));
 applyLineHeight(settings.get('lineHeight'));
 applyFormattingPanel(settings.get('formattingPanelMode'), settings.get('formattingPanelPreview'));
 
+// Wire the color panel (split buttons + swatch pickers). Pass a ref
+// object so the panel reads the live view through `view.view` even
+// when the EditorView gets re-mounted (e.g. on docx import).
+wireColorPanel({ get view() { return view; } });
+
 function refreshWordCount(): void {
   if (!view) {
     wordCountText.textContent = '—';
@@ -374,10 +393,11 @@ function mountView(doc: PMNode): void {
           enterInHeading(state, dispatch, view),
       }),
       // Ribbon commands — structural style hotkeys (F4–F7 / Mod-F7)
-      // plus inline mark toggles (Mod-B / Mod-I). buildRibbonKeymap()
-      // accepts user overrides keyed by RibbonCommandId; wire those
-      // through once a "Keyboard shortcuts" settings panel exists.
-      keymap(buildRibbonKeymap()),
+      // plus inline mark toggles (Mod-B / Mod-I) and the color-aware
+      // toggles (F11 / Mod-F11). buildRibbonKeymap() accepts user
+      // overrides keyed by RibbonCommandId and a context that supplies
+      // the live "current color" for highlight/shading from settings.
+      keymap(buildRibbonKeymap({}, ribbonContext)),
       keymap(baseKeymap),
       readModePlugin,
       absorbPlugin,

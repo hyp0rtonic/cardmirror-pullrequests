@@ -715,11 +715,11 @@ from the cite-classifier — see the rule below.)
 
 - F12 Clear with cursor in a tag — strip the card wrap and downgrade
   to body? Just downgrade the tag (leaving the card invalid)? Refuse?
-- F11 Highlight inside a heading — should heading paragraphs allow
-  highlight at all, or only body content? (F9 Underline is settled:
-  structural textblocks get `underline_direct` rather than the named
-  style. F10 Emphasis is settled: skipped inside structural blocks,
-  same as F8 Cite.)
+_(All four F-key inline marks are now decided: F8 Cite skips
+structural, F9 Underline applies the body-vs-structural variant,
+F10 Emphasis skips structural, F11 Highlight + Mod-F11 Shading apply
+unconditionally since they're runtime annotations rather than
+semantic styles.)_
 
 **Outline navigation:**
 
@@ -995,6 +995,99 @@ through one overrides surface):
   cursor-on-word gesture is convenient. F8 and F10 share
   `applyBodyMark()` internally; the differing empty-selection
   behavior is parameterized via `expandToWordWhenEmpty`.
+- **F11 — toggle Highlight.** Color-agnostic toggle: if every char in
+  the selection already carries any `highlight` mark, the toggle
+  strips it. Otherwise the active color (from `settings.lastHighlight
+  Color`) is applied across the whole range, replacing any existing
+  color. Empty selection: no-op (no word expansion — highlights are
+  typically multi-word). No structural-block skip — tags / analytics
+  / etc. can carry highlights, since they're a runtime annotation,
+  not a semantic style. Supports all 15 Word named highlight colors
+  (`yellow`, `green`, `cyan`, `magenta`, `blue`, `red`, plus the six
+  `dark*` variants, `lightGray`, `darkGray`, `black`) round-tripped
+  as `<w:highlight w:val="…"/>`.
+- **Mod-F11 — toggle Background color (shading).** Same toggle shape
+  as F11 but operates on the `shading` mark (`<w:shd w:fill="…"/>`,
+  RGB hex). Independent of highlight — both marks can coexist on the
+  same character. When both are present, highlight wins visually
+  because `highlight` is defined after `shading` in the schema, so
+  PM's mark-rank ordering puts highlight as the inner DOM wrapper.
+  Default active color is `D2D2D2` (Verbatim's "protected highlight"
+  grey produced by `HighlightToBackgroundColor`).
+
+**Ribbon color panel:** a third panel section after the cite panel
+holds three split buttons — Highlight (highlighter glyph), Background
+(paint-bucket glyph), Font Color (`A` glyph tinted by the active font
+color). Each control is a slim split button: a wider main button +
+a narrower arrow (visually subordinate). The panel is a 2×2 grid with
+column-major flow — Highlight at top-left, Shading directly under it,
+Font color top-right (bottom-right reserved). Same stacked rhythm as
+the cite panel.
+
+**Selection-present click:** the main button applies the active color
+to the selection via the matching command (F11 / Mod-F11 toggle for
+highlight/shading; direct-apply for font color, with `null` meaning
+Automatic).
+
+**Empty-selection click → paintbrush mode** (Word's highlighter
+behavior). Clicking a main button with an empty selection toggles a
+sticky paintbrush mode for that mark. The editor cursor changes
+(`cursor: cell` via a `.pmd-paintbrush-{mode}` class on
+`view.dom` / `.ProseMirror`), the active button reads as
+"grayed-out / pressed", and every subsequent drag-select inside the
+editor automatically applies the active color. The mode stays active
+across multiple applications until Escape or clicking the same button
+again. Clicking a different color button switches the paintbrush type
+(state is single-slot).
+
+Three Word-mirroring refinements:
+  - **Toggle behavior** (highlight + shading paintbrush): the
+    paintbrush apply uses the toggle command (`applyHighlight` /
+    `applyShading`), not `setHighlightColor` / `setShadingColor`.
+    Re-painting an already-marked range strips the mark. Color-
+    agnostic — any uniform mark, regardless of its color, gets
+    stripped on re-paint. Font color paintbrush stays as `setFontColor`
+    since font color isn't a binary on/off mark.
+  - **Selection collapses after each apply** ("lift the brush"). The
+    paintbrush mouseup handler captures the apply transaction, appends
+    a `setSelection(TextSelection.create(doc, sel.to))`, and dispatches
+    once — so the user sees what they just painted without the
+    selection overlay obscuring it, and undo treats apply + collapse
+    as one step.
+  - Paintbrush is button-only — F11 / Mod-F11 hotkeys remain pure
+    toggles that no-op on empty selection.
+
+**Arrow → swatch picker.** Each picker is a 4×4 grid with 16 entries.
+The top-left swatch is consistently the strip/automatic option across
+all three controls; the remaining 15 are Word's named highlight
+colors with canonical RGBs.
+  - Highlight: top-left "No highlight" (strips, one-shot, does not
+    persist) + 15 Word named colors (persisted by name).
+  - Background: top-left "No background color" (strips, one-shot) +
+    15 RGB equivalents of the Word names (persisted by hex).
+  - Font Color: top-left "Automatic" (persisted as `null`, removes
+    the mark) + 15 RGB equivalents.
+
+Picking a swatch updates the per-control setting where applicable
+(`lastHighlightColor`, `lastShadingColor`, `lastFontColor`) AND
+applies it to the current selection in one click. The picker dismisses
+on outside-click or Escape. Live "current color" bars under each
+main button stay in sync with settings.
+
+Font color is fully independent of highlight and shading — applying
+one never touches the others. `font_color` round-trips as
+`<w:color w:val="…"/>` and writes `null` (the Automatic option) as
+"no mark" rather than explicit black.
+
+**Note on default shading grey:** Verbatim's `HighlightToBackgroundColor`
+macro produces shading at RGB `D2D2D2`, which is close to but not
+identical to Word's `lightGray` highlight equivalent at `C0C0C0`
+("Gray 25%"). The shading dropdown uses the Word-standard `C0C0C0`
+and that's also the default `lastShadingColor`. Existing `D2D2D2`
+shading in imported docs renders at its exact hex — the schema
+preserves the actual color attr regardless of the palette — so
+round-trip stays lossless; only newly-applied shading uses the
+Word-standard value.
 - **Alt-F8 — Copy previous cite.** Reframed from Verbatim's
   `CopyPreviousCite`. Source: cite_paragraphs whose end is before the
   cursor in the cursor's enclosing card; falls back to the most
@@ -1014,10 +1107,11 @@ buttons preview the styles they apply (bold / underline / color / box,
 following per-style typography flags). Tooltips display the active
 keyboard binding using the platform's modifier glyphs.
 
-**Empty Verbatim ribbon slots:** Verbatim's F11 (Highlight Yellow),
-F12 (Clear Formatting) and the Shrink / Condense / Cleanup families
-aren't shipped yet. The same registry surface will hold them when they
-land.
+**Empty Verbatim ribbon slots:** Verbatim's F12 (Clear Formatting) and
+the Shrink / Condense / Cleanup families aren't shipped yet. The same
+registry surface will hold them when they land. (Verbatim's F11 was
+Highlight Yellow — single-color; ours is a fuller toggle-plus-picker
+with the full Word palette and a sibling background-color control.)
 
 ## 16. Stylepox handling
 

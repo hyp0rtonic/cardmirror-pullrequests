@@ -13,6 +13,11 @@ import {
   setUndertag,
   applyCite,
   applyEmphasis,
+  applyHighlight,
+  applyShading,
+  setHighlightColor,
+  setShadingColor,
+  setFontColor,
   copyPreviousCite,
   buildRibbonKeymap,
   DEFAULT_RIBBON_KEYS,
@@ -1770,5 +1775,308 @@ describe('applyEmphasis (F10)', () => {
 
   it('default key binding: F10 → applyEmphasis', () => {
     expect(DEFAULT_RIBBON_KEYS['applyEmphasis']).toBe('F10');
+  });
+});
+
+// ---- applyHighlight (F11) ----
+
+function hasMarkOfNameWithAttr(
+  doc: import('prosemirror-model').Node,
+  search: string,
+  markName: string,
+  attr: string,
+): string | undefined {
+  let found: string | undefined;
+  doc.descendants((n) => {
+    if (!n.isText) return;
+    if ((n.text ?? '').includes(search)) {
+      const m = n.marks.find((mm) => mm.type.name === markName);
+      if (m) found = String(m.attrs[attr]);
+    }
+  });
+  return found;
+}
+
+describe('applyHighlight (F11)', () => {
+  it('empty selection: no-op (no word expansion)', () => {
+    const doc = makeDoc([paragraph('hello world')]);
+    const state = setCursorIn(doc, (n) => n.type.name === 'paragraph');
+    expect(apply(state, applyHighlight(() => 'yellow'))).toBeNull();
+  });
+
+  it('selection with no highlights: applies the active color to the entire range', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('hello world')),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hello world') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 11)),
+    );
+    const next = apply(state, applyHighlight(() => 'green'));
+    expect(next).not.toBeNull();
+    expect(hasMarkOfNameWithAttr(next!.doc, 'hello world', 'highlight', 'color')).toBe('green');
+  });
+
+  it('uniformly highlighted (same color): toggle off — strips the mark', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(
+          null,
+          schema.text('hi', [schema.marks['highlight']!.create({ color: 'yellow' })]),
+        ),
+      ),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hi') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 2)),
+    );
+    const next = apply(state, applyHighlight(() => 'yellow'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'hi', 'highlight', 'color')).toBeUndefined();
+  });
+
+  it('uniformly highlighted in different color: still toggle off (color-agnostic)', () => {
+    // Selection is all-yellow; user invokes F11 with active color = green.
+    // Color-agnostic toggle: every char has SOME highlight → strip.
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(
+          null,
+          schema.text('hi', [schema.marks['highlight']!.create({ color: 'yellow' })]),
+        ),
+      ),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hi') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 2)),
+    );
+    const next = apply(state, applyHighlight(() => 'green'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'hi', 'highlight', 'color')).toBeUndefined();
+  });
+
+  it('partially highlighted: applies active color to the entire range', () => {
+    // Half yellow, half plain.
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(null, [
+          schema.text('lit', [schema.marks['highlight']!.create({ color: 'yellow' })]),
+          schema.text('plain'),
+        ]),
+      ),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (start === -1 && n.isText && (n.text ?? '') === 'lit') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 'litplain'.length)),
+    );
+    const next = apply(state, applyHighlight(() => 'red'));
+    // The whole range now carries red.
+    expect(hasMarkOfNameWithAttr(next!.doc, 'lit', 'highlight', 'color')).toBe('red');
+    expect(hasMarkOfNameWithAttr(next!.doc, 'plain', 'highlight', 'color')).toBe('red');
+  });
+
+  it('highlights a selection inside a tag (no structural skip)', () => {
+    const doc = makeDoc([cardWithChildren(tag('TheTag'))]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'TheTag') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 6)),
+    );
+    const next = apply(state, applyHighlight(() => 'yellow'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'TheTag', 'highlight', 'color')).toBe('yellow');
+  });
+
+  it('default key binding: F11 → applyHighlight', () => {
+    expect(DEFAULT_RIBBON_KEYS['applyHighlight']).toBe('F11');
+  });
+});
+
+// ---- applyShading (Mod-F11) ----
+
+describe('applyShading (Mod-F11)', () => {
+  it('empty selection: no-op', () => {
+    const doc = makeDoc([paragraph('hello')]);
+    const state = setCursorIn(doc, (n) => n.type.name === 'paragraph');
+    expect(apply(state, applyShading(() => 'D2D2D2'))).toBeNull();
+  });
+
+  it('no-shading selection: applies active color across the range', () => {
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('text'))]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'text') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 4)),
+    );
+    const next = apply(state, applyShading(() => 'D2D2D2'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'text', 'shading', 'color')).toBe('D2D2D2');
+  });
+
+  it('uniformly shaded: toggle off regardless of color', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(
+          null,
+          schema.text('shaded', [schema.marks['shading']!.create({ color: 'FFFF00' })]),
+        ),
+      ),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'shaded') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 6)),
+    );
+    const next = apply(state, applyShading(() => 'D2D2D2'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'shaded', 'shading', 'color')).toBeUndefined();
+  });
+
+  it('shading and highlight coexist on the same range', () => {
+    // Apply shading first then highlight — both marks should be present.
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('mixed'))]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'mixed') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    let state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, start, start + 5)),
+    );
+    const s1 = apply(state, applyShading(() => 'D2D2D2'))!;
+    state = s1.apply(s1.tr.setSelection(TextSelection.create(s1.doc, start, start + 5)));
+    const s2 = apply(state, applyHighlight(() => 'yellow'))!;
+    expect(hasMarkOfNameWithAttr(s2.doc, 'mixed', 'shading', 'color')).toBe('D2D2D2');
+    expect(hasMarkOfNameWithAttr(s2.doc, 'mixed', 'highlight', 'color')).toBe('yellow');
+  });
+
+  it('default key binding: Mod-F11 → applyShading', () => {
+    expect(DEFAULT_RIBBON_KEYS['applyShading']).toBe('Mod-F11');
+  });
+});
+
+// ---- Direct-apply commands (dropdown picks) ----
+
+describe('setHighlightColor / setShadingColor / setFontColor', () => {
+  it('setHighlightColor replaces any existing highlight color across the range', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(null, [
+          schema.text('A', [schema.marks['highlight']!.create({ color: 'yellow' })]),
+          schema.text('B', [schema.marks['highlight']!.create({ color: 'green' })]),
+        ]),
+      ),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (start === -1 && n.isText && n.text === 'A') start = p;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, start, start + 2)));
+    const next = apply(state, setHighlightColor('red'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'A', 'highlight', 'color')).toBe('red');
+    expect(hasMarkOfNameWithAttr(next!.doc, 'B', 'highlight', 'color')).toBe('red');
+  });
+
+  it('setShadingColor normalizes hex to uppercase', () => {
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('text'))]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'text') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, start, start + 4)));
+    const next = apply(state, setShadingColor('abcdef'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'text', 'shading', 'color')).toBe('ABCDEF');
+  });
+
+  it('setFontColor(null) strips the font_color mark (Automatic)', () => {
+    const doc = makeDoc([
+      cardWithChildren(
+        tag('T'),
+        schema.nodes['card_body']!.create(
+          null,
+          schema.text('colored', [schema.marks['font_color']!.create({ color: 'FF0000' })]),
+        ),
+      ),
+    ]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'colored') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, start, start + 7)));
+    const next = apply(state, setFontColor(null));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'colored', 'font_color', 'color')).toBeUndefined();
+  });
+
+  it('setFontColor with a hex replaces any existing color', () => {
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('text'))]);
+    let start = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'text') start = p;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, start, start + 4)));
+    const next = apply(state, setFontColor('1F3864'));
+    expect(hasMarkOfNameWithAttr(next!.doc, 'text', 'font_color', 'color')).toBe('1F3864');
+  });
+});
+
+// ---- Schema mark order: highlight nests inside shading ----
+
+describe('schema mark ordering for visual stacking', () => {
+  it('highlight has a higher rank than shading (renders inside)', () => {
+    // `rank` is internal PM (set by MarkType.compile in definition order)
+    // but exposed at runtime. Higher rank = later in marks array = inner
+    // DOM element.
+    const hRank = (schema.marks['highlight'] as unknown as { rank: number }).rank;
+    const sRank = (schema.marks['shading'] as unknown as { rank: number }).rank;
+    expect(hRank).toBeGreaterThan(sRank);
+  });
+
+  it('Mark.setFrom puts shading before highlight in a mixed mark set', () => {
+    const m = schema.text('x', [
+      schema.marks['highlight']!.create({ color: 'yellow' }),
+      schema.marks['shading']!.create({ color: 'D2D2D2' }),
+    ]);
+    const names = m.marks.map((mm) => mm.type.name);
+    expect(names.indexOf('shading')).toBeLessThan(names.indexOf('highlight'));
   });
 });

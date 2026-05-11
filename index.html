@@ -33,6 +33,35 @@
           <button id="underline-btn" class="formatting-panel-btn formatting-panel-underline" type="button">Underline</button>
           <button id="emphasis-btn" class="formatting-panel-btn formatting-panel-emphasis" type="button">Emphasis</button>
         </div>
+        <div id="color-panel" class="ribbon-color-panel" role="group" aria-label="Colors">
+          <!-- Three split buttons: main click applies current color, arrow
+               opens a swatch picker. Each control shows a colored bar at
+               the bottom reflecting the active selection. -->
+          <div class="ribbon-color-control" data-control="highlight">
+            <button id="highlight-btn" class="ribbon-color-main" type="button" title="Highlight (F11)">
+              <span class="ribbon-color-glyph">✎</span>
+              <span class="ribbon-color-bar" id="highlight-bar"></span>
+            </button>
+            <button id="highlight-picker-btn" class="ribbon-color-arrow" type="button" title="Highlight color"
+                    aria-haspopup="true" aria-expanded="false">▾</button>
+          </div>
+          <div class="ribbon-color-control" data-control="shading">
+            <button id="shading-btn" class="ribbon-color-main" type="button" title="Background color">
+              <span class="ribbon-color-glyph">🪣</span>
+              <span class="ribbon-color-bar" id="shading-bar"></span>
+            </button>
+            <button id="shading-picker-btn" class="ribbon-color-arrow" type="button" title="Background color"
+                    aria-haspopup="true" aria-expanded="false">▾</button>
+          </div>
+          <div class="ribbon-color-control" data-control="fontcolor">
+            <button id="fontcolor-btn" class="ribbon-color-main" type="button" title="Font color">
+              <span class="ribbon-color-glyph" id="fontcolor-glyph">A</span>
+              <span class="ribbon-color-bar" id="fontcolor-bar"></span>
+            </button>
+            <button id="fontcolor-picker-btn" class="ribbon-color-arrow" type="button" title="Font color"
+                    aria-haspopup="true" aria-expanded="false">▾</button>
+          </div>
+        </div>
       </div>
       <div class="ribbon-section ribbon-center">
         <button id="read-mode-btn" type="button" title="Read mode" aria-label="Read mode">👁</button>

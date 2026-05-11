@@ -676,6 +676,158 @@ const STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE = new Set([
   'tag', 'analytic', 'pocket', 'hat', 'block', 'undertag',
 ]);
 
+/**
+ * F11 — toggle Highlight across the selection with the active
+ * highlight color. Color-agnostic toggle: if every character in the
+ * selection already carries any `highlight` mark, strip it. Otherwise
+ * apply the active color to the whole range (replacing any existing
+ * color in chars that were already highlighted).
+ *
+ * No structural-block skip — tags, analytics, etc. can carry
+ * highlights (they're a runtime annotation, not a semantic style).
+ * Empty selection: no-op (no word expansion — highlights typically
+ * span multiple words and users select before applying).
+ */
+export function applyHighlight(activeColor: () => string): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    if (sel.empty) return false;
+    const highlightType = schema.marks['highlight'];
+    if (!highlightType) return false;
+
+    const { from, to } = sel;
+    const { allMarked, anyText } = scanTextMarkPresence(state.doc, from, to, 'highlight');
+    if (!anyText) return false;
+
+    if (!dispatch) return true;
+    const tr = state.tr;
+    if (allMarked) {
+      tr.removeMark(from, to, highlightType);
+    } else {
+      // Replace any existing highlight color with the active one across
+      // the whole range. removeMark + addMark guarantees the new color
+      // wins even where a different highlight already exists.
+      tr.removeMark(from, to, highlightType);
+      tr.addMark(from, to, highlightType.create({ color: activeColor() }));
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
+ * Mod-F11 — toggle Shading (background color, `<w:shd w:fill="…"/>`).
+ * Same toggle shape as F11. Shading is independent of highlight —
+ * both can coexist on the same character. When both are present the
+ * inner DOM wrapper (highlight, defined after shading in the schema)
+ * wins visually. Highlight is rendered as the on-screen color;
+ * shading remains in the data for round-trip and as the "protected
+ * highlight" fallback that survives Word's Remove Highlighting.
+ */
+export function applyShading(activeColor: () => string): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    if (sel.empty) return false;
+    const shadingType = schema.marks['shading'];
+    if (!shadingType) return false;
+
+    const { from, to } = sel;
+    const { allMarked, anyText } = scanTextMarkPresence(state.doc, from, to, 'shading');
+    if (!anyText) return false;
+
+    if (!dispatch) return true;
+    const tr = state.tr;
+    if (allMarked) {
+      tr.removeMark(from, to, shadingType);
+    } else {
+      tr.removeMark(from, to, shadingType);
+      tr.addMark(from, to, shadingType.create({ color: activeColor() }));
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
+ * Direct-apply commands fed by the ribbon's color dropdowns. Each
+ * applies the chosen value to the selection unconditionally — these
+ * are "I picked this color, paint everything with it" gestures, not
+ * toggles. No-op on collapsed selection.
+ *
+ * `setHighlightColor` and `setShadingColor` always write the mark.
+ * `setFontColor` accepts null to remove the mark entirely ("Automatic"
+ * in the dropdown). Hex values are normalized to uppercase, matching
+ * the OOXML convention used elsewhere in the schema.
+ */
+export function setHighlightColor(color: string): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    if (sel.empty) return false;
+    const type = schema.marks['highlight'];
+    if (!type) return false;
+    if (!dispatch) return true;
+    const tr = state.tr;
+    tr.removeMark(sel.from, sel.to, type);
+    tr.addMark(sel.from, sel.to, type.create({ color }));
+    dispatch(tr);
+    return true;
+  };
+}
+
+export function setShadingColor(rgb: string): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    if (sel.empty) return false;
+    const type = schema.marks['shading'];
+    if (!type) return false;
+    if (!dispatch) return true;
+    const tr = state.tr;
+    tr.removeMark(sel.from, sel.to, type);
+    tr.addMark(sel.from, sel.to, type.create({ color: rgb.toUpperCase() }));
+    dispatch(tr);
+    return true;
+  };
+}
+
+export function setFontColor(rgb: string | null): Command {
+  return (state, dispatch) => {
+    const sel = state.selection;
+    if (sel.empty) return false;
+    const type = schema.marks['font_color'];
+    if (!type) return false;
+    if (!dispatch) return true;
+    const tr = state.tr;
+    tr.removeMark(sel.from, sel.to, type);
+    if (rgb !== null) {
+      tr.addMark(sel.from, sel.to, type.create({ color: rgb.toUpperCase() }));
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
+ * Walk text nodes in [from, to] and report whether every text char
+ * carries a mark of the given name, plus whether any text was found
+ * at all. Used by toggle commands to decide on-vs-off.
+ */
+function scanTextMarkPresence(
+  doc: PMNode,
+  from: number,
+  to: number,
+  markName: string,
+): { allMarked: boolean; anyText: boolean } {
+  let allMarked = true;
+  let anyText = false;
+  doc.nodesBetween(from, to, (node) => {
+    if (!node.isText) return true;
+    anyText = true;
+    if (!node.marks.some((m) => m.type.name === markName)) allMarked = false;
+    return true;
+  });
+  return { allMarked, anyText };
+}
+
 export function copyPreviousCite(): Command {
   return (state, dispatch) => {
     // Collapse a non-empty selection to its start position.
@@ -1018,6 +1170,8 @@ export type RibbonCommandId =
   | 'applyCite'
   | 'applyUnderline'
   | 'applyEmphasis'
+  | 'applyHighlight'
+  | 'applyShading'
   | 'copyPreviousCite';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
@@ -1036,6 +1190,8 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'applyCite',
   'applyUnderline',
   'applyEmphasis',
+  'applyHighlight',
+  'applyShading',
   'copyPreviousCite',
 ];
 
@@ -1051,6 +1207,8 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   applyCite: 'Apply Cite style',
   applyUnderline: 'Toggle Underline',
   applyEmphasis: 'Apply Emphasis style',
+  applyHighlight: 'Toggle Highlight',
+  applyShading: 'Toggle Background Color',
   copyPreviousCite: 'Copy previous cite',
 };
 
@@ -1074,23 +1232,46 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   applyCite: 'F8',
   applyUnderline: ['F9', 'Mod-u'],
   applyEmphasis: 'F10',
+  applyHighlight: 'F11',
+  applyShading: 'Mod-F11',
   copyPreviousCite: 'Alt-F8',
 };
 
-const COMMAND_FACTORIES: Record<RibbonCommandId, () => Command> = {
-  setPocket: () => setHeading('pocket'),
-  setHat: () => setHeading('hat'),
-  setBlock: () => setHeading('block'),
-  setTag: () => setTag(),
-  setAnalytic: () => setAnalytic(),
-  setUndertag: () => setUndertag(),
-  toggleBold: () => toggleMark(schema.marks['bold']!),
-  toggleItalic: () => toggleMark(schema.marks['italic']!),
-  applyCite: () => applyCite(),
-  applyUnderline: () => applyUnderline(),
-  applyEmphasis: () => applyEmphasis(),
-  copyPreviousCite: () => copyPreviousCite(),
+/**
+ * Live values the color-aware commands (F11 Highlight, Mod-F11
+ * Shading) read at invocation time. Passed into `buildRibbonKeymap`
+ * and `getRibbonCommand` so the editor can hand them a `settings`-
+ * backed resolver. Defaults pull the schema's defaults, so tests can
+ * call `getRibbonCommand('applyHighlight')` without wiring settings.
+ */
+export interface RibbonContext {
+  highlightColor: () => string;
+  shadingColor: () => string;
+}
+
+const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
+  highlightColor: () => 'yellow',
+  shadingColor: () => 'D2D2D2',
 };
+
+function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
+  switch (id) {
+    case 'setPocket': return setHeading('pocket');
+    case 'setHat': return setHeading('hat');
+    case 'setBlock': return setHeading('block');
+    case 'setTag': return setTag();
+    case 'setAnalytic': return setAnalytic();
+    case 'setUndertag': return setUndertag();
+    case 'toggleBold': return toggleMark(schema.marks['bold']!);
+    case 'toggleItalic': return toggleMark(schema.marks['italic']!);
+    case 'applyCite': return applyCite();
+    case 'applyUnderline': return applyUnderline();
+    case 'applyEmphasis': return applyEmphasis();
+    case 'applyHighlight': return applyHighlight(ctx.highlightColor);
+    case 'applyShading': return applyShading(ctx.shadingColor);
+    case 'copyPreviousCite': return copyPreviousCite();
+  }
+}
 
 /** Normalize a default-key value (string | string[]) to an array. */
 function keysArray(spec: string | string[]): string[] {
@@ -1120,11 +1301,12 @@ export function primaryKeyFor(
  */
 export function buildRibbonKeymap(
   overrides: Partial<Record<RibbonCommandId, string | string[]>> = {},
+  ctx: RibbonContext = DEFAULT_RIBBON_CONTEXT,
 ): Record<string, Command> {
   const out: Record<string, Command> = {};
   for (const id of RIBBON_COMMAND_IDS) {
     const spec = overrides[id] ?? DEFAULT_RIBBON_KEYS[id];
-    const cmd = COMMAND_FACTORIES[id]();
+    const cmd = commandFor(id, ctx);
     for (const key of keysArray(spec)) {
       if (!key) continue;
       out[key] = cmd;
@@ -1139,8 +1321,11 @@ export function buildRibbonKeymap(
  * keymap — when a binding is rebound through settings, buttons and
  * keys both follow.
  */
-export function getRibbonCommand(id: RibbonCommandId): Command {
-  return COMMAND_FACTORIES[id]();
+export function getRibbonCommand(
+  id: RibbonCommandId,
+  ctx: RibbonContext = DEFAULT_RIBBON_CONTEXT,
+): Command {
+  return commandFor(id, ctx);
 }
 
 /**
