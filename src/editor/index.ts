@@ -7,7 +7,7 @@
  * navigation panel, send-to-speech, drag-and-drop, etc.) is later work.
  */
 
-import { EditorState } from 'prosemirror-state';
+import { EditorState, type Plugin } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { history, undo, redo } from 'prosemirror-history';
@@ -345,7 +345,9 @@ function applyFormattingPanel(
     docOpsPanelEl.classList.toggle('hidden', mode === 'hidden');
   }
   for (const { id, btn } of formattingPanelBtnRefs) {
-    const keyDisplay = formatKeyForDisplay(primaryKeyFor(id));
+    const keyDisplay = formatKeyForDisplay(
+      primaryKeyFor(id, settings.get('ribbonKeyOverrides')),
+    );
     const shortLabel = FORMATTING_PANEL_SHORT_LABEL[id];
     const fullLabel = RIBBON_COMMAND_LABELS[id];
     // ' · ' matches the separator used in the status-bar read-time
@@ -449,6 +451,14 @@ function applyLineHeight(_multiplier: number): void {
   editorEl.style.setProperty('--pmd-line-height-undertag', String(s.lineHeightUndertag));
 }
 
+// Track the last applied ribbon-key override map so the settings
+// subscriber can detect changes by reference and reconfigure the
+// view's plugin stack only when bindings actually moved. We start
+// with whatever the store has at boot — first subscriber call won't
+// see a diff and won't reconfigure (the freshly-built view already
+// has the current bindings baked in).
+let lastRibbonOverrides = settings.get('ribbonKeyOverrides');
+
 // Apply read-mode visual state and editing lockdown whenever the
 // setting changes (and once now to handle the persisted value).
 settings.subscribe((s) => {
@@ -463,6 +473,14 @@ settings.subscribe((s) => {
   syncParagraphIntegrityBtn();
   refreshWordCount();
   refreshFontSizeDisplay();
+  if (s.ribbonKeyOverrides !== lastRibbonOverrides) {
+    lastRibbonOverrides = s.ribbonKeyOverrides;
+    if (view) {
+      view.updateState(
+        view.state.reconfigure({ plugins: buildEditorPlugins() }),
+      );
+    }
+  }
 });
 applyReadMode(settings.get('readMode'));
 applyZoom(settings.get('zoomPct'));
@@ -504,7 +522,10 @@ window.addEventListener('keydown', (e) => {
   // it can't be one of ours.
   if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^F\d+$/.test(e.key)) return;
   const keyString = ribbonKeyStringFor(e);
-  const cmdId = ribbonCommandForKey(keyString);
+  const cmdId = ribbonCommandForKey(
+    keyString,
+    settings.get('ribbonKeyOverrides'),
+  );
   if (!cmdId) return;
   e.preventDefault();
   if (!view) return;
@@ -878,6 +899,56 @@ function makeStarterDoc(): PMNode {
   ]);
 }
 
+/**
+ * Build the editor's plugin list. Extracted so that `mountView` and
+ * the live keybinding-override subscriber both produce the same set —
+ * the only delta when overrides change is the ribbon keymap plugin,
+ * but PM doesn't let you splice a single plugin, so the whole list is
+ * rebuilt and the view is `reconfigure`d in place.
+ */
+function buildEditorPlugins(): Plugin[] {
+  return [
+    history(),
+    keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
+    // Tag/analytic boundary editing rules (ARCHITECTURE.md §14.3).
+    // These run before baseKeymap so they get first crack at
+    // Backspace / Delete / Enter when the cursor is in a tag.
+    keymap({
+      Backspace: (state, dispatch, view) =>
+        backspaceAtTagStart(state, dispatch, view) ||
+        backspaceAtFirstBodyStart(state, dispatch, view),
+      Delete: (state, dispatch, view) =>
+        deleteAtTagEnd(state, dispatch, view) ||
+        deleteAtContainerEnd(state, dispatch, view),
+      Enter: (state, dispatch, view) =>
+        enterAtTagEnd(state, dispatch, view) ||
+        enterMidTag(state, dispatch, view) ||
+        enterInHeading(state, dispatch, view),
+    }),
+    // Ribbon commands — structural style hotkeys (F4–F7 / Mod-F7)
+    // plus inline mark toggles (Mod-B / Mod-I) and the color-aware
+    // toggles (F11 / Mod-F11). User overrides come from settings; the
+    // `ribbonKeyOverrides` subscriber below reconfigures the state
+    // when they change so new bindings take effect without a reload.
+    keymap(
+      buildRibbonKeymap(settings.get('ribbonKeyOverrides'), ribbonContext),
+    ),
+    keymap(baseKeymap),
+    readModePlugin,
+    absorbPlugin,
+    citeClassifierPlugin,
+    namedStyleNormalizerPlugin,
+    fontSizeClassPlugin,
+    buildPastePlugin({
+      condenseOnPaste: () => settings.get('condenseOnPaste'),
+      paragraphIntegrity: () => settings.get('paragraphIntegrity'),
+      usePilcrows: () => settings.get('usePilcrows'),
+      headingMode: () => settings.get('headingMode'),
+      onArmedChange: (armed) => updatePlainPasteIndicator(armed),
+    }),
+  ];
+}
+
 function mountView(doc: PMNode): void {
   if (view) {
     editorDragSurface.detach();
@@ -886,44 +957,7 @@ function mountView(doc: PMNode): void {
   const state = EditorState.create({
     doc,
     schema,
-    plugins: [
-      history(),
-      keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
-      // Tag/analytic boundary editing rules (ARCHITECTURE.md §14.3).
-      // These run before baseKeymap so they get first crack at
-      // Backspace / Delete / Enter when the cursor is in a tag.
-      keymap({
-        Backspace: (state, dispatch, view) =>
-          backspaceAtTagStart(state, dispatch, view) ||
-          backspaceAtFirstBodyStart(state, dispatch, view),
-        Delete: (state, dispatch, view) =>
-          deleteAtTagEnd(state, dispatch, view) ||
-          deleteAtContainerEnd(state, dispatch, view),
-        Enter: (state, dispatch, view) =>
-          enterAtTagEnd(state, dispatch, view) ||
-          enterMidTag(state, dispatch, view) ||
-          enterInHeading(state, dispatch, view),
-      }),
-      // Ribbon commands — structural style hotkeys (F4–F7 / Mod-F7)
-      // plus inline mark toggles (Mod-B / Mod-I) and the color-aware
-      // toggles (F11 / Mod-F11). buildRibbonKeymap() accepts user
-      // overrides keyed by RibbonCommandId and a context that supplies
-      // the live "current color" for highlight/shading from settings.
-      keymap(buildRibbonKeymap({}, ribbonContext)),
-      keymap(baseKeymap),
-      readModePlugin,
-      absorbPlugin,
-      citeClassifierPlugin,
-      namedStyleNormalizerPlugin,
-      fontSizeClassPlugin,
-      buildPastePlugin({
-        condenseOnPaste: () => settings.get('condenseOnPaste'),
-        paragraphIntegrity: () => settings.get('paragraphIntegrity'),
-        usePilcrows: () => settings.get('usePilcrows'),
-        headingMode: () => settings.get('headingMode'),
-        onArmedChange: (armed) => updatePlainPasteIndicator(armed),
-      }),
-    ],
+    plugins: buildEditorPlugins(),
   });
   view = new EditorView(editorEl, {
     state,

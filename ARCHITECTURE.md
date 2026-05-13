@@ -957,8 +957,8 @@ remaining commands map directly to schema transforms.
 
 Status — what's wired (all in `src/editor/ribbon-commands.ts`
 unless noted, all routed through a single `RibbonCommandId` registry
-so a future "Keyboard shortcuts" settings panel can rebind anything
-through one overrides surface):
+so the "Keyboard shortcuts" settings panel can rebind anything through
+one overrides surface — see DECISIONS 2026-05-12 (keybinding editor)):
 
 - **Structural-style hotkeys (F4 / F5 / F6 / F7 / Mod-F7 / Mod-F8).**
   Set the current paragraph or heading to Pocket / Hat / Block / Tag /

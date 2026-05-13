@@ -410,8 +410,8 @@ single registry (`src/editor/ribbon-commands.ts`):
   hotkeys win where they exist (`F4`–`F7`, `Alt-F8`); Word's wins for
   inline marks (`Mod-B`, `Mod-I`); we picked the rest by analogy.
 - `buildRibbonKeymap(overrides)` — produces a keymap object given
-  optional per-ID overrides. Settings UI for rebinding isn't built
-  yet, but the surface is.
+  optional per-ID overrides. Rebinding UI lives in Settings as of
+  2026-05-12 (see "Keybinding editor" entry below).
 
 **Conversion rules** are intentionally context-aware:
 
@@ -1455,3 +1455,67 @@ shows it under Condense with `—` for its key.
 The warning markers are scanned by Shrink alongside omissions and
 governed by the same `shrinkRestoresOmissionsToNormal` toggle. See the
 "Protected-range handling" section of the Shrink entry above.
+
+## 2026-05-13: Keybinding editor
+
+Activates the rebinding surface that has been sitting unused since the
+ribbon registry first landed (2026-05-10 entry above). New
+`ribbonKeyOverrides` setting — a `Partial<Record<RibbonCommandId,
+string | string[]>>` — feeds the existing `buildRibbonKeymap` /
+`ribbonCommandForKey` / `primaryKeyFor` override args from one place,
+and a settings-dialog editor surfaces every command for rebinding.
+
+### Settings storage
+
+- `ribbonKeyOverrides` is the full override map. Absence of a key
+  means "use the default for this command"; presence with a non-empty
+  spec replaces the default; presence with `''` or `[]` means the
+  command is explicitly unbound. The store sanitizes unknown shapes
+  to `{}`.
+- The override map is sanitized by shape only — unknown command IDs
+  pass through (no circular import of the ID list, and stale IDs from
+  a future rename simply have no effect at lookup time).
+
+### Reactive plugin reconfigure
+
+`mountView` builds the editor's plugin list via a new `buildEditorPlugins()`
+helper. A settings subscriber compares `s.ribbonKeyOverrides` by
+reference against the last applied value; when it changes,
+`view.updateState(state.reconfigure({ plugins: buildEditorPlugins() }))`
+swaps the plugin stack in place — the doc, selection, and history
+survive. No remount, no reload.
+
+The settings store reuses object identity (`set` short-circuits when
+the value `===` the stored one), so the subscriber doesn't reconfigure
+for unrelated setting changes — only when the override map actually
+moved.
+
+### Editor UI (`keybindings-editor.ts`)
+
+- One row per `RibbonCommandId`, sorted alphabetically by
+  `RIBBON_COMMAND_LABELS[id]` so users can find commands by name.
+- Resolved bindings (overrides win, default fallback) render as chips
+  with `×` to remove. Empty resolution renders as `—`.
+- `+` per row enters a capture mode: listens for a `keydown` and
+  builds a key string via `ribbonKeyStringFor`. Escape cancels. Bare
+  modifiers, Escape/Tab/Enter/Space, and single-character keys
+  without a modifier are rejected with an inline flash.
+- Conflict policy: if the captured key is already bound to another
+  command, that command's binding set has the key removed first (the
+  trimmed list becomes that command's override). The displaced
+  command's row flashes the change. This guarantees one-key-one-
+  command — predictable for users, no last-keymap-wins surprise.
+- `↺` per row drops the override entry entirely (back to default).
+- "Restore all defaults" at the bottom clears the whole override map.
+
+### Surfaces threaded with overrides
+
+- `buildRibbonKeymap(settings.get('ribbonKeyOverrides'), …)` — the
+  PM keymap inside the editor.
+- Global `window` keydown handler in `index.ts` —
+  `ribbonCommandForKey(keyString, settings.get('ribbonKeyOverrides'))`,
+  so F-keys still fire commands when the editor isn't focused.
+- Ribbon button tooltips —
+  `primaryKeyFor(id, settings.get('ribbonKeyOverrides'))`.
+- Reference (cheat-sheet) modal — reads overrides at render time so
+  the displayed keys match the user's customizations.

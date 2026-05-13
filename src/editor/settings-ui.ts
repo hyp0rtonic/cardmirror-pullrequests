@@ -24,6 +24,7 @@ import {
   condenseWarningCloseFor,
 } from './settings.js';
 import { isFontAvailable } from './font-detect.js';
+import { buildKeybindingsEditor } from './keybindings-editor.js';
 
 /**
  * Available body fonts. A mix of Microsoft Office defaults (likely
@@ -202,6 +203,10 @@ class SettingsModal {
     } else if (meta.kind === 'condenseWarningDelimiter') {
       row.appendChild(text);
       row.appendChild(buildCondenseWarningDelimiterEditor());
+      return row;
+    } else if (meta.kind === 'keybindings') {
+      row.appendChild(text);
+      row.appendChild(buildKeybindingsEditor());
       return row;
     }
 

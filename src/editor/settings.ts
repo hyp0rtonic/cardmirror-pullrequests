@@ -9,6 +9,7 @@
  */
 
 import { isWordHighlightName, isHex6 } from './color-palette.js';
+import type { RibbonCommandId } from './ribbon-commands.js';
 
 const STORAGE_KEY = 'pmd-settings';
 
@@ -292,6 +293,16 @@ export interface Settings {
    * `[` matches the most common convention in user docs.
    */
   condenseWarningDelimiter: CondenseWarningDelimiter;
+  /**
+   * User-supplied overrides for ribbon-command key bindings. Each
+   * entry maps a `RibbonCommandId` to its custom key spec — either a
+   * single key string (e.g. `'F8'`, `'Mod-Shift-7'`) or an array for
+   * multi-binding commands (e.g. `['F9', 'Mod-u']`). An empty string
+   * or empty array means "explicitly unbound" (the command exists in
+   * the menu / ribbon but has no key). Commands not present in this
+   * map fall back to `DEFAULT_RIBBON_KEYS`.
+   */
+  ribbonKeyOverrides: Partial<Record<RibbonCommandId, string | string[]>>;
 }
 
 /** Open-delimiter options for "Condense with warning" markers. */
@@ -353,6 +364,7 @@ const DEFAULTS: Settings = {
   forReferenceUseGray50: false,
   shrinkRestoresOmissionsToNormal: false,
   condenseWarningDelimiter: '[',
+  ribbonKeyOverrides: {},
 };
 
 /** Public read-only view of the built-in defaults — handy for any UI
@@ -380,7 +392,8 @@ export interface SettingMeta {
     | 'lineHeights'
     | 'formattingPanelMode'
     | 'headingMode'
-    | 'condenseWarningDelimiter';
+    | 'condenseWarningDelimiter'
+    | 'keybindings';
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -507,6 +520,13 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Line-spacing multiplier per paragraph type (unitless × font-size).',
     kind: 'lineHeights',
+  },
+  {
+    key: 'ribbonKeyOverrides',
+    label: 'Keyboard shortcuts',
+    description:
+      'Rebind any ribbon / menu command to your own keys. Click + on a row to add a binding; click × on a chip to remove one; click ↺ to restore that row\'s defaults.',
+    kind: 'keybindings',
   },
 ];
 
@@ -658,7 +678,29 @@ function sanitize(s: Settings): Settings {
     )
       ? (s.condenseWarningDelimiter as CondenseWarningDelimiter)
       : DEFAULTS.condenseWarningDelimiter,
+    ribbonKeyOverrides: sanitizeRibbonKeyOverrides(s.ribbonKeyOverrides),
   };
+}
+
+/** Keep only string / string[] entries, coercing arrays to plain arrays
+ *  of strings. Unknown keys pass through — we don't import the
+ *  ribbon-command ID list here (it would create an import cycle), so
+ *  any obsolete IDs from a future schema change will simply have no
+ *  effect at lookup time. */
+function sanitizeRibbonKeyOverrides(
+  raw: unknown,
+): Partial<Record<RibbonCommandId, string | string[]>> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Partial<Record<string, string | string[]>> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'string') {
+      out[k] = v;
+    } else if (Array.isArray(v)) {
+      const cleaned = v.filter((x): x is string => typeof x === 'string');
+      out[k] = cleaned;
+    }
+  }
+  return out as Partial<Record<RibbonCommandId, string | string[]>>;
 }
 
 function sanitizeLineHeight(raw: unknown, fallback: number): number {

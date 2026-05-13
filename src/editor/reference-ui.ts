@@ -14,6 +14,7 @@ import {
   formatKeyForDisplay,
   type RibbonCommandId,
 } from './ribbon-commands.js';
+import { settings } from './settings.js';
 
 interface ShortcutGroup {
   title: string;
@@ -121,7 +122,11 @@ class ReferenceModal {
         const row = document.createElement('div');
         row.className = 'pmd-reference-row';
 
-        const keySpec = DEFAULT_RIBBON_KEYS[id];
+        // Live overrides from settings take precedence over defaults
+        // so the cheat sheet always reflects the user's current
+        // bindings (including unbound / freshly-customized commands).
+        const overrides = settings.get('ribbonKeyOverrides');
+        const keySpec = overrides[id] ?? DEFAULT_RIBBON_KEYS[id];
         const keys = Array.isArray(keySpec) ? keySpec : [keySpec];
         const keyText = keys
           .map((k) => formatKeyForDisplay(k))
