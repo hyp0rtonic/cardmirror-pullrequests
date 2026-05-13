@@ -49,6 +49,8 @@ import {
   primaryKeyFor,
   ribbonKeyStringFor,
   ribbonCommandForKey,
+  setFontSize,
+  adjustFontSize,
   RIBBON_COMMAND_LABELS,
   type StructuralRibbonCommandId,
   type RibbonContext,
@@ -67,7 +69,11 @@ const readModeBtn = document.getElementById('read-mode-btn') as HTMLButtonElemen
 const wordCountBtn = document.getElementById('word-count-btn') as HTMLButtonElement;
 const wordCountText = document.getElementById('word-count-text')!;
 const plainPasteToggleBtn = document.getElementById('plain-paste-toggle-btn') as HTMLButtonElement | null;
-const fontSizeDisplay = document.getElementById('font-size-display') as HTMLDivElement | null;
+const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement | null;
+const fontSizePickerBtn = document.getElementById('font-size-picker-btn') as HTMLButtonElement | null;
+const fontSizeControlEl = fontSizeInput?.parentElement as HTMLDivElement | null;
+const fontSizeUpBtn = document.getElementById('font-size-up-btn') as HTMLButtonElement | null;
+const fontSizeDownBtn = document.getElementById('font-size-down-btn') as HTMLButtonElement | null;
 
 function updatePlainPasteIndicator(armed: boolean): void {
   if (!plainPasteToggleBtn) return;
@@ -384,18 +390,139 @@ if (plainPasteToggleBtn) {
   });
 }
 
+// ---- Font-size input + dropdown ----
+
+const FONT_SIZE_PRESETS = [4, 6, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 48, 72];
+
+function commitFontSizeInput(): void {
+  if (!fontSizeInput || !view) return;
+  const raw = fontSizeInput.value.trim();
+  if (raw === '' || raw === '—') {
+    // No-op revert: re-sync from current cursor state.
+    refreshFontSizeDisplay();
+    return;
+  }
+  const pt = parseFloat(raw);
+  if (!Number.isFinite(pt) || pt <= 0) {
+    refreshFontSizeDisplay();
+    return;
+  }
+  // Clamp to OOXML's sane range (1–409pt; 818 half-points is Word's cap).
+  const clamped = Math.max(1, Math.min(409, pt));
+  setFontSize(clamped)(view.state, view.dispatch.bind(view));
+  view.focus();
+}
+
+if (fontSizeInput) {
+  fontSizeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitFontSizeInput();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      refreshFontSizeDisplay();
+      fontSizeInput.blur();
+    }
+  });
+  fontSizeInput.addEventListener('blur', () => {
+    commitFontSizeInput();
+  });
+  // Focus highlights the current value so typing replaces it.
+  fontSizeInput.addEventListener('focus', () => {
+    fontSizeInput.select();
+  });
+}
+
+let openFontSizePickerEl: HTMLElement | null = null;
+function closeFontSizePicker(): void {
+  if (!openFontSizePickerEl) return;
+  openFontSizePickerEl.remove();
+  openFontSizePickerEl = null;
+  fontSizePickerBtn?.setAttribute('aria-expanded', 'false');
+}
+
+function openFontSizePicker(): void {
+  if (!fontSizePickerBtn) return;
+  if (openFontSizePickerEl) {
+    closeFontSizePicker();
+    return;
+  }
+  const picker = document.createElement('div');
+  picker.className = 'pmd-font-size-picker';
+  for (const pt of FONT_SIZE_PRESETS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = String(pt);
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', () => {
+      if (view) setFontSize(pt)(view.state, view.dispatch.bind(view));
+      closeFontSizePicker();
+      view?.focus();
+    });
+    picker.appendChild(btn);
+  }
+  document.body.appendChild(picker);
+  const rect = fontSizePickerBtn.getBoundingClientRect();
+  picker.style.top = `${rect.bottom + 2}px`;
+  picker.style.left = `${rect.right - picker.offsetWidth}px`;
+  openFontSizePickerEl = picker;
+  fontSizePickerBtn.setAttribute('aria-expanded', 'true');
+
+  const onDocPointerDown = (e: PointerEvent) => {
+    if (!openFontSizePickerEl) return;
+    const t = e.target as Node | null;
+    if (t && (openFontSizePickerEl.contains(t) || fontSizePickerBtn.contains(t))) return;
+    closeFontSizePicker();
+    document.removeEventListener('pointerdown', onDocPointerDown);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      closeFontSizePicker();
+      document.removeEventListener('pointerdown', onDocPointerDown);
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('pointerdown', onDocPointerDown);
+  document.addEventListener('keydown', onKey);
+}
+
+if (fontSizePickerBtn) {
+  fontSizePickerBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  fontSizePickerBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openFontSizePicker();
+  });
+}
+
+for (const [btn, delta] of [
+  [fontSizeUpBtn, 1],
+  [fontSizeDownBtn, -1],
+] as const) {
+  if (!btn) continue;
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+  btn.addEventListener('click', () => {
+    if (!view) return;
+    adjustFontSize(delta, effectivePtForNode)(view.state, view.dispatch.bind(view));
+    view.focus();
+  });
+}
+
 function refreshFontSizeDisplay(): void {
-  if (!fontSizeDisplay) return;
+  if (!fontSizeInput || !fontSizeControlEl) return;
+  // Don't clobber the user's in-progress edit — only sync the input
+  // value when it isn't focused.
+  if (document.activeElement === fontSizeInput) return;
   if (!view) {
-    fontSizeDisplay.textContent = '—';
-    fontSizeDisplay.classList.remove('pmd-font-size-direct');
+    fontSizeInput.value = '—';
+    fontSizeControlEl.classList.remove('pmd-font-size-direct');
     return;
   }
   const info = effectiveFontSizeForDisplay(view.state);
-  fontSizeDisplay.textContent = info.pt == null ? '—' : `${formatPt(info.pt)}`;
+  fontSizeInput.value = info.pt == null ? '—' : formatPt(info.pt);
   // Red when every contributing run derives its size from an explicit
   // `font_size` mark; black when bare or driven by a named-style mark.
-  fontSizeDisplay.classList.toggle(
+  fontSizeControlEl.classList.toggle(
     'pmd-font-size-direct',
     info.pt != null && info.direct,
   );
@@ -414,41 +541,73 @@ interface FontSizeInfo {
   direct: boolean;
 }
 
+/**
+ * Effective font-size (in pt) for a paragraph that has no run-level
+ * size cues. Reads from the live `displaySizes` setting so all
+ * downstream consumers reflect user-customized per-style sizes.
+ */
+function paragraphDefaultPt(parentName: string): number {
+  const sizes = settings.get('displaySizes');
+  switch (parentName) {
+    case 'pocket': return sizes.pocket;
+    case 'hat': return sizes.hat;
+    case 'block': return sizes.block;
+    case 'tag': return sizes.tag;
+    case 'analytic': return sizes.analytic;
+    case 'undertag': return sizes.undertag;
+    default: return sizes.normal;
+  }
+}
+
+/**
+ * Effective font-size for a single text run, with the same precedence
+ * the chip / increment buttons / display logic all use:
+ *   1. `font_size` mark on the run → that value (and `direct: true`).
+ *   2. Named-style mark on the run (cite_mark, underline_mark, etc.)
+ *      → the corresponding per-style size from displaySizes.
+ *   3. Otherwise → the parent paragraph's natural size.
+ */
+function ptForRun(text: PMNode, parent: PMNode): { pt: number; direct: boolean } {
+  const fs = text.marks.find((m) => m.type.name === 'font_size');
+  if (fs) {
+    return { pt: Number(fs.attrs['halfPoints'] ?? 22) / 2, direct: true };
+  }
+  const sizes = settings.get('displaySizes');
+  for (const m of text.marks) {
+    switch (m.type.name) {
+      case 'cite_mark': return { pt: sizes.cite, direct: false };
+      case 'underline_mark': return { pt: sizes.underline, direct: false };
+      case 'emphasis_mark': return { pt: sizes.emphasis, direct: false };
+      case 'undertag_mark': return { pt: sizes.undertag, direct: false };
+      case 'analytic_mark': return { pt: sizes.analytic, direct: false };
+    }
+  }
+  return { pt: paragraphDefaultPt(parent.type.name), direct: false };
+}
+
+/**
+ * Resolver used by `adjustFontSize` to pick a per-run starting size
+ * when the run has no explicit `font_size` mark. `node === null`
+ * means "no adjacent text" — fall through to the parent default.
+ */
+function effectivePtForNode(node: PMNode | null, parent: PMNode): number {
+  if (node && node.isText) return ptForRun(node, parent).pt;
+  return paragraphDefaultPt(parent.type.name);
+}
+
 function effectiveFontSizeForDisplay(state: EditorState): FontSizeInfo {
   const sel = state.selection;
-  const sizes = settings.get('displaySizes');
-  const paragraphDefault = (name: string): number => {
-    switch (name) {
-      case 'pocket': return sizes.pocket;
-      case 'hat': return sizes.hat;
-      case 'block': return sizes.block;
-      case 'tag': return sizes.tag;
-      case 'analytic': return sizes.analytic;
-      case 'undertag': return sizes.undertag;
-      default: return sizes.normal;
-    }
-  };
-  const sizeFromText = (text: PMNode, parent: PMNode): { pt: number; direct: boolean } => {
-    const fs = text.marks.find((m) => m.type.name === 'font_size');
-    if (fs) {
-      return { pt: Number(fs.attrs['halfPoints'] ?? 22) / 2, direct: true };
-    }
-    for (const m of text.marks) {
-      switch (m.type.name) {
-        case 'cite_mark': return { pt: sizes.cite, direct: false };
-        case 'underline_mark': return { pt: sizes.underline, direct: false };
-        case 'emphasis_mark': return { pt: sizes.emphasis, direct: false };
-        case 'undertag_mark': return { pt: sizes.undertag, direct: false };
-        case 'analytic_mark': return { pt: sizes.analytic, direct: false };
-      }
-    }
-    return { pt: paragraphDefault(parent.type.name), direct: false };
-  };
-
   if (sel.empty) {
     const $pos = sel.$from;
     const parent = $pos.parent;
     if (!parent.isTextblock) return { pt: null, direct: false };
+    // storedMarks takes precedence — that's what the next typed
+    // character will use. Word-like behavior after the user types a
+    // size into the chip with an empty selection.
+    if (state.storedMarks) {
+      const fs = state.storedMarks.find((m) => m.type.name === 'font_size');
+      if (fs) return { pt: Number(fs.attrs['halfPoints'] ?? 22) / 2, direct: true };
+    }
     const idx = $pos.index();
     // Prefer the text node immediately BEFORE the cursor — that's the
     // run the user is about to extend by typing. Falls back to the
@@ -456,8 +615,8 @@ function effectiveFontSizeForDisplay(state: EditorState): FontSizeInfo {
     const before = idx > 0 ? parent.child(idx - 1) : null;
     const after = idx < parent.childCount ? parent.child(idx) : null;
     const target = before?.isText ? before : (after?.isText ? after : null);
-    if (target) return sizeFromText(target, parent);
-    return { pt: paragraphDefault(parent.type.name), direct: false };
+    if (target) return ptForRun(target, parent);
+    return { pt: paragraphDefaultPt(parent.type.name), direct: false };
   }
 
   // Non-empty: collect (size, direct) per text run. Uniform size → show
@@ -468,7 +627,7 @@ function effectiveFontSizeForDisplay(state: EditorState): FontSizeInfo {
   let anyRun = false;
   state.doc.nodesBetween(sel.from, sel.to, (node, _pos, parent) => {
     if (!node.isText || !parent) return true;
-    const r = sizeFromText(node, parent);
+    const r = ptForRun(node, parent);
     found.add(r.pt);
     if (!r.direct) allDirect = false;
     anyRun = true;

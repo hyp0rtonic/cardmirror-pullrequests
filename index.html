@@ -61,9 +61,24 @@
             <button id="fontcolor-picker-btn" class="ribbon-color-arrow" type="button" title="Font color"
                     aria-haspopup="true" aria-expanded="false">▾</button>
           </div>
+          <!-- Font size split-control: input for the current pt
+               (Enter / blur applies), arrow opens a preset-size
+               dropdown. Sits in the 4th cell of the color panel's
+               2×2 grid. -->
+          <div class="ribbon-color-control ribbon-font-size-control" data-control="fontsize">
+            <input id="font-size-input" class="ribbon-font-size-input" type="text"
+                   inputmode="numeric" autocomplete="off" spellcheck="false"
+                   aria-label="Font size at cursor" title="Font size — Enter to apply" />
+            <button id="font-size-picker-btn" class="ribbon-color-arrow" type="button" title="Font size"
+                    aria-haspopup="true" aria-expanded="false">▾</button>
+          </div>
+          <!-- 3rd column: increment/decrement font size of selection. -->
+          <button id="font-size-up-btn" class="ribbon-font-size-step" type="button"
+                  title="Increase font size" aria-label="Increase font size"
+                  ><span>A</span><span class="ribbon-font-size-step-up-arrow">▴</span></button>
+          <button id="font-size-down-btn" class="ribbon-font-size-step" type="button"
+                  title="Decrease font size" aria-label="Decrease font size">A▾</button>
         </div>
-        <div id="font-size-display" class="ribbon-font-size-display" role="status"
-             aria-label="Font size at cursor" title="Font size at cursor (read-only)">—</div>
         <div id="doc-ops-panel" class="ribbon-doc-ops-panel" role="group" aria-label="Document operations">
           <!-- Doc-level toggles, stacked vertically. ¶ on top drives
                F3's default condense behavior; T below arms F2's plain-

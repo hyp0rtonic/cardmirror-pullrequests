@@ -991,6 +991,111 @@ export function setFontColor(rgb: string | null): Command {
 }
 
 /**
+ * Adjust the font_size of the selection by `delta` points (+1 or -1
+ * for the ribbon's increment/decrement buttons). With an empty
+ * selection, this nudges `storedMarks` so the next-typed character
+ * picks up the adjusted size — same shape as `setFontSize`'s empty-
+ * selection branch.
+ *
+ * The `effectivePt` callback derives the run's "current" size when
+ * it has no `font_size` mark — e.g., a hat-paragraph run reports
+ * 22pt, a `.pmd-cite` run reports 13pt, a body run reports 11pt.
+ * Without this, increments off non-font_size-marked text would all
+ * nudge from a hardcoded body default and produce surprising jumps
+ * (cursor in a 22pt hat → +1 lands on 12pt).
+ */
+export function adjustFontSize(
+  delta: number,
+  effectivePt: (node: PMNode | null, parent: PMNode) => number,
+): Command {
+  return (state, dispatch) => {
+    const type = schema.marks['font_size'];
+    if (!type) return false;
+    const sel = state.selection;
+    const nudge = (pt: number) => Math.max(1, Math.min(409, pt + delta));
+
+    if (sel.empty) {
+      if (!dispatch) return true;
+      const $from = sel.$from;
+      const parent = $from.parent;
+      const current = state.storedMarks ?? $from.marks();
+      const existing = current.find((m) => m.type === type);
+      let currentPt: number;
+      if (existing) {
+        currentPt = Number(existing.attrs['halfPoints'] ?? 22) / 2;
+      } else {
+        // Look at the adjacent text node (before preferred), since the
+        // cursor effectively "inherits" its run's identity. If neither
+        // neighbor is text, fall through to parent default.
+        const idx = $from.index();
+        const before = idx > 0 ? parent.child(idx - 1) : null;
+        const after = idx < parent.childCount ? parent.child(idx) : null;
+        const adjacent =
+          before?.isText ? before : after?.isText ? after : null;
+        currentPt = effectivePt(adjacent, parent);
+      }
+      const withoutFs = current.filter((m) => m.type !== type);
+      const next = type
+        .create({ halfPoints: Math.round(nudge(currentPt) * 2) })
+        .addToSet(withoutFs);
+      dispatch(state.tr.setStoredMarks(next));
+      return true;
+    }
+
+    if (!dispatch) return true;
+    const tr = state.tr;
+    state.doc.nodesBetween(sel.from, sel.to, (node, pos, parent) => {
+      if (!node.isText || !parent) return true;
+      const start = Math.max(sel.from, pos);
+      const end = Math.min(sel.to, pos + node.nodeSize);
+      if (start >= end) return true;
+      const currentPt = effectivePt(node, parent);
+      const targetHp = Math.round(nudge(currentPt) * 2);
+      tr.removeMark(start, end, type);
+      tr.addMark(start, end, type.create({ halfPoints: targetHp }));
+      return true;
+    });
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
+ * Apply a `font_size` mark (or remove it, when `pt === null`) across
+ * the selection. With an empty selection, the change updates the
+ * editor's `storedMarks` so the next typed character picks it up —
+ * Word's "type some number into the font-size box and start typing"
+ * behavior. `pt` is in points (the chip's user-facing unit); we
+ * convert to OOXML half-points internally.
+ */
+export function setFontSize(pt: number | null): Command {
+  return (state, dispatch) => {
+    const type = schema.marks['font_size'];
+    if (!type) return false;
+    const sel = state.selection;
+    if (sel.empty) {
+      if (!dispatch) return true;
+      const current = state.storedMarks ?? sel.$from.marks();
+      const withoutFs = current.filter((m) => m.type !== type);
+      const next =
+        pt === null
+          ? withoutFs
+          : type.create({ halfPoints: Math.round(pt * 2) }).addToSet(withoutFs);
+      dispatch(state.tr.setStoredMarks(next));
+      return true;
+    }
+    if (!dispatch) return true;
+    const tr = state.tr;
+    tr.removeMark(sel.from, sel.to, type);
+    if (pt !== null) {
+      tr.addMark(sel.from, sel.to, type.create({ halfPoints: Math.round(pt * 2) }));
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
  * Walk text nodes in [from, to] and report whether every text char
  * carries a mark of the given name, plus whether any text was found
  * at all. Used by toggle commands to decide on-vs-off.

@@ -138,6 +138,15 @@ body {
   background: var(--pmd-c-hover);
 }
 
+/* Settings gear sits alone in the ribbon-right section. Sized to
+   match the open/save and doc-ops buttons so chrome widths stay
+   consistent. */
+#ribbon #settings-btn {
+  width: 1.5rem;
+  height: 1.45rem;
+  font-size: 0.85rem;
+}
+
 #ribbon button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -160,7 +169,7 @@ body {
    buttons rendered at 1.7rem / 0.95rem. */
 #ribbon .ribbon-button-stack button {
   height: 1.45rem;
-  width: 2rem;
+  width: 1.5rem;
   font-size: 0.78rem;
 }
 
@@ -338,40 +347,105 @@ body {
 }
 .ribbon-doc-ops-panel.hidden { display: none; }
 
-/* Read-only font-size readout. Shows the effective font size at the
-   cursor (or "—" if the selection spans mixed sizes). Sized to match
-   the doc-ops button height so it sits on the same baseline. */
-.ribbon-font-size-display {
-  align-self: center;
-  min-width: 2.5rem;
-  height: 1.45rem;
-  padding: 0 0.4rem;
-  margin-left: 0.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--pmd-c-bg);
-  border: 1px solid var(--pmd-c-border);
-  border-radius: 3px;
+/* Editable font-size control inside the color panel — sits in the
+   4th cell of the 2×2 grid alongside the three color controls.
+   Numeric input on the left, dropdown arrow on the right (split-
+   button shape that matches the colors). The input shows the current
+   effective font-size in pt; Enter / blur applies. */
+#ribbon .ribbon-font-size-input {
+  /* Match the main-button width (1.75rem) of the color controls so
+     the right column (font color over font size) reads as one stack
+     of equal-width controls. The arrow that follows sits at the
+     same 1.05rem as every other color-arrow. */
+  width: 1.75rem;
+  flex: 0 0 1.75rem;
+  height: auto;
+  align-self: stretch;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: inherit;
   font-size: 0.85rem;
-  color: var(--pmd-c-text);
   font-variant-numeric: tabular-nums;
-  user-select: none;
-  cursor: default;
+  padding: 0;
+  text-align: center;
+  color: var(--pmd-c-text);
+  /* Hide the native spinner — the dropdown is our pt picker. */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+#ribbon .ribbon-font-size-input::-webkit-outer-spin-button,
+#ribbon .ribbon-font-size-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#ribbon .ribbon-font-size-input:focus-visible {
+  outline: 2px solid var(--pmd-c-focus, #4a90e2);
+  outline-offset: -2px;
 }
 
-/* Red text when the displayed size comes from an explicit font_size
-   mark (direct formatting). Bare runs and named-style-derived sizes
-   keep the default color, so the chip's color answers "is this run
-   overriding the paragraph's style?" at a glance. */
-.ribbon-font-size-display.pmd-font-size-direct {
+/* Red when the current value comes from an explicit font_size mark
+   (direct formatting). Bare runs and named-style-derived sizes keep
+   the default color. */
+.ribbon-font-size-control.pmd-font-size-direct .ribbon-font-size-input {
   color: #b00020;
+}
+
+/* Increment / decrement font-size buttons — third column of the
+   color panel, stacked. Match the doc-ops button size so the column
+   widths read uniformly across the ribbon. */
+#ribbon .ribbon-font-size-step {
+  width: 1.5rem;
+  height: 1.45rem;
+  font-size: 0.7rem;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+/* The up-arrow glyph sits low on the baseline by default — same row
+   as the "A" — which reads as visually unbalanced (the arrow looks
+   like it's hugging the bottom of the A rather than centered with
+   the cap). Nudge it up so the arrow tip aligns near the A's cap-
+   height. The down-arrow is already balanced relative to the A's
+   baseline, so it doesn't need shifting. */
+.ribbon-font-size-step-up-arrow {
+  display: inline-block;
+  transform: translateY(-0.18em);
+}
+
+/* Dropdown popup — preset pt sizes, styled like the color picker. */
+.pmd-font-size-picker {
+  position: fixed;
+  z-index: 1000;
+  background: var(--pmd-c-bg, #fff);
+  border: 1px solid var(--pmd-c-border, #999);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  padding: 2px;
+  user-select: none;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.pmd-font-size-picker button {
+  display: block;
+  width: 100%;
+  padding: 0.2rem 0.8rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--pmd-c-text);
+}
+.pmd-font-size-picker button:hover {
+  background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06));
 }
 
 /* Single-button cell matching the formatting panel's row height. */
 #ribbon .ribbon-doc-ops-btn {
   height: 1.45rem;
-  width: 1.6rem;
+  width: 1.5rem;
   font-size: 0.85rem;
   line-height: 1;
 }
