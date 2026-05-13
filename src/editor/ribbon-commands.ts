@@ -973,6 +973,187 @@ export function setShadingColor(rgb: string): Command {
   };
 }
 
+/**
+ * Verbatim's "Standardize Highlighting" (`UniHighlight`). Walks the
+ * target range, finds every text run that carries a `highlight` mark,
+ * and rewrites its color to the current active highlight color —
+ * useful for collapsing a mix of cyan / yellow / etc. back to one
+ * consistent color. Unhighlighted text is untouched.
+ *
+ * `scope`:
+ *   - `'document'` — walk the whole doc (Verbatim parity).
+ *   - `'selection'` — walk only the current selection. No-op when
+ *     the selection is empty.
+ */
+export function uniHighlight(
+  activeColor: () => string,
+  scope: 'document' | 'selection' = 'document',
+): Command {
+  return runUniColor('highlight', activeColor, scope, false);
+}
+
+/**
+ * Standardize Shading — same shape as `uniHighlight` but for the
+ * `shading` mark. Shading uses RGB hex (no leading `#`); the active
+ * color is normalized to uppercase to match the schema.
+ */
+export function uniShade(
+  activeColor: () => string,
+  scope: 'document' | 'selection' = 'document',
+): Command {
+  return runUniColor('shading', activeColor, scope, true);
+}
+
+/** Word's 15 named highlight colors with their canonical OOXML RGB
+ *  values. Used to bridge between the `highlight` mark (which
+ *  stores a name) and the `shading` mark (which stores hex RGB). */
+const HIGHLIGHT_NAME_TO_HEX: Record<string, string> = {
+  yellow: 'FFFF00',
+  green: '00FF00',
+  cyan: '00FFFF',
+  magenta: 'FF00FF',
+  blue: '0000FF',
+  red: 'FF0000',
+  darkBlue: '000080',
+  darkCyan: '008080',
+  darkGreen: '008000',
+  darkMagenta: '800080',
+  darkRed: '800000',
+  darkYellow: '808000',
+  darkGray: '808080',
+  lightGray: 'C0C0C0',
+  black: '000000',
+};
+
+function nearestHighlightName(hex: string): string {
+  const upper = hex.toUpperCase();
+  for (const [name, target] of Object.entries(HIGHLIGHT_NAME_TO_HEX)) {
+    if (target === upper) return name;
+  }
+  // No exact match — pick the nearest by Euclidean RGB distance so
+  // shading colors that aren't one of Word's 15 named highlights
+  // still convert to *something* reasonable.
+  const r = parseInt(upper.slice(0, 2), 16);
+  const g = parseInt(upper.slice(2, 4), 16);
+  const b = parseInt(upper.slice(4, 6), 16);
+  let bestName = 'yellow';
+  let bestDist = Infinity;
+  for (const [name, target] of Object.entries(HIGHLIGHT_NAME_TO_HEX)) {
+    const tr = parseInt(target.slice(0, 2), 16);
+    const tg = parseInt(target.slice(2, 4), 16);
+    const tb = parseInt(target.slice(4, 6), 16);
+    const dist = (r - tr) ** 2 + (g - tg) ** 2 + (b - tb) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestName = name;
+    }
+  }
+  return bestName;
+}
+
+/**
+ * Convert every `highlight` mark in the current selection to a
+ * `shading` mark with the equivalent RGB color (Word's 15 named
+ * highlight colors map cleanly to their canonical RGBs). No-op on
+ * empty selection. Unhighlighted text is untouched.
+ */
+export function highlightToShading(): Command {
+  return (state, dispatch) => {
+    const highlightType = schema.marks['highlight'];
+    const shadingType = schema.marks['shading'];
+    if (!highlightType || !shadingType) return false;
+    if (state.selection.empty) return false;
+    if (!dispatch) return true;
+    const { from, to } = state.selection;
+    const tr = state.tr;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return true;
+      const hl = node.marks.find((m) => m.type === highlightType);
+      if (!hl) return true;
+      const colorName = String(hl.attrs['color'] ?? 'yellow');
+      const hex = HIGHLIGHT_NAME_TO_HEX[colorName] ?? 'FFFF00';
+      const start = Math.max(from, pos);
+      const end = Math.min(to, pos + node.nodeSize);
+      if (start >= end) return true;
+      tr.removeMark(start, end, highlightType);
+      tr.addMark(start, end, shadingType.create({ color: hex }));
+      return true;
+    });
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
+ * Convert every `shading` mark in the current selection to a
+ * `highlight` mark whose color name matches the shading's RGB (exact
+ * match first, then nearest-by-RGB-distance for arbitrary shades).
+ * No-op on empty selection. Non-shaded text is untouched.
+ */
+export function shadingToHighlight(): Command {
+  return (state, dispatch) => {
+    const highlightType = schema.marks['highlight'];
+    const shadingType = schema.marks['shading'];
+    if (!highlightType || !shadingType) return false;
+    if (state.selection.empty) return false;
+    if (!dispatch) return true;
+    const { from, to } = state.selection;
+    const tr = state.tr;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return true;
+      const sh = node.marks.find((m) => m.type === shadingType);
+      if (!sh) return true;
+      const hex = String(sh.attrs['color'] ?? 'D2D2D2');
+      const name = nearestHighlightName(hex);
+      const start = Math.max(from, pos);
+      const end = Math.min(to, pos + node.nodeSize);
+      if (start >= end) return true;
+      tr.removeMark(start, end, shadingType);
+      tr.addMark(start, end, highlightType.create({ color: name }));
+      return true;
+    });
+    dispatch(tr);
+    return true;
+  };
+}
+
+function runUniColor(
+  markName: 'highlight' | 'shading',
+  activeColor: () => string,
+  scope: 'document' | 'selection',
+  upperHex: boolean,
+): Command {
+  return (state, dispatch) => {
+    const type = schema.marks[markName];
+    if (!type) return false;
+    let from: number;
+    let to: number;
+    if (scope === 'selection') {
+      if (state.selection.empty) return false;
+      from = state.selection.from;
+      to = state.selection.to;
+    } else {
+      from = 0;
+      to = state.doc.content.size;
+    }
+    const color = upperHex ? activeColor().toUpperCase() : activeColor();
+    if (!dispatch) return true;
+    const tr = state.tr;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return true;
+      if (!node.marks.some((m) => m.type === type)) return true;
+      const start = Math.max(from, pos);
+      const end = Math.min(to, pos + node.nodeSize);
+      if (start >= end) return true;
+      tr.removeMark(start, end, type);
+      tr.addMark(start, end, type.create({ color }));
+      return true;
+    });
+    dispatch(tr);
+    return true;
+  };
+}
+
 export function setFontColor(rgb: string | null): Command {
   return (state, dispatch) => {
     const sel = state.selection;
@@ -1807,7 +1988,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleCase: 'Toggle case',
   copyPreviousCite: 'Copy previous cite',
   pasteAsText: 'Toggle plain-paste mode',
-  clearToNormal: 'Clear to Normal',
+  clearToNormal: 'Clear',
 };
 
 /**

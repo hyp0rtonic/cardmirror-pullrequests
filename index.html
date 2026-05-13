@@ -32,7 +32,7 @@
           <button id="cite-btn" class="formatting-panel-btn formatting-panel-cite" type="button">Cite</button>
           <button id="underline-btn" class="formatting-panel-btn formatting-panel-underline" type="button">Underline</button>
           <button id="emphasis-btn" class="formatting-panel-btn formatting-panel-emphasis" type="button">Emphasis</button>
-          <button id="normal-btn" class="formatting-panel-btn formatting-panel-normal" type="button">Normal</button>
+          <button id="normal-btn" class="formatting-panel-btn formatting-panel-normal" type="button">Clear</button>
         </div>
         <div id="color-panel" class="ribbon-color-panel" role="group" aria-label="Colors">
           <!-- Three split buttons: main click applies current color, arrow
@@ -79,6 +79,18 @@
                   ><span>A</span><span class="ribbon-font-size-step-up-arrow">▴</span></button>
           <button id="font-size-down-btn" class="ribbon-font-size-step" type="button"
                   title="Decrease font size" aria-label="Decrease font size">A▾</button>
+        </div>
+        <!-- Document/card-level utility menus. "Doc" holds doc-wide
+             operations (Verbatim's Doc menu — standardize highlighting
+             across the whole document, etc.). "Card" holds operations
+             scoped to a selection (typically: a card the user is
+             actively editing). Stacked vertically like the other
+             two-button panels. -->
+        <div id="doc-menu-panel" class="ribbon-doc-menu-panel" role="group" aria-label="Document utilities">
+          <button id="doc-menu-btn" class="ribbon-doc-menu-btn" type="button"
+                  title="Document utilities" aria-haspopup="true" aria-expanded="false">Doc ▾</button>
+          <button id="card-menu-btn" class="ribbon-doc-menu-btn" type="button"
+                  title="Card utilities" aria-haspopup="true" aria-expanded="false">Card ▾</button>
         </div>
         <div id="doc-ops-panel" class="ribbon-doc-ops-panel" role="group" aria-label="Document operations">
           <!-- Doc-level toggles, stacked vertically. ¶ on top drives

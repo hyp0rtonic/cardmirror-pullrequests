@@ -1942,6 +1942,73 @@ body.pmd-nav-resize-active {
   text-align: right !important;
 }
 
+/* Doc / Card dropdown stack — Verbatim parity. Sits between the
+   font-size controls and the doc-ops toggles. Two-row grid like
+   the other stacked button pairs so the chrome rows align. */
+.ribbon-doc-menu-panel {
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-rows: 1.45rem 1.45rem;
+  align-content: center;
+  gap: 2px 3px;
+  padding-left: 0.5rem;
+  margin-left: 0.25rem;
+  border-left: 1px solid var(--pmd-c-border-soft);
+}
+
+#ribbon .ribbon-doc-menu-btn {
+  height: 1.45rem;
+  width: auto;
+  padding: 0 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.pmd-doc-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--pmd-c-bg, #fff);
+  border: 1px solid var(--pmd-c-border, #999);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  padding: 4px 0;
+  min-width: 12rem;
+  user-select: none;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+}
+
+.pmd-doc-menu-section-title {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pmd-c-text-muted);
+}
+
+.pmd-doc-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.75rem;
+  color: var(--pmd-c-text);
+}
+
+.pmd-doc-menu-item:hover {
+  background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06));
+}
+
+.pmd-doc-menu-separator {
+  height: 1px;
+  background: var(--pmd-c-divider, rgba(0, 0, 0, 0.1));
+  margin: 0.25rem 0;
+}
+
 /* Heading-mode setting: radio rows. Long option labels wrap on
    narrow dialogs, unlike <select>'s OS-rendered options. */
 .pmd-heading-mode-editor {

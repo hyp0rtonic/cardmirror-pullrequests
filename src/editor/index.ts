@@ -18,6 +18,7 @@ import { fromDocx, toDocx } from '../index.js';
 import { NavigationPanel } from './nav-panel.js';
 import { openSettings } from './settings-ui.js';
 import { openReference } from './reference-ui.js';
+import { openDocMenu } from './doc-menu-ui.js';
 import {
   settings,
   DISPLAY_SIZE_KEYS,
@@ -52,6 +53,10 @@ import {
   ribbonCommandForKey,
   setFontSize,
   adjustFontSize,
+  uniHighlight,
+  uniShade,
+  highlightToShading,
+  shadingToHighlight,
   RIBBON_COMMAND_LABELS,
   type StructuralRibbonCommandId,
   type RibbonContext,
@@ -109,6 +114,76 @@ const ribbonContext: RibbonContext = {
 openBtn.addEventListener('click', () => dropzone.click());
 settingsBtn.addEventListener('click', () => openSettings());
 if (referenceBtn) referenceBtn.addEventListener('click', () => openReference());
+
+const docMenuBtn = document.getElementById('doc-menu-btn') as HTMLButtonElement | null;
+if (docMenuBtn) {
+  docMenuBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  docMenuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDocMenu(docMenuBtn, view, [
+      {
+        title: 'Highlighting',
+        items: [
+          {
+            label: 'Standardize Highlighting',
+            run: (v) =>
+              uniHighlight(() => settings.get('lastHighlightColor'), 'document')(
+                v.state,
+                v.dispatch.bind(v),
+              ),
+          },
+          {
+            label: 'Standardize Highlighting (Selection)',
+            run: (v) =>
+              uniHighlight(() => settings.get('lastHighlightColor'), 'selection')(
+                v.state,
+                v.dispatch.bind(v),
+              ),
+          },
+          {
+            label: 'Standardize Shading',
+            run: (v) =>
+              uniShade(() => settings.get('lastShadingColor'), 'document')(
+                v.state,
+                v.dispatch.bind(v),
+              ),
+          },
+          {
+            label: 'Standardize Shading (Selection)',
+            run: (v) =>
+              uniShade(() => settings.get('lastShadingColor'), 'selection')(
+                v.state,
+                v.dispatch.bind(v),
+              ),
+          },
+        ],
+      },
+    ]);
+  });
+}
+
+const cardMenuBtn = document.getElementById('card-menu-btn') as HTMLButtonElement | null;
+if (cardMenuBtn) {
+  cardMenuBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  cardMenuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDocMenu(cardMenuBtn, view, [
+      {
+        title: 'Highlighting',
+        items: [
+          {
+            label: 'Highlight to Background',
+            run: (v) => highlightToShading()(v.state, v.dispatch.bind(v)),
+          },
+          {
+            label: 'Background to Highlight',
+            run: (v) => shadingToHighlight()(v.state, v.dispatch.bind(v)),
+          },
+        ],
+      },
+    ]);
+  });
+}
 readModeBtn.addEventListener('click', () => settings.set('readMode', !settings.get('readMode')));
 wordCountBtn.addEventListener('click', () => { if (view) openWordCount(view); });
 
@@ -149,7 +224,7 @@ const FORMATTING_PANEL_SHORT_LABEL: Record<FormattingPanelId, string> = {
   applyCite: 'Cite',
   applyUnderline: 'Underline',
   applyEmphasis: 'Emphasis',
-  clearToNormal: 'Normal',
+  clearToNormal: 'Clear',
 };
 const formattingPanelEl = document.getElementById('formatting-panel') as HTMLElement | null;
 const citePanelEl = document.getElementById('cite-panel') as HTMLElement | null;
