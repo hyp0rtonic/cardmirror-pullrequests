@@ -464,24 +464,51 @@ function cleanedTextblock(node: PMNode): PMNode {
  * pilcrows, a 6-pt ¶ text node between consecutive sources; without,
  * a single space (as a plain text node).
  *
+ * Joiner marks: the space joiner inherits the marks of the trailing
+ * text run of the preceding paragraph. Without this, a `schema.text(' ')`
+ * with no marks defaults to the paragraph's base font-size (Normal),
+ * so joining two 8-pt paragraphs would leave a literal 11-pt space at
+ * each seam — the font-size-class plugin then sees a mixed-size
+ * paragraph and bumps line-height to the larger strut, making the
+ * merged paragraph look "11-pt-tall" even though most text is 8 pt.
+ * Inheriting the trailing marks gives the joiner the same font-size /
+ * highlight / bold / etc. as the run it's extending, which is the
+ * visually correct continuation. Pilcrow joiners deliberately keep
+ * their own intrinsic formatting (the 6-pt ¶ marker is the whole
+ * point) so they don't inherit either way.
+ *
  * The first source's marks are preserved; later sources' content
  * keeps its own marks. No attempt to merge marks across boundaries
  * (each source contributes a discrete inline run).
  */
 function mergeRun(sources: PMNode[], withPilcrows: boolean, targetType: NodeType): PMNode {
   const inlines: PMNode[] = [];
+  let trailingMarks: readonly Mark[] = [];
   for (let i = 0; i < sources.length; i++) {
     if (i > 0) {
       if (withPilcrows) {
         inlines.push(makePilcrowText());
       } else {
-        inlines.push(schema.text(' '));
+        inlines.push(schema.text(' ', trailingMarks as Mark[]));
       }
     }
     const cleaned = cleanTextblockContent(sources[i]!);
     cleaned.forEach((child) => inlines.push(child));
+    trailingMarks = trailingTextMarks(cleaned);
   }
   return targetType.create(null, Fragment.fromArray(inlines));
+}
+
+/** Marks of the last text node in `fragment`, walking backwards past
+ *  any trailing inline leaves. Returns an empty array if the fragment
+ *  has no text node. Used by `mergeRun` to give the joiner space the
+ *  formatting of the run it extends. */
+function trailingTextMarks(fragment: Fragment): readonly Mark[] {
+  for (let i = fragment.childCount - 1; i >= 0; i--) {
+    const child = fragment.child(i);
+    if (child.isText) return child.marks;
+  }
+  return [];
 }
 
 // ---------- Selection-based merging: respect-headings path ----------
