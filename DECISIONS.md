@@ -1456,6 +1456,86 @@ The warning markers are scanned by Shrink alongside omissions and
 governed by the same `shrinkRestoresOmissionsToNormal` toggle. See the
 "Protected-range handling" section of the Shrink entry above.
 
+## 2026-05-13: Select Similar Formatting (Doc menu, two variants)
+
+Native port of Verbatim's `Formatting.SelectSimilar`. Verbatim wraps
+Word's intrinsic `WordBasic.SelectSimilarFormatting` (with a
+Shrink/Grow hack for plain body text — see the source at
+`reference-docs/verbatim/desktop/src/Formatting.bas:272`); we have no
+Word matcher to call, so this is a from-scratch implementation
+defined entirely in `similar-selection-plugin.ts`.
+
+### Matching fingerprint
+
+For a cursor position, the fingerprint is `(parent textblock type,
+full mark set of the text node "at" the cursor)`. Mark equality is by
+type AND attrs — so `font_size: 16` and `font_size: 22` are distinct
+matches. Importantly: **the empty mark set is a valid fingerprint**.
+Cursor on a `card_body` run with no direct formatting matches *only*
+other plain `card_body` runs, not every `card_body` in the doc. Per
+the user spec: "if the style is card_body and the direct formatting
+is none, we're matching NONE, not matching all direct formatting."
+
+The "text node at the cursor" preference order is `$pos.nodeBefore`
+first (matches Word's typing-continues-previous-run convention), then
+`$pos.nodeAfter`. Cursor at an empty paragraph (no surrounding text)
+returns no matches.
+
+### Selection model — shadow selection
+
+PM doesn't support disjoint selections, so matches are rendered as
+inline decorations rather than a real `Selection`. A new plugin
+(`similarSelectionPlugin`) holds plugin state `{ matches: RangePair[],
+scope: RangePair | null, mode: 'idle' | 'awaiting-cursor' }` and emits
+two decoration classes:
+
+- `.pmd-similar-scope` — the user-picked outer range for the scoped
+  variant. Faint amber background tint.
+- `.pmd-similar-match` — each matched run. Dashed amber outline with
+  a slightly stronger background.
+
+No format command consumes the shadow selection yet — this is a pure
+visual first cut. The follow-up is to extend selected ribbon commands
+(font color / highlight / shading / bold / italic / font size /
+F8-F10 / clearToNormal) to operate on the match set when the PM
+selection is collapsed and matches are non-empty. Validating the
+matching + dismissal UX before doing that plumbing.
+
+### Two commands
+
+- `selectSimilar` (unscoped) — no-op on a non-empty selection.
+  Otherwise computes the fingerprint at the cursor, walks the whole
+  doc, and dispatches `setMatches`.
+- `selectSimilarScoped` — two-stage. First invocation requires a
+  non-empty selection: that range becomes the scope, plugin enters
+  `awaiting-cursor`, the scope renders with its tint. The next
+  collapsed-cursor transaction inside the scope triggers matching
+  restricted to the scope; if the cursor lands outside the scope,
+  the scope is cancelled instead.
+
+Both commands sit in a new "Select" subsection of the Doc menu
+(alphabetically after Highlighting). Empty default keys — bind via
+the keybinding editor if desired.
+
+### Dismissal
+
+Any doc-changing transaction clears matches + scope. Any selection-
+changing transaction clears matches **unless** the new collapsed
+cursor lands inside an existing match (which is what happens right
+after the command's own dispatch — so the command doesn't dissipate
+itself). Escape clears via `handleKeyDown`. The plugin's setMeta
+transactions are recognized before the dismissal branch fires.
+
+### Why decorations and not a sidecar selection plugin
+
+PM's intrinsic Selection has well-defined edit semantics; a shadow
+selection rendered as decorations does not. Treating the match set
+as a "current target for format ops" needs every consumer command to
+opt in. Doing it as decorations + an explicit follow-up phase keeps
+the contract sharp: ribbon commands keep their existing PM-Selection-
+based semantics today, and the upcoming "operate on similar" surface
+can be added incrementally without retrofitting every command at once.
+
 ## 2026-05-13: Keybinding editor
 
 Activates the rebinding surface that has been sitting unused since the

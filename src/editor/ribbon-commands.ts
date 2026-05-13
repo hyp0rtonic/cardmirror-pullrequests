@@ -47,6 +47,10 @@ import {
 } from './condense.js';
 import type { CondenseWarningDelimiter } from './settings.js';
 import { togglePlainPaste } from './paste-plugin.js';
+import {
+  selectSimilar,
+  selectSimilarScoped,
+} from './similar-selection-plugin.js';
 
 type HeadingTypeName = 'pocket' | 'hat' | 'block';
 
@@ -2232,7 +2236,9 @@ export type RibbonCommandId =
   | 'standardizeShadingSelection'
   | 'toggleReadMode'
   | 'wordCountSelection'
-  | 'openShortcutsReference';
+  | 'openShortcutsReference'
+  | 'selectSimilar'
+  | 'selectSimilarScoped';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setPocket',
@@ -2272,6 +2278,8 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'toggleReadMode',
   'wordCountSelection',
   'openShortcutsReference',
+  'selectSimilar',
+  'selectSimilarScoped',
 ];
 
 export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
@@ -2308,6 +2316,8 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleReadMode: 'Toggle read mode',
   wordCountSelection: 'Word count selection',
   openShortcutsReference: 'Open keyboard shortcuts',
+  selectSimilar: 'Select Similar Formatting',
+  selectSimilarScoped: 'Select Similar Formatting (Scoped)',
 };
 
 /**
@@ -2354,6 +2364,8 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   toggleReadMode: '',
   wordCountSelection: '',
   openShortcutsReference: '',
+  selectSimilar: '',
+  selectSimilarScoped: '',
 };
 
 /**
@@ -2511,6 +2523,10 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         ctx.openShortcutsReference();
         return true;
       };
+    case 'selectSimilar':
+      return selectSimilar();
+    case 'selectSimilarScoped':
+      return selectSimilarScoped();
   }
 }
 

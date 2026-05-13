@@ -35,6 +35,7 @@ import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
 import { namedStyleNormalizerPlugin } from './named-style-normalizer-plugin.js';
 import { fontSizeClassPlugin } from './font-size-class-plugin.js';
+import { similarSelectionPlugin } from './similar-selection-plugin.js';
 import { buildPastePlugin, togglePlainPaste } from './paste-plugin.js';
 import { editorDragSurface } from './drag-editor-surface.js';
 import {
@@ -155,6 +156,7 @@ if (docMenuBtn) {
   docMenuBtn.addEventListener('mousedown', (e) => e.preventDefault());
   docMenuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    // Sections alphabetical by title — Highlighting then Select.
     openDocMenu(docMenuBtn, view, [
       {
         title: 'Highlighting',
@@ -174,6 +176,19 @@ if (docMenuBtn) {
           {
             label: 'Standardize Shading (Selection)',
             run: () => runRibbon('standardizeShadingSelection'),
+          },
+        ],
+      },
+      {
+        title: 'Select',
+        items: [
+          {
+            label: 'Select Similar Formatting',
+            run: () => runRibbon('selectSimilar'),
+          },
+          {
+            label: 'Select Similar Formatting (Scoped)',
+            run: () => runRibbon('selectSimilarScoped'),
           },
         ],
       },
@@ -916,6 +931,7 @@ function buildEditorPlugins(): Plugin[] {
     citeClassifierPlugin,
     namedStyleNormalizerPlugin,
     fontSizeClassPlugin,
+    similarSelectionPlugin,
     buildPastePlugin({
       condenseOnPaste: () => settings.get('condenseOnPaste'),
       paragraphIntegrity: () => settings.get('paragraphIntegrity'),

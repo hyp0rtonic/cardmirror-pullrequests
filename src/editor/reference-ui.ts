@@ -70,6 +70,10 @@ const GROUPS: ShortcutGroup[] = [
     title: 'View',
     commands: ['toggleReadMode', 'wordCountSelection', 'openShortcutsReference'],
   },
+  {
+    title: 'Select',
+    commands: ['selectSimilar', 'selectSimilarScoped'],
+  },
 ];
 
 class ReferenceModal {
