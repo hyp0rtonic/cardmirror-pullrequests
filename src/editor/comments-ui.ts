@@ -20,6 +20,21 @@ import type { EditorView } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import { schema } from '../schema/index.js';
 import { settings } from './settings.js';
+import { callAnthropic, AnthropicError } from './ai/anthropic.js';
+import {
+  buildExplainContext,
+  formatExplainPrompt,
+  EXPLAIN_SYSTEM_PROMPT,
+  hasAiMention,
+} from './ai/explain-context.js';
+import { activitiesForNow, pickRandomActivity } from './ai/clod.js';
+import { showToast } from './toast.js';
+
+/** Cycle the Clod-activity placeholder text every this many
+ *  milliseconds while an AI request is in flight. ~4 seconds reads
+ *  naturally — long enough to actually read a line, short enough to
+ *  make progress feel alive. */
+const ACTIVITY_TICK_MS = 4000;
 import {
   commentsKey,
   getCommentsState,
@@ -43,6 +58,21 @@ export class CommentsColumn {
   private activeReplyThreadId: string | null = null;
   private activeReplyText = '';
   private suppressBlurReset = false;
+  /** Threads whose first submission should auto-invoke the AI
+   *  explainer. Set by `addAiThreadFromSelection`; cleared the
+   *  moment the first submission fires the request. */
+  private pendingAiFirst: Set<string> = new Set();
+  /** Threads with an in-flight AI request. UI renders a transient
+   *  "thinking…" placeholder while present. */
+  private aiInFlight: Set<string> = new Set();
+  /** Per-thread cached context built at the moment the AI thread
+   *  was created. The doc may shift before the AI request fires
+   *  (user types elsewhere); the cached context preserves what the
+   *  selection meant when the thread was opened. */
+  private aiContextByThread: Map<string, ReturnType<typeof buildExplainContext>> = new Map();
+  /** Interval handle for the Clod-activity text-cycling tick.
+   *  Null when no AI request is pending or Clod mode is off. */
+  private activityTimer: number | null = null;
 
   constructor(root: HTMLElement, getView: () => EditorView | null) {
     this.root = root;
@@ -191,8 +221,69 @@ export class CommentsColumn {
     for (const c of thread.comments) {
       card.appendChild(this.renderComment(thread, c, c.id === thread.id));
     }
+    if (this.aiInFlight.has(thread.id)) {
+      card.appendChild(this.renderAiThinkingPlaceholder());
+    }
     card.appendChild(this.renderReplyForm(thread));
     return card;
+  }
+
+  private renderAiThinkingPlaceholder(): HTMLElement {
+    const block = document.createElement('div');
+    block.className = 'pmd-comment-reply pmd-comment-ai pmd-comment-ai-thinking';
+    const header = document.createElement('header');
+    header.className = 'pmd-comment-header';
+    const badge = document.createElement('span');
+    badge.className = 'pmd-comment-initials';
+    badge.textContent = 'AI';
+    header.appendChild(badge);
+    const name = document.createElement('span');
+    name.className = 'pmd-comment-author';
+    name.textContent = 'AI';
+    header.appendChild(name);
+    block.appendChild(header);
+    const body = document.createElement('div');
+    body.className = 'pmd-comment-body';
+    const line = document.createElement('p');
+    line.className = 'pmd-comment-ai-thinking-dots';
+    line.textContent = this.inFlightActivityText();
+    body.appendChild(line);
+    block.appendChild(body);
+    // Tag with `data-activity-target` so the activity-cycling tick
+    // can swap the text without re-rendering the whole column.
+    line.dataset['activityTarget'] = '1';
+    return block;
+  }
+
+  private inFlightActivityText(): string {
+    if (!settings.get('clodEnabled')) return 'Thinking…';
+    const pool = activitiesForNow({
+      customByTime: settings.get('clodActivitiesByTime'),
+      ranges: settings.get('clodTimePeriods'),
+    });
+    return pickRandomActivity(pool);
+  }
+
+  /** Tick the in-flight placeholders' text to fresh Clod activities
+   *  every few seconds while at least one AI request is pending. */
+  private startActivityTicker(): void {
+    if (this.activityTimer !== null) return;
+    const tick = (): void => {
+      if (this.aiInFlight.size === 0 || !settings.get('clodEnabled')) {
+        this.stopActivityTicker();
+        return;
+      }
+      const targets = this.root.querySelectorAll<HTMLElement>('[data-activity-target]');
+      for (const el of targets) el.textContent = this.inFlightActivityText();
+    };
+    this.activityTimer = window.setInterval(tick, ACTIVITY_TICK_MS);
+  }
+
+  private stopActivityTicker(): void {
+    if (this.activityTimer !== null) {
+      window.clearInterval(this.activityTimer);
+      this.activityTimer = null;
+    }
   }
 
   /** Header-only render for the empty-root state: shows author
@@ -300,6 +391,15 @@ export class CommentsColumn {
     );
     this.suppressBlurReset = false;
     view.focus();
+
+    // AI auto-invoke flow: a thread created via the "Ask AI"
+    // button carries a pending flag. The user's first text submit
+    // becomes the question; we fire the request and append the
+    // model's reply as a kind:'ai' comment in the same thread.
+    if (this.pendingAiFirst.has(threadId)) {
+      this.pendingAiFirst.delete(threadId);
+      this.invokeAi(threadId, text);
+    }
   }
 
   private renderComment(thread: Thread, comment: Comment, isRoot: boolean): HTMLElement {
@@ -374,6 +474,97 @@ export class CommentsColumn {
     view.dispatch(view.state.tr.setMeta(commentsKey, addReplyMeta(threadId, comment)));
     this.suppressBlurReset = false;
     view.focus();
+
+    // `@AI` mention in any reply re-invokes the model with the
+    // thread + range context. Only fires when AI features are
+    // enabled in settings.
+    if (settings.get('aiFeaturesEnabled') && hasAiMention(text)) {
+      this.invokeAi(threadId, text);
+    }
+  }
+
+  /** Run the AI explainer against `threadId`. Uses the cached
+   *  context captured at thread creation; if none is cached
+   *  (re-invoked via @AI mention in a thread the user created
+   *  with `+`), rebuilds context from the thread's current
+   *  comment_range mark position. */
+  private invokeAi(threadId: string, question: string): void {
+    const view = this.getView();
+    if (!view) return;
+    if (!settings.get('aiFeaturesEnabled')) {
+      showToast('AI features are disabled — enable them in Settings.');
+      return;
+    }
+    const apiKey = settings.get('anthropicApiKey').trim();
+    if (!apiKey) {
+      showToast('Set an Anthropic API key in Settings to use AI features.');
+      return;
+    }
+
+    let ctx = this.aiContextByThread.get(threadId) ?? null;
+    if (!ctx) ctx = this.contextFromCurrentRange(threadId);
+    if (!ctx) {
+      showToast('Could not build context for AI request.');
+      return;
+    }
+    const promptCtx = ctx;
+
+    this.aiInFlight.add(threadId);
+    this.render();
+    this.startActivityTicker();
+
+    void (async () => {
+      try {
+        const reply = await callAnthropic({
+          apiKey,
+          system: EXPLAIN_SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: formatExplainPrompt(question, promptCtx) }],
+        });
+        const aiComment: Comment = {
+          id: newCommentId(),
+          author: 'AI',
+          initials: 'AI',
+          date: new Date().toISOString(),
+          text: reply.text.trim(),
+          kind: 'ai',
+          parentId: threadId,
+        };
+        const v2 = this.getView();
+        if (!v2) return;
+        v2.dispatch(v2.state.tr.setMeta(commentsKey, addReplyMeta(threadId, aiComment)));
+      } catch (e) {
+        if (e instanceof AnthropicError) {
+          showToast(`AI: ${e.message}`);
+        } else {
+          showToast(`AI error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } finally {
+        this.aiInFlight.delete(threadId);
+        this.aiContextByThread.delete(threadId);
+        if (this.aiInFlight.size === 0) this.stopActivityTicker();
+        this.render();
+      }
+    })();
+  }
+
+  /** Rebuild an `ExplainContext` from the thread's CURRENT range
+   *  in the doc. Used when an AI invocation happens on a thread
+   *  whose original context wasn't cached (e.g. an `@AI` mention
+   *  in a user-created thread). Returns null when the mark is no
+   *  longer in the doc. */
+  private contextFromCurrentRange(threadId: string): ReturnType<typeof buildExplainContext> {
+    const view = this.getView();
+    if (!view) return null;
+    const ranges = collectRanges(view.state.doc);
+    const range = ranges.get(threadId);
+    if (!range) return null;
+    const TextSelection = (view.state.selection.constructor as unknown) as {
+      create: (doc: PMNode, from: number, to: number) => never;
+    };
+    const synth = view.state.apply(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, range.from, range.to)),
+    );
+    return buildExplainContext(synth);
   }
 
   private deleteThread(threadId: string): void {
@@ -415,6 +606,50 @@ export class CommentsColumn {
     if (el && 'scrollIntoView' in el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  }
+
+  /** Apply a comment_range mark to the current selection, build an
+   *  empty thread, and mark it so the user's first submission
+   *  auto-invokes the AI explainer. Returns the new thread id (or
+   *  null when the selection was empty / AI was disabled).
+   *
+   *  Also caches the explainer context at this moment — so if the
+   *  doc shifts before the user submits, the AI still sees what
+   *  the original selection meant. */
+  addAiThreadFromSelection(view: EditorView): string | null {
+    if (!settings.get('aiFeaturesEnabled')) {
+      showToast('AI features are disabled — enable them in Settings.');
+      return null;
+    }
+    const { state } = view;
+    const sel = state.selection;
+    if (sel.empty) return null;
+    const commentType = schema.marks['comment_range'];
+    if (!commentType) return null;
+
+    const ctx = buildExplainContext(state);
+    if (!ctx) return null;
+
+    const threadId = newCommentId();
+    const root: Comment = {
+      id: threadId,
+      author: settings.get('commentAuthor'),
+      initials: settings.get('commentAuthorInitials').trim(),
+      date: new Date().toISOString(),
+      text: '',
+      kind: 'human',
+      parentId: null,
+    };
+    const thread: Thread = { id: threadId, comments: [root] };
+
+    this.pendingAiFirst.add(threadId);
+    this.aiContextByThread.set(threadId, ctx);
+
+    const tr = state.tr;
+    tr.addMark(sel.from, sel.to, commentType.create({ threadId }));
+    tr.setMeta(commentsKey, addThreadMeta(thread));
+    view.dispatch(tr);
+    return threadId;
   }
 
   /** Focus the brand-new thread's reply input so the user can

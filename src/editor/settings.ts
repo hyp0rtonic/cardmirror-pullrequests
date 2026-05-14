@@ -342,6 +342,29 @@ export interface Settings {
    *  @AI mentions inside comments, etc.). When false, no UI for
    *  AI shows up and no API calls happen even if a key is set. */
   aiFeaturesEnabled: boolean;
+  /** Friendlier "Clod" persona for the AI in-flight indicator —
+   *  while the model is composing a reply, the placeholder cycles
+   *  through time-of-day Clod activities ("Clod is making toast…").
+   *  Off by default; the easter-egg configurator (shift+right-click
+   *  on the toggle in Settings) opens a dialog to customize the
+   *  activity pools per time period. */
+  clodEnabled: boolean;
+  /** Per-time-period activity override pools. Empty arrays fall
+   *  back to the built-in lists in `src/editor/ai/clod.ts`. */
+  clodActivitiesByTime: {
+    morning: string[];
+    day: string[];
+    evening: string[];
+    night: string[];
+  };
+  /** Hour boundaries (0-23) for each Clod time period. Periods may
+   *  cross midnight (start > end), which is normal for "night". */
+  clodTimePeriods: {
+    morning: { start: number; end: number };
+    day: { start: number; end: number };
+    evening: { start: number; end: number };
+    night: { start: number; end: number };
+  };
 }
 
 /** Open-delimiter options for "Condense with warning" markers. The
@@ -429,6 +452,14 @@ const DEFAULTS: Settings = {
   commentsVisible: false,
   anthropicApiKey: '',
   aiFeaturesEnabled: false,
+  clodEnabled: false,
+  clodActivitiesByTime: { morning: [], day: [], evening: [], night: [] },
+  clodTimePeriods: {
+    morning: { start: 5, end: 9 },
+    day: { start: 9, end: 20 },
+    evening: { start: 20, end: 23 },
+    night: { start: 23, end: 5 },
+  },
 };
 
 /** Public read-only view of the built-in defaults — handy for any UI
@@ -460,7 +491,8 @@ export interface SettingMeta {
     | 'shrinkCustomProtections'
     | 'keybindings'
     | 'text'
-    | 'password';
+    | 'password'
+    | 'clod';
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
@@ -627,6 +659,13 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       'Used only when AI features are enabled. Stored locally in browser settings; sent only to api.anthropic.com.',
     kind: 'password',
+  },
+  {
+    key: 'clodEnabled',
+    label: 'Enable Clod mode',
+    description:
+      'When the AI is composing a reply, the in-flight placeholder cycles through time-of-day Clod activities ("Clod is making toast…") instead of plain "Thinking…".',
+    kind: 'clod',
   },
 ];
 
@@ -802,7 +841,48 @@ function sanitize(s: Settings): Settings {
         ? s.anthropicApiKey
         : DEFAULTS.anthropicApiKey,
     aiFeaturesEnabled: !!s.aiFeaturesEnabled,
+    clodEnabled: !!s.clodEnabled,
+    clodActivitiesByTime: sanitizeClodActivitiesByTime(s.clodActivitiesByTime),
+    clodTimePeriods: sanitizeClodTimePeriods(s.clodTimePeriods),
   };
+}
+
+function sanitizeClodActivitiesByTime(raw: unknown): Settings['clodActivitiesByTime'] {
+  const out = {
+    morning: [] as string[],
+    day: [] as string[],
+    evening: [] as string[],
+    night: [] as string[],
+  };
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<Record<keyof typeof out, unknown>>;
+  for (const k of ['morning', 'day', 'evening', 'night'] as const) {
+    const v = r[k];
+    if (Array.isArray(v)) {
+      out[k] = v.filter((x): x is string => typeof x === 'string' && x.length > 0);
+    }
+  }
+  return out;
+}
+
+function sanitizeClodTimePeriods(raw: unknown): Settings['clodTimePeriods'] {
+  const out = { ...DEFAULTS.clodTimePeriods };
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<Record<keyof typeof out, unknown>>;
+  for (const k of ['morning', 'day', 'evening', 'night'] as const) {
+    const v = r[k];
+    if (!v || typeof v !== 'object') continue;
+    const obj = v as { start?: unknown; end?: unknown };
+    const start = Number(obj.start);
+    const end = Number(obj.end);
+    if (
+      Number.isInteger(start) && start >= 0 && start <= 23 &&
+      Number.isInteger(end) && end >= 0 && end <= 23
+    ) {
+      out[k] = { start, end };
+    }
+  }
+  return out;
 }
 
 function sanitizeShrinkProtections(raw: unknown): ShrinkProtection[] {

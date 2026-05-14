@@ -2834,6 +2834,7 @@ export type RibbonCommandId =
   | 'toggleReadMode'
   | 'toggleCommentsVisible'
   | 'addCommentToSelection'
+  | 'aiAskAboutSelection'
   | 'wordCountSelection'
   | 'openShortcutsReference'
   | 'selectSimilar'
@@ -2890,6 +2891,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'toggleReadMode',
   'toggleCommentsVisible',
   'addCommentToSelection',
+  'aiAskAboutSelection',
   'wordCountSelection',
   'openShortcutsReference',
   'selectSimilar',
@@ -2943,6 +2945,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleReadMode: 'Toggle read mode',
   toggleCommentsVisible: 'Show / hide comments',
   addCommentToSelection: 'Add comment to selection',
+  aiAskAboutSelection: 'Ask AI about selection',
   wordCountSelection: 'Word count selection',
   openShortcutsReference: 'Open keyboard shortcuts',
   selectSimilar: 'Select Similar Formatting',
@@ -3006,6 +3009,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   toggleReadMode: '',
   toggleCommentsVisible: '',
   addCommentToSelection: '',
+  aiAskAboutSelection: '',
   wordCountSelection: '',
   openShortcutsReference: '',
   selectSimilar: '',
@@ -3085,6 +3089,7 @@ export interface RibbonContext {
   openShortcutsReference: () => void;
   toggleCommentsVisible: () => void;
   addCommentToSelection: () => void;
+  aiAskAboutSelection: () => void;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -3109,6 +3114,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   openShortcutsReference: () => {},
   toggleCommentsVisible: () => {},
   addCommentToSelection: () => {},
+  aiAskAboutSelection: () => {},
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -3209,6 +3215,13 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         if (state.selection.empty) return false;
         if (!dispatch) return true;
         ctx.addCommentToSelection();
+        return true;
+      };
+    case 'aiAskAboutSelection':
+      return (state, dispatch) => {
+        if (state.selection.empty) return false;
+        if (!dispatch) return true;
+        ctx.aiAskAboutSelection();
         return true;
       };
     case 'wordCountSelection':

@@ -1806,6 +1806,94 @@ inside the protected range. Doubles listed before singles so the
 longer match wins on overlap, matching the rest of the file's
 ordering convention.
 
+## 2026-05-13: AI explainer (comments-integrated) + Clod port
+
+The comments plugin now hosts the user's AI-explainer flow. Two
+entry points, both selection-based:
+
+  - **`+` button / `addCommentToSelection`** — creates a normal
+    human-only thread (no AI auto-fire). User can later type
+    `@AI` in a reply to invoke the model.
+  - **`🤖` button / `aiAskAboutSelection`** — creates a thread
+    with a pending-AI flag and caches the explainer context at
+    the moment the thread was opened. The user types their
+    question into the first input; on submit the question is
+    stored as the root comment AND a POST goes to Anthropic with
+    the cached context. Reply arrives as a `kind: 'ai'` comment
+    in the same thread.
+
+### Anthropic client
+
+`src/editor/ai/anthropic.ts` is a thin `fetch` wrapper around
+`POST /v1/messages`. Direct browser calls require the
+`anthropic-dangerous-direct-browser-access: true` header — the
+user knowingly opts in by enabling AI features and pasting their
+key. `AnthropicError` carries a `kind` discriminant
+(`no-key | auth | rate-limit | server | network | parse`) so the
+toast layer can pick a useful message without parsing strings.
+
+### Context builder
+
+`src/editor/ai/explain-context.ts` walks up from the selection's
+`$from` to the nearest `card` or `analytic_unit`, collects its
+`tag` / `analytic` / `cite_paragraph` children, and packages them
+with the selection text. Doc-level selections fall through with
+just the selection. The cached context is captured at thread
+open so the AI sees what the user actually meant, even if the
+user edits elsewhere before submitting.
+
+### System prompt
+
+The prompt frames replies as a research coach for an educational
+tool. Each reply has three short parts: a direct answer (treated
+as a jumping-off point, not the final word), specific search
+terms, and concrete places to look (Google Scholar, JSTOR, SSRN,
+think-tank archives, domain-specific journalists, debate-camp
+evidence repos, etc.). Replies should be short enough for the
+side-panel comment format.
+
+### `@AI` mention
+
+`hasAiMention(text)` matches `@AI` (case-insensitive) bounded by
+non-word chars on either side, so substrings inside emails /
+acronyms don't trigger. Any reply containing the mention
+re-invokes the model with the thread's range as context. When
+the original context wasn't cached (e.g. for a `+` thread),
+`contextFromCurrentRange` rebuilds it from the comment_range
+mark's current position.
+
+### Clod persona port
+
+Ported from the user's prior `Card Formatting Tools.py` so the
+in-flight placeholder while the model is composing cycles
+through time-of-day activities ("Clod is making toast…") instead
+of plain "Thinking…".
+
+  - `src/editor/ai/clod.ts` — activity pools per time period
+    plus eight holidays that replace the day pool on their
+    calendar date. `currentClodPeriod` handles ranges that cross
+    midnight. `activitiesForNow` resolves custom overrides
+    (non-empty user array → use that pool) vs built-in defaults.
+  - **Settings UI** — a new "Enable Clod mode" toggle (kind
+    `'clod'`). Easter egg: Mod + Alt + Shift + click on the
+    checkbox opens `src/editor/ai/clod-configurator.ts`, a dialog
+    with one tab per time period (activity-pool text area + reset
+    button) plus a Time-Periods tab for the hour boundaries. We
+    started with shift + right-click and had to switch — the
+    browser's native context menu and our handler raced badly.
+  - **Comments UI** — when AI is in-flight AND Clod mode is on,
+    the placeholder text is a Clod activity. A 4-second ticker
+    refreshes it via `data-activity-target` while the request is
+    outstanding; the ticker stops on the last resolution.
+
+### Master switch
+
+`aiFeaturesEnabled` gates the entire surface: the 🤖 button is
+hidden via the `hidden` attribute (and a settings subscriber re-
+syncs on toggle), AI commands no-op with a toast, and `@AI`
+mentions are ignored. Users can keep their key saved but go
+offline ad-hoc by flipping the switch.
+
 ## 2026-05-13: Comments — round-trip + side column + AI groundwork
 
 Comments are now a first-class feature. Three concerns:

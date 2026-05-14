@@ -2739,6 +2739,166 @@ body.pmd-nav-resize-active {
   cursor: help;
 }
 
+/* Comments panel — same 2-row vertical rhythm as the other ops
+   panels, but the bottom row holds two side-by-side buttons (+ and
+   🤖) so the AI affordance fits without making the panel three
+   rows tall. The toggle button (💬) spans both columns of the top
+   row. */
+.ribbon-comments-ops-panel {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: 1.45rem 1.45rem;
+  align-content: center;
+  gap: 2px 3px;
+  padding-left: 0.5rem;
+  margin-left: 0.25rem;
+  border-left: 1px solid var(--pmd-c-border-soft);
+}
+.ribbon-comments-ops-panel .ribbon-comments-toggle {
+  grid-column: 1 / span 2;
+}
+
+/* ---------------------------------------------- Clod configurator */
+
+.pmd-clod-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--pmd-c-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.pmd-clod-dialog {
+  background: var(--pmd-c-bg);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 640px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+}
+.pmd-clod-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--pmd-c-divider);
+}
+.pmd-clod-header h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.pmd-clod-close {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1.6rem; line-height: 1; color: var(--pmd-c-text-muted);
+  padding: 0 0.25rem;
+}
+.pmd-clod-close:hover { color: var(--pmd-c-text); }
+.pmd-clod-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--pmd-c-divider);
+  background: var(--pmd-c-bg-soft, #f7f7f8);
+  overflow-x: auto;
+}
+.pmd-clod-tab {
+  padding: 0.55rem 0.9rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border-bottom: 2px solid transparent;
+  color: var(--pmd-c-text-muted);
+  white-space: nowrap;
+}
+.pmd-clod-tab:hover { color: var(--pmd-c-text); }
+.pmd-clod-tab-active {
+  color: var(--pmd-c-text);
+  border-bottom-color: var(--pmd-c-accent, #4a90e2);
+}
+.pmd-clod-body { padding: 1rem 1.25rem; overflow-y: auto; }
+.pmd-clod-panel { display: flex; flex-direction: column; gap: 0.6rem; }
+.pmd-clod-panel[hidden] { display: none; }
+.pmd-clod-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-clod-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  box-sizing: border-box;
+  resize: vertical;
+}
+.pmd-clod-reset {
+  align-self: flex-end;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.pmd-clod-reset:hover { background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06)); }
+.pmd-clod-grid {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+.pmd-clod-grid-label { font-size: 0.9rem; }
+.pmd-clod-hour {
+  width: 4rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  font-family: inherit;
+}
+.pmd-clod-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--pmd-c-divider);
+}
+.pmd-clod-btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  border: 1px solid var(--pmd-c-border, #999);
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.pmd-clod-btn:hover { background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06)); }
+.pmd-clod-btn-primary {
+  background: var(--pmd-c-accent, #4a90e2);
+  border-color: var(--pmd-c-accent, #4a90e2);
+  color: #fff;
+}
+.pmd-clod-btn-primary:hover { background: var(--pmd-c-accent-hover, #3a7dd0); }
+
+/* AI thinking placeholder — faded purple background to match the
+   AI badge color, italic text. */
+.pmd-comment-ai-thinking {
+  background: rgba(139, 92, 246, 0.06);
+}
+.pmd-comment-ai-thinking-dots {
+  font-style: italic;
+  color: var(--pmd-c-text-muted);
+}
+
 .pmd-save-as-overlay {
   position: fixed;
   inset: 0;
