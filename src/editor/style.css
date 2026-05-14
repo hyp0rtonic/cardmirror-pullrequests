@@ -2524,6 +2524,133 @@ body.pmd-nav-resize-active {
 
 /* ---------------------------------------------- Reference (cheat-sheet) modal */
 
+.pmd-save-as-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--pmd-c-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.pmd-save-as-dialog {
+  background: var(--pmd-c-bg);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+}
+
+.pmd-save-as-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--pmd-c-divider);
+}
+
+.pmd-save-as-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.pmd-save-as-close {
+  background: transparent;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  padding: 0 0.25rem;
+}
+
+.pmd-save-as-close:hover {
+  color: var(--pmd-c-text);
+}
+
+.pmd-save-as-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pmd-save-as-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.pmd-save-as-field-label {
+  font-size: 0.85rem;
+  color: var(--pmd-c-text-secondary, var(--pmd-c-text-muted));
+}
+
+.pmd-save-as-input {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.95rem;
+  border: 1px solid var(--pmd-c-border, #999);
+  border-radius: 4px;
+  font-family: inherit;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+}
+
+.pmd-save-as-input:focus {
+  outline: 2px solid var(--pmd-c-accent, #4a90e2);
+  outline-offset: -1px;
+}
+
+/* Options container — empty for now, so it collapses out of the
+   layout. Future option rows will be flex children with their own
+   margin / padding rules. */
+.pmd-save-as-options:empty {
+  display: none;
+}
+
+.pmd-save-as-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pmd-save-as-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.pmd-save-as-btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  border: 1px solid var(--pmd-c-border, #999);
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.pmd-save-as-btn:hover {
+  background: var(--pmd-c-button-hover, rgba(0, 0, 0, 0.06));
+}
+
+.pmd-save-as-btn-primary {
+  background: var(--pmd-c-accent, #4a90e2);
+  border-color: var(--pmd-c-accent, #4a90e2);
+  color: #fff;
+}
+
+.pmd-save-as-btn-primary:hover {
+  background: var(--pmd-c-accent-hover, #3a7dd0);
+}
+
 .pmd-reference-overlay {
   position: fixed;
   inset: 0;

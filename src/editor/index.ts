@@ -31,6 +31,7 @@ import {
   type DisplayColors,
   type FormattingPanelMode,
 } from './settings.js';
+import { openSaveAs } from './save-as-ui.js';
 import { readModePlugin, PMD_READ_MODE_TOGGLE } from './read-mode-plugin.js';
 import { absorbPlugin } from './absorb-plugin.js';
 import { citeClassifierPlugin } from './cite-classifier-plugin.js';
@@ -1122,6 +1123,12 @@ function defaultSaveFilename(): string {
 }
 
 exportBtn.addEventListener('click', async () => {
+  // In-app Save As dialog first — single entry point for filename
+  // and the future export options that prompted this rework.
+  // Cancelling the dialog aborts the save entirely.
+  const choice = await openSaveAs(defaultSaveFilename());
+  if (!choice) return;
+
   try {
     const bytes = await toDocx(currentDoc);
     // Copy into a regular ArrayBuffer for Blob's BlobPart contract.
@@ -1130,13 +1137,12 @@ exportBtn.addEventListener('click', async () => {
     const blob = new Blob([ab], {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
-    const suggestedName = defaultSaveFilename();
 
     // Preferred path: File System Access API (`showSaveFilePicker`).
-    // Gives the user a native save dialog with the suggested name
-    // pre-filled, and writes straight to disk. Chromium-based
-    // browsers (Chrome / Edge / Opera / Zen). Falls back to a
-    // synthesized download link + prompt for everything else.
+    // Gives the user a native save dialog with our chosen name pre-
+    // filled, and writes straight to disk. Chromium-based browsers
+    // (Chrome / Edge / Opera / Zen). Other browsers fall back to a
+    // synthesized download link with the chosen name verbatim.
     const showSaveFilePicker = (window as unknown as {
       showSaveFilePicker?: (opts: {
         suggestedName?: string;
@@ -1154,7 +1160,7 @@ exportBtn.addEventListener('click', async () => {
       let handle;
       try {
         handle = await showSaveFilePicker({
-          suggestedName,
+          suggestedName: choice.filename,
           types: [
             {
               description: 'Word document',
@@ -1165,7 +1171,7 @@ exportBtn.addEventListener('click', async () => {
           ],
         });
       } catch (e) {
-        // AbortError = user cancelled the dialog. Quietly bail.
+        // AbortError = user cancelled the OS dialog. Quietly bail.
         if (e instanceof DOMException && e.name === 'AbortError') return;
         throw e;
       }
@@ -1178,18 +1184,14 @@ exportBtn.addEventListener('click', async () => {
       return;
     }
 
-    // Fallback: prompt for a name, then download. No real "save
-    // dialog" in the OS sense, but at least the user can rename.
-    const chosen = window.prompt('Save as:', suggestedName);
-    if (!chosen) return;
-    const finalName = chosen.toLowerCase().endsWith('.docx') ? chosen : `${chosen}.docx`;
+    // Fallback: synthesize a download link with the chosen name.
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = finalName;
+    a.download = choice.filename;
     a.click();
     URL.revokeObjectURL(url);
-    currentDocFilename = finalName;
+    currentDocFilename = choice.filename;
   } catch (err) {
     console.error('Save failed:', err);
     alert(`Save failed: ${err instanceof Error ? err.message : err}`);

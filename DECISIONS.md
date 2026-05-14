@@ -1806,6 +1806,31 @@ inside the protected range. Doubles listed before singles so the
 longer match wins on overlap, matching the rest of the file's
 ordering convention.
 
+## 2026-05-13: In-app Save As dialog (replaces `window.prompt` fallback)
+
+The export-button flow previously used `window.prompt` whenever the
+File System Access API wasn't available, and had no entry point for
+per-export options. Replaced with a Promise-based `openSaveAs` modal
+(`src/editor/save-as-ui.ts`) that always runs first — Chromium users
+still see the OS save dialog afterwards, with our chosen filename
+pre-filled as `suggestedName`.
+
+Shape:
+  - Header with title + ✕ close button.
+  - Body: filename input (defaults to the imported doc's name or
+    `untitled.docx`; auto-appends `.docx` on confirm) plus an empty
+    `.pmd-save-as-options` container that's hidden by `:empty` CSS.
+    The container is the planned slot for the export options that
+    prompted this rework (comments-anonymization toggle, page-break
+    policy, etc.).
+  - Footer: Cancel / Save buttons. Enter submits, Escape cancels,
+    backdrop click cancels.
+
+API: `openSaveAs(initialFilename) → Promise<SaveAsResult | null>`.
+`null` means the user cancelled — caller bails. `SaveAsResult` is a
+concrete interface (not `Record<string, unknown>`) so widening the
+option set generates compile errors at every consumer.
+
 ## 2026-05-13: Paragraph spacing round-trip (rendering decoupled)
 
 Every paragraph-like textblock now carries a `spacing:
