@@ -62,11 +62,17 @@ export class CommentsColumn {
     settings.set('commentsVisible', visible);
   }
 
-  /** Re-render the column from the current plugin state + doc. */
+  /** Re-render the column from the current plugin state + doc.
+   *  Two phases: build the cards into the DOM (positions are still
+   *  default at this point), then `layoutCards` measures each card's
+   *  natural height and assigns a `top` aligned with the start of
+   *  its anchored range. */
   render(): void {
     const view = this.getView();
     if (!view) {
       this.root.innerHTML = '';
+      this.root.classList.remove('pmd-comments-empty-state');
+      this.root.style.minHeight = '';
       return;
     }
     const state = getCommentsState(view.state);
@@ -74,29 +80,79 @@ export class CommentsColumn {
 
     this.root.innerHTML = '';
     if (state.threads.size === 0) {
+      this.root.classList.add('pmd-comments-empty-state');
       const empty = document.createElement('div');
       empty.className = 'pmd-comments-empty';
       empty.textContent = 'No comments yet.';
       this.root.appendChild(empty);
+      this.root.style.minHeight = '';
       return;
     }
+    this.root.classList.remove('pmd-comments-empty-state');
 
     // Iterate threads in document order so the column matches the
-    // top-to-bottom flow of the editor.
+    // top-to-bottom flow of the editor. Orphans (mark removed but
+    // plugin state not yet GC'd) append at the end.
     const orderedIds = Array.from(ranges.keys()).filter((id) => state.threads.has(id));
-    // Append any orphaned threads (mark removed but plugin state
-    // not yet GC'd) at the bottom so the user can still see + delete
-    // them. The plugin's appendTransaction cleans these up on the
-    // next doc edit.
     for (const id of state.threads.keys()) {
       if (!ranges.has(id)) orderedIds.push(id);
     }
-
     for (const id of orderedIds) {
       const thread = state.threads.get(id);
       if (!thread) continue;
       this.root.appendChild(this.renderThread(thread, ranges.get(id) ?? null));
     }
+
+    // Defer measurement to the next frame so the browser has
+    // committed the new card DOM and computed their natural heights.
+    requestAnimationFrame(() => this.layoutCards(view, ranges));
+  }
+
+  /** Position each thread card next to its anchored range using
+   *  `view.coordsAtPos`. Cards stack downward when their desired
+   *  positions would overlap (greedy left-to-right packing in the
+   *  one-column case). */
+  private layoutCards(
+    view: EditorView,
+    ranges: Map<string, { from: number; to: number }>,
+  ): void {
+    const cards = Array.from(this.root.querySelectorAll<HTMLElement>('.pmd-comment-thread'));
+    if (cards.length === 0) {
+      this.root.style.minHeight = '';
+      return;
+    }
+    const columnRect = this.root.getBoundingClientRect();
+    const minGap = 8; // px between adjacent cards
+
+    interface Layout { card: HTMLElement; desiredTop: number; height: number }
+    const layouts: Layout[] = [];
+    for (const card of cards) {
+      const id = card.dataset['threadId'] ?? '';
+      const range = ranges.get(id);
+      let desiredTop = 0;
+      if (range) {
+        try {
+          const coords = view.coordsAtPos(range.from);
+          desiredTop = Math.max(0, coords.top - columnRect.top);
+        } catch {
+          // Range out of view / detached — leave at top.
+        }
+      }
+      layouts.push({ card, desiredTop, height: card.offsetHeight });
+    }
+    layouts.sort((a, b) => a.desiredTop - b.desiredTop);
+
+    let cursor = 0;
+    for (const l of layouts) {
+      const actualTop = Math.max(l.desiredTop, cursor);
+      l.card.style.top = `${actualTop}px`;
+      cursor = actualTop + l.height + minGap;
+    }
+    // Ensure the column itself is tall enough to contain the last
+    // card. Without this, a card anchored near the bottom of a
+    // tall doc overflows the column's flex-stretched height and
+    // gets visually clipped against the page boundary.
+    this.root.style.minHeight = `${cursor}px`;
   }
 
   private renderThread(thread: Thread, range: { from: number; to: number } | null): HTMLElement {

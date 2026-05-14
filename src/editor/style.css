@@ -2547,11 +2547,13 @@ body.pmd-nav-resize-active {
 
 /* `#app` is the editor's main flex container. The editor takes the
    remaining space; the comments column docks to the right when
-   visible and collapses out of layout when `hidden`. */
+   visible and collapses out of layout when `hidden`. The earlier
+   `#app` rule sets `min-height: calc(100vh - ribbon - status)` —
+   inherited here so the comments column reaches the full viewport
+   height even when the document is short. */
 #app {
   display: flex;
   flex-direction: row;
-  min-height: 0;
 }
 #editor {
   flex: 1 1 auto;
@@ -2560,17 +2562,24 @@ body.pmd-nav-resize-active {
 .pmd-comments-column {
   flex: 0 0 320px;
   max-width: 320px;
-  overflow-y: auto;
   background: var(--pmd-c-bg-soft, #f7f7f8);
   border-left: 1px solid var(--pmd-c-border-soft, rgba(0, 0, 0, 0.08));
-  padding: 0.75rem 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  /* `position: relative` is the anchor for absolutely-positioned
+     thread cards; each card's `top` value places it next to the
+     part of the document it pertains to (Google Docs–style). No
+     own `overflow-y` so the cards scroll with the editor when the
+     page scrolls, keeping the alignment intact. */
+  position: relative;
   font-family: 'Calibri', 'Helvetica Neue', sans-serif;
   font-size: 0.85rem;
 }
 .pmd-comments-column[hidden] { display: none; }
+.pmd-comments-column.pmd-comments-empty-state {
+  /* Padding only when in empty-state mode — when cards are absolute-
+     positioned they handle their own offsets so the column itself
+     stays unpadded. */
+  padding: 0.75rem 0.6rem;
+}
 
 .pmd-comments-empty {
   color: var(--pmd-c-text-muted);
@@ -2580,6 +2589,15 @@ body.pmd-nav-resize-active {
 }
 
 .pmd-comment-thread {
+  position: absolute;
+  /* The 0.6rem inset matches the old in-column padding so cards
+     don't kiss the column border. */
+  left: 0.6rem;
+  right: 0.6rem;
+  /* `top` is set inline by `CommentsColumn.layoutCards` after each
+     render. Default 0 so the very first paint doesn't pile cards
+     at the same spot before measurement runs. */
+  top: 0;
   background: var(--pmd-c-bg, #fff);
   border: 1px solid var(--pmd-c-border-soft, rgba(0, 0, 0, 0.12));
   border-radius: 6px;
@@ -2588,6 +2606,9 @@ body.pmd-nav-resize-active {
   flex-direction: column;
   gap: 0.4rem;
   cursor: pointer;
+  /* Smooth out the layout pass so cards animate to their new
+     anchored positions on doc edits rather than jumping. */
+  transition: top 0.12s ease-out;
 }
 .pmd-comment-thread:hover {
   border-color: var(--pmd-c-border, #888);
