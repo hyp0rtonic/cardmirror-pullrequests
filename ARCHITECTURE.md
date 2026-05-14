@@ -98,14 +98,19 @@ doc:           sequence of block-level kinds (flat)
 pocket:        Heading 1 paragraph (inline content, stable id)
 hat:           Heading 2 paragraph (inline content, stable id)
 block:         Heading 3 paragraph (inline content, stable id)
-card:          tag (card_body | undertag | cite_paragraph | analytic)*
-analytic_unit: analytic (card_body | undertag | cite_paragraph)*
+card:          tag (card_body | undertag | cite_paragraph | analytic | table)*
+analytic_unit: analytic (card_body | undertag | cite_paragraph | table)*
 tag:           inline*      (only inside card)
 analytic:      inline*      (inside analytic_unit, or in-card cite slot)
 undertag:      inline*
 cite_paragraph, card_body: inline body paragraphs (inside cards or
                            analytic_units, or loose at doc level)
 paragraph:     inline*      (unstyled body text — implicit Normal)
+table:         table_row+   (at doc level OR inside a card / analytic_unit)
+table_row:     (table_cell | table_header)+
+table_cell:    paragraph+   (cells hold generic paragraphs only)
+table_header:  paragraph+   (kept for prosemirror-tables compat;
+                            importer always produces table_cell)
 ```
 
 `card` and `analytic_unit` content expressions are deliberately loose
@@ -149,12 +154,15 @@ Notes:
 - **Marks** for inline emphasis: `cite_mark`, `underline_mark`,
   `underline_direct`, `emphasis_mark`, `undertag_mark`,
   `analytic_mark`, plus direct-formatting marks `highlight(color)`,
-  `font_size(pt)`, `bold`, `italic`, `strikethrough`, `font_color`,
-  `shading(color)`, and `link(href)` for hyperlinks (URLs are the
-  common case; intra-doc links to bookmarked headings are supported
-  for completeness — see §12 on heading IDs). `strikethrough`
-  round-trips as `<w:strike/>`; OOXML's `<w:dstrike/>` (double
-  strikethrough) imports as the same single-strike mark.
+  `font_size(pt)`, `bold`, `italic`, `strikethrough`, `superscript`,
+  `subscript`, `font_color`, `shading(color)`, and `link(href)` for
+  hyperlinks (URLs are the common case; intra-doc links to
+  bookmarked headings are supported for completeness — see §12 on
+  heading IDs). `strikethrough` round-trips as `<w:strike/>`; OOXML's
+  `<w:dstrike/>` (double strikethrough) imports as the same single-
+  strike mark. `superscript` / `subscript` round-trip as `<w:vertAlign
+  w:val="superscript|subscript"/>` and are mutually exclusive (each
+  declares `excludes: 'superscript subscript'`).
 
   `underline_mark` is the named "Underline" character style — used
   in body textblocks. `underline_direct` is plain direct underline
@@ -165,6 +173,30 @@ Notes:
   `underline_mark` never lands in a structural slot. Visually
   identical; the distinction matters for OOXML round-trip and for
   Verbatim's semantic classification.
+- **Per-paragraph round-trip attrs.** Every node that serializes to
+  `<w:p>` (paragraph, pocket, hat, block, tag, analytic, undertag,
+  cite_paragraph, card_body) carries two attrs that preserve OOXML
+  paragraph-level state across import → editor → export:
+    - `indent` — left indent in dxa (1440 = 1 inch). Tab / Shift-Tab
+      indent / outdent by one step (720 dxa). Rendered inline as
+      `padding-left`.
+    - `spacing` — opaque `{ [oxmlAttr]: value }` map captured from
+      `<w:spacing>`. Round-tripped verbatim; rendering deliberately
+      ignores it (per-type CSS governs the editor's visible rhythm).
+  Tables carry analogous round-trip-only opacity: `table.rawTblPr`
+  captures the entire inner content of `<w:tblPr>` (borders / styles
+  / shading); `table_cell.rawTcPr` / `table_header.rawTcPr` capture
+  per-cell `<w:tcPr>` extras (tcBorders, shd, vAlign) minus the
+  structurally regenerated bits (gridSpan, vMerge, tcW) and any
+  track-change markers. The exporter re-emits these fragments
+  verbatim; the schema has no UI to edit them.
+- **Track changes are accepted on import.** Wrapped runs inside
+  `<w:ins>` / `<w:moveTo>` are recursed into as kept content;
+  `<w:del>` / `<w:moveFrom>` are dropped entirely. `<w:pPrChange>` /
+  `<w:rPrChange>` are ignored implicitly because pPr/rPr parsing
+  only reads known properties. Table-revision markers
+  (`<w:tcPrChange>`, `<w:cellIns>`, etc.) are stripped from
+  `rawTblPr` / `rawTcPr` before storage.
 - **Stable heading IDs.** Every heading-level node (`pocket`, `hat`,
   `block`, `tag`, `analytic` when it owns a paragraph) carries an
   `attrs.id` UUID, generated when the heading is created and preserved

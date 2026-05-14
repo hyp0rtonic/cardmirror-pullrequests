@@ -103,3 +103,34 @@ referenced files.
   with pilcrows shows up.
 - Real-time collab (transclusion option 1) infrastructure. Defer to
   v2+; v1 ships option 3 (refresh on demand).
+
+### Queued OOXML features
+
+- **Numbered / bulleted lists** — `<w:numPr>` + `numbering.xml`. Held
+  for now; common in real docs but a meaningful schema addition
+  (new `bullet_list` / `ordered_list` / `list_item` nodes).
+- **Comments** — `<w:commentRangeStart/End>` + `word/comments.xml`.
+  Not present in current sample docs but on the queue.
+- **Per-type display-spacing setting** — paragraph spacing already
+  round-trips through the schema's `spacing` attr; what's still
+  pending is a settings-UI panel to override the visible rhythm per
+  paragraph type (Pocket vs Hat vs Tag vs card_body, etc.). The
+  stored OOXML values are data, the per-type setting is
+  presentation. CSS hooks already exist in `style.css`; pattern-
+  match the existing `--pmd-line-height` plumbing.
+
+### Explicit non-goals
+
+The following OOXML features are out of scope; importer drops them,
+exporter never emits them.
+
+- **Section properties** — `<w:sectPr>` (margins, page size, columns).
+  We don't model paginated layout.
+- **Revision IDs** — `<w:rsid*>` on runs and paragraphs. Word-internal
+  metadata, no semantic value.
+- **Bookmarks beyond headings** — `<w:bookmarkStart>` / `<w:bookmarkEnd>`
+  that don't carry our `pmd-heading-*` naming convention. We use
+  bookmarks only as our stable heading-ID transport.
+- **Footnotes / endnotes** — `<w:footnoteReference>` + `footnotes.xml`.
+  Debate docs rarely use them; the cost of modeling footnote nodes
+  outweighs the value.

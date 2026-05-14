@@ -4,10 +4,16 @@ A ProseMirror-based editor that interoperates with **Advanced Verbatim**
 (the project owner's fork of [Verbatim](https://github.com/ashtarcommunications/verbatim),
 the de facto Microsoft Word add-in for US policy/LD/PF debate).
 
-Project status: **early development.** v0 covers schema design + lossless
-docx round-trip + a CLI for manual verification. Editor UI, multi-doc
+Project status: **active development.** Schema, lossless docx round-trip
+(including tables, cell/table properties, indent, paragraph spacing,
+hyperlinks via element + field-code forms, super/sub/strike, and more),
+the editor UI ribbon (style hotkeys, color pickers, formatting panel,
+Doc / Card / Table dropdown menus, keybinding editor, read mode,
+shrink/condense pipeline, Select Similar Formatting, Fix Formatting
+Gaps, Convert Analytics to Tags, Remove Hyperlinks), a nav-pane outline
+with copy-drag, and a CLI for manual verification are landed. Multi-doc
 workspace, send-to-speech, search, and other features per
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) come later.
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) come next.
 
 ## Where to read
 
@@ -77,17 +83,28 @@ doc:        sequence of block-level kinds
 pocket:     Heading 1 paragraph (with stable id)
 hat:        Heading 2 paragraph (with stable id)
 block:      Heading 3 paragraph (with stable id)
-card:       structured: tag (card_body | undertag | cite_paragraph | analytic)*
+card:       structured: tag (card_body | undertag | cite_paragraph | analytic | table)*
 tag:        Heading 4 (only inside card)
 cite_paragraph, card_body: body paragraphs inside cards
 analytic:   outline-4 paragraph (Analytic style; can be standalone or in-card)
 undertag:   Undertag-styled paragraph
 paragraph:  unstyled body text (first-class — can sit between any nodes)
+table:      table_row+ (at doc level OR inside a card / analytic_unit)
+table_row:  (table_cell | table_header)+
+table_cell: paragraph+
 ```
 
-Marks: `cite_mark`, `underline_mark`, `emphasis_mark`, `undertag_mark`,
-`analytic_mark`, plus direct formatting `bold`, `italic`, `link`,
-`highlight`, `font_color`, `font_size`, `shading`.
+Every paragraph-like textblock carries round-trip-only attrs
+`indent` (left indent in OOXML dxa) and `spacing` (verbatim
+`<w:spacing>` map). Tables carry `rawTblPr` (table-level borders /
+style / shading captured opaquely); cells carry `rawTcPr`
+(per-cell borders, shading, vAlign).
+
+Marks: `cite_mark`, `underline_mark`, `underline_direct`,
+`emphasis_mark`, `undertag_mark`, `analytic_mark`, plus direct
+formatting `bold`, `italic`, `strikethrough`, `superscript`,
+`subscript`, `link`, `highlight`, `font_color`, `font_size`,
+`shading`, `pilcrow_marker`, `font_family`.
 
 See [`src/schema/`](./src/schema/) for full specs and
 [`ARCHITECTURE.md §4`](./ARCHITECTURE.md) for design rationale.
