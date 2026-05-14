@@ -599,6 +599,76 @@ describe('importer — paragraph indent', () => {
   });
 });
 
+describe('importer — paragraph spacing', () => {
+  it('captures <w:spacing> attributes verbatim into the paragraph attr', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="240" w:after="120" w:line="276" w:lineRule="auto"/>
+        </w:pPr>
+        <w:r><w:t>body</w:t></w:r>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    const sp = doc.firstChild!.attrs['spacing'] as Record<string, string> | null;
+    expect(sp).toBeTruthy();
+    expect(sp!['w:before']).toBe('240');
+    expect(sp!['w:after']).toBe('120');
+    expect(sp!['w:line']).toBe('276');
+    expect(sp!['w:lineRule']).toBe('auto');
+  });
+
+  it('round-trips spacing through the exporter unchanged', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="240" w:after="120" w:line="276" w:lineRule="auto"/>
+        </w:pPr>
+        <w:r><w:t>body</w:t></w:r>
+      </w:p>
+    `);
+    const original = importDoc(xml);
+    const { documentXml } = exportDoc(original);
+    expect(documentXml).toContain('w:before="240"');
+    expect(documentXml).toContain('w:after="120"');
+    expect(documentXml).toContain('w:line="276"');
+    expect(documentXml).toContain('w:lineRule="auto"');
+    // Re-import preserves the same attr set.
+    const re = importDoc(documentXml);
+    const before = original.firstChild!.attrs['spacing'];
+    const after = re.firstChild!.attrs['spacing'];
+    expect(after).toEqual(before);
+  });
+
+  it('preserves spacing alongside indent and other pPr attrs', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:pPr>
+          <w:pStyle w:val="Heading4"/>
+          <w:spacing w:before="80"/>
+          <w:ind w:left="360"/>
+        </w:pPr>
+        <w:r><w:t>Tag text</w:t></w:r>
+      </w:p>
+    `);
+    const doc = importDoc(xml);
+    const tag = doc.firstChild!.child(0);
+    expect(tag.type.name).toBe('tag');
+    expect(tag.attrs['indent']).toBe(360);
+    const sp = tag.attrs['spacing'] as Record<string, string> | null;
+    expect(sp!['w:before']).toBe('80');
+    const { documentXml } = exportDoc(doc);
+    expect(documentXml).toContain('w:before="80"');
+    expect(documentXml).toContain('<w:ind w:left="360"/>');
+  });
+
+  it('paragraphs without <w:spacing> have a null spacing attr (no clutter)', () => {
+    const xml = bodyXml(`<w:p><w:r><w:t>plain</w:t></w:r></w:p>`);
+    const doc = importDoc(xml);
+    expect(doc.firstChild!.attrs['spacing']).toBe(null);
+  });
+});
+
 describe('importer — table / cell raw properties round-trip', () => {
   it('captures and re-emits `<w:tblPr>` extras (borders, custom style)', () => {
     const tblPrInner =

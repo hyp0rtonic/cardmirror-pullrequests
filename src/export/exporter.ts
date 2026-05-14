@@ -15,6 +15,7 @@ import type { Mark, Node as PMNode } from 'prosemirror-model';
 import {
   el,
   emptyEl,
+  escAttr,
   escText,
   XML_PROLOG,
 } from '../ooxml/xml.js';
@@ -322,6 +323,18 @@ class DocxExporter {
     let pPrInner = '';
     if (pStyle) pPrInner += `<w:pStyle w:val="${pStyle}"/>`;
     if (alignment) pPrInner += `<w:jc w:val="${alignment}"/>`;
+    // Per-paragraph `<w:spacing>` attributes captured at import. The
+    // editor renders body paragraph rhythm via per-type CSS instead
+    // of these values; we re-emit them verbatim so Word sees the
+    // original spacing on export.
+    const spacing = node.attrs['spacing'] as Record<string, string> | null;
+    if (spacing && typeof spacing === 'object') {
+      const attrs: string[] = [];
+      for (const [k, v] of Object.entries(spacing)) {
+        if (typeof v === 'string') attrs.push(`${k}="${escAttr(v)}"`);
+      }
+      if (attrs.length > 0) pPrInner += `<w:spacing ${attrs.join(' ')}/>`;
+    }
     // Left indent in OOXML dxa; the schema's `indent` attr stores
     // the raw OOXML value so round-trip is byte-identical.
     const indent = Number(node.attrs['indent'] ?? 0);

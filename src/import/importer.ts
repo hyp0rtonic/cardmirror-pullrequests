@@ -50,6 +50,10 @@ interface ParaInfo {
   /** Left indent in OOXML dxa from `<w:ind w:left="…"/>` (or
    *  `w:start`, RTL fallback). 0 when absent. */
   indent: number;
+  /** `<w:spacing>` attributes captured verbatim (before / after /
+   *  line / lineRule / etc.) for round-trip. Null when the source
+   *  paragraph had no `<w:spacing>` element. */
+  spacing: Record<string, string> | null;
   /** When set, the assembler emits this PMNode verbatim at this
    *  position in the doc instead of treating it as a paragraph.
    *  Used for `<w:tbl>` → `table` nodes, which are pre-assembled
@@ -124,6 +128,7 @@ export function importDoc(
           headingId: null,
           pStyle: null,
           indent: 0,
+          spacing: null,
           rawNode: tableNode,
         });
       }
@@ -160,6 +165,7 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
   const pPr = findChild(pChildren, 'w:pPr');
   let pStyle: string | null = null;
   let indent = 0;
+  let spacing: Record<string, string> | null = null;
   if (pPr) {
     const pPrChildren = childrenOf(pPr, 'w:pPr');
     const pStyleEl = findChild(pPrChildren, 'w:pStyle');
@@ -176,6 +182,18 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
       const v = ia['w:left'] ?? ia['w:start'];
       const n = v ? parseInt(v, 10) : NaN;
       if (Number.isFinite(n) && n > 0) indent = n;
+    }
+    // `<w:spacing>` — capture all attribute values verbatim for
+    // round-trip. We don't apply them visually in the editor; per-
+    // type CSS governs paragraph rhythm, and the captured data is
+    // re-emitted on export so Word sees the original values.
+    const spEl = findChild(pPrChildren, 'w:spacing');
+    if (spEl) {
+      const captured: Record<string, string> = {};
+      for (const [k, v] of Object.entries(attrsOf(spEl))) {
+        if (typeof v === 'string') captured[k] = v;
+      }
+      if (Object.keys(captured).length > 0) spacing = captured;
     }
   }
 
@@ -202,7 +220,7 @@ function parseParagraph(pNode: XmlNode, ctx: ImportContext): ParaInfo {
 
   const nodeType = resolveNodeType(pStyle, inlines);
 
-  return { nodeType, inlines, headingId, pStyle, indent };
+  return { nodeType, inlines, headingId, pStyle, indent, spacing };
 }
 
 /**
@@ -967,15 +985,21 @@ function attrsForHeading(id: string | null): { id: string } {
   return { id: id ?? newHeadingId() };
 }
 
-/** Merge an indent (dxa) onto a base attrs object. Returns `null`
- *  unchanged so call sites can still pass `null` and only opt-in to
- *  the attr when the paragraph had a `<w:ind>`. */
+/** Merge per-paragraph round-trip attrs (indent + spacing) onto a
+ *  base attrs object. Returns `null` unchanged when nothing to add
+ *  so call sites can still pass `null` for paragraphs that had
+ *  neither a `<w:ind>` nor a `<w:spacing>`. */
 function withIndent(
   base: Record<string, unknown> | null,
   para: ParaInfo,
 ): Record<string, unknown> | null {
-  if (!para.indent || para.indent <= 0) return base;
-  return { ...(base ?? {}), indent: para.indent };
+  const hasIndent = para.indent && para.indent > 0;
+  const hasSpacing = para.spacing && Object.keys(para.spacing).length > 0;
+  if (!hasIndent && !hasSpacing) return base;
+  const out: Record<string, unknown> = { ...(base ?? {}) };
+  if (hasIndent) out['indent'] = para.indent;
+  if (hasSpacing) out['spacing'] = para.spacing;
+  return out;
 }
 
 function paragraphToNode(para: ParaInfo): PMNode | null {
@@ -993,9 +1017,12 @@ function paragraphToNode(para: ParaInfo): PMNode | null {
   const isHeading = ['pocket', 'hat', 'block', 'tag', 'analytic'].includes(effectiveType);
   const baseAttrs = isHeading ? attrsForHeading(para.headingId) : {};
   const attrs: Record<string, unknown> = { ...baseAttrs };
-  // Indent applies to every paragraph-like textblock — all 9 OOXML
-  // paragraph kinds we model carry the `indent` attr now.
+  // Indent + spacing apply to every paragraph-like textblock — all 9
+  // OOXML paragraph kinds we model carry both round-trip attrs now.
   if (para.indent > 0) attrs['indent'] = para.indent;
+  if (para.spacing && Object.keys(para.spacing).length > 0) {
+    attrs['spacing'] = para.spacing;
+  }
   try {
     return nodeType.createChecked(attrs, para.inlines);
   } catch (_e) {

@@ -196,6 +196,12 @@ describe('round-trip: real example docs', () => {
         // same number of times after round-trip as before.
         expect(after).toEqual(before);
       });
+
+      it('preserves paragraph spacing through round-trip', () => {
+        const before = collectSpacingBag(imported);
+        const after = collectSpacingBag(roundTripped);
+        expect(after).toEqual(before);
+      });
     });
   }
 });
@@ -209,6 +215,24 @@ function collectIndentBag(doc: PMNode): Record<string, number> {
     const indent = Number(node.attrs?.['indent'] ?? 0);
     if (indent > 0) {
       const key = `${node.type.name}:${indent}`;
+      bag[key] = (bag[key] ?? 0) + 1;
+    }
+    return true;
+  });
+  return bag;
+}
+
+/** Multiset of `${nodeType}:${stable-spacing-key}` for every
+ *  paragraph-like node that has a non-null `spacing` attr. The
+ *  spacing object is canonicalized by sorting its OOXML attribute
+ *  keys so two equivalent specs collapse onto the same string. */
+function collectSpacingBag(doc: PMNode): Record<string, number> {
+  const bag: Record<string, number> = {};
+  doc.descendants((node) => {
+    const sp = node.attrs?.['spacing'] as Record<string, string> | null;
+    if (sp && typeof sp === 'object') {
+      const entries = Object.entries(sp).sort(([a], [b]) => a.localeCompare(b));
+      const key = `${node.type.name}:${entries.map(([k, v]) => `${k}=${v}`).join('|')}`;
       bag[key] = (bag[key] ?? 0) + 1;
     }
     return true;

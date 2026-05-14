@@ -1806,6 +1806,24 @@ inside the protected range. Doubles listed before singles so the
 longer match wins on overlap, matching the rest of the file's
 ordering convention.
 
+## 2026-05-13: Paragraph spacing round-trip (rendering decoupled)
+
+Every paragraph-like textblock now carries a `spacing:
+Record<string, string> | null` attr that holds the OOXML
+`<w:spacing>` attribute values verbatim. Importer captures every
+attribute on `<w:spacing>` (before / after / line / lineRule /
+beforeLines / afterLines / beforeAutospacing / afterAutospacing /
+…); exporter re-emits them as `<w:spacing>` inside `<w:pPr>`.
+Round-trip is byte-stable on a multiset-of-`(nodeType, attrs)`
+basis across all real-doc fixtures.
+
+Rendering deliberately ignores the stored spacing — per-type CSS
+margins continue to govern the editor's visible paragraph rhythm,
+matching the [[project-paragraph-spacing-planned]] design: the
+stored value is data (for round-trip), the per-type setting is
+presentation. Adding the per-type display-spacing setting in
+settings/UI is a separate next step.
+
 ## 2026-05-13: Table / cell raw properties round-trip + track-changes accept-on-import
 
 Two related import changes that widen OOXML fidelity without

@@ -36,12 +36,29 @@ const indentAttr = {
   },
 };
 
+/** OOXML `<w:spacing>` attributes captured verbatim for round-trip.
+ *  Stored as a plain `{ [attr]: value }` object whose keys are the
+ *  OOXML attribute names (`w:before`, `w:after`, `w:line`,
+ *  `w:lineRule`, etc.). Visual rendering is governed by per-type
+ *  CSS, not this attr — see PROJECT.md's queued per-type display-
+ *  spacing setting. Null when the source paragraph had no
+ *  `<w:spacing>` element. */
+const spacingAttr = {
+  spacing: {
+    default: null as Record<string, string> | null,
+    validate: (v: unknown) =>
+      v === null ||
+      (typeof v === 'object' && v !== null && !Array.isArray(v)),
+  },
+};
+
 const headingAttrs = {
   id: {
     default: null as string | null,
     validate: (v: unknown) => (v === null || typeof v === 'string'),
   },
   ...indentAttr,
+  ...spacingAttr,
 };
 
 /** Convert a paragraph node's `indent` (dxa) to an inline CSS
@@ -354,7 +371,7 @@ export const nodes: { [name: string]: NodeSpec } = {
   /** Cite paragraph. Used inside a card or at the doc level. */
   cite_paragraph: {
     content: 'inline*',
-    attrs: indentAttr,
+    attrs: { ...indentAttr, ...spacingAttr },
     parseDOM: [{
       tag: 'p.pmd-cite-para',
       getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
@@ -370,7 +387,7 @@ export const nodes: { [name: string]: NodeSpec } = {
   /** Card body paragraph — implicit Normal style on export. */
   card_body: {
     content: 'inline*',
-    attrs: indentAttr,
+    attrs: { ...indentAttr, ...spacingAttr },
     parseDOM: [{
       tag: 'p.pmd-card-body',
       getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
@@ -432,7 +449,7 @@ export const nodes: { [name: string]: NodeSpec } = {
   /** Undertag paragraph (linked to UndertagChar). */
   undertag: {
     content: 'inline*',
-    attrs: indentAttr,
+    attrs: { ...indentAttr, ...spacingAttr },
     parseDOM: [{
       tag: 'p.pmd-undertag',
       getAttrs: (dom: HTMLElement) => ({ indent: readIndentFromStyle(dom) }),
@@ -463,6 +480,7 @@ export const nodes: { [name: string]: NodeSpec } = {
           v === 'justify',
       },
       ...indentAttr,
+      ...spacingAttr,
     },
     parseDOM: [
       {
