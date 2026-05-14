@@ -2001,63 +2001,67 @@ export function pasteAsText(): Command {
  * inside an anchor and disappears with the wrapper).
  */
 /**
- * Verbatim's `FixFormattingGaps` — bridge missing mark coverage
- * across short word-to-word gaps so word-by-word formatting doesn't
- * leave visual breaks. Conceptually: "if there's an underlined word,
- * a blank space, and an emphasized word in sequence, this acts as if
- * the user selected the blank space and pressed F9" — the gap fills
- * in to match the bookends, the bookends themselves are untouched.
+ * Verbatim's `FixFormattingGaps` (extended) — normalize every short
+ * word-to-word gap so its marks are the intersection of the two
+ * bookends' marks. This both BRIDGES marks the bookends agree on
+ * (so word-by-word formatting doesn't leave visual breaks) and
+ * CLEANS UP marks the gap is wrongly carrying that aren't shared.
  *
  * Selection-sensitive (non-empty selection → that range; empty →
  * whole doc). Walks each textblock in scope independently — bridges
  * never cross paragraph breaks.
  *
- * Per-textblock, runs the regex
+ * The regex is
  *
- *   /[A-Za-z0-9][.,;:?()\-! ]+[A-Za-z0-9]/g
+ *   /[A-Za-z0-9'"‘’“”][.,;:?()\-! ]+(?=[A-Za-z0-9'"‘’“”])/g
  *
- * — a word char, one or more "gap" chars (period / comma / semicolon
- * / colon / question mark / parens / hyphen / exclamation / space),
- * another word char. For each match the bridged marks are added to
- * the CHARS BETWEEN the bookends only (gap-only range — bookends are
- * never re-marked, so the schema's `excludes` rule on the three
- * mutually-exclusive named-style marks can't kick in and strip a
- * bookend's mark).
+ * — left bookend (1 word char) + 1+ gap chars + lookahead at the
+ * right bookend. Lookahead is critical: it lets single-char interior
+ * words (e.g., "a", "I") serve as the right bookend of one match
+ * and the left bookend of the next without `/g`'s lastIndex eating
+ * them. Quotes are included in the bookend class so gaps adjacent
+ * to quoted runs still bridge.
  *
- * The decision to operate on a gap at all is gated by the bookends'
- * named-style marks. A gap "qualifies" only when both bookends
- * carry a named-style mark of compatible types:
+ * The gap range — the chars strictly between the bookends — is
+ * what we modify; the bookends themselves are never touched.
  *
- *   - underline + underline
- *   - emphasis + emphasis
- *   - cite + cite
- *   - underline + emphasis (either order)
+ * **Target mark set** for each gap, computed from the two bookends'
+ * marks. Six mark types are touched; everything else (bold, italic,
+ * font_color, font_family, link, …) is left alone.
  *
- * Any other pair (named-style abutting plain text, two completely
- * different combinations, just-shrunken text on one side, etc.)
- * leaves the gap entirely untouched — its font_size, highlight,
- * everything stays exactly as it was.
+ *   - Named-style (underline_mark / emphasis_mark / cite_mark,
+ *     mutually exclusive via schema):
+ *       - Same named-style on both → include that mark.
+ *       - underline + emphasis (either order) → include underline
+ *         (Verbatim's "underline wins on mixed",
+ *         `Formatting.bas:1071-1074`).
+ *       - Anything else → no named-style mark in the target.
+ *   - highlight / shading: both bookends carry the mark → include
+ *     with the FIRST bookend's color attr. Else → none.
+ *   - font_size (uses the chip's effective-pt resolver — the same
+ *     one the chip / increment buttons / shrink use):
+ *       - Compute each bookend's effective pt (explicit font_size →
+ *         named-style default → parent block default).
+ *       - Pick the bookend with the SMALLER effective pt.
+ *       - If that bookend has an explicit font_size mark → include
+ *         the same mark in the target.
+ *       - If that bookend is implicit → no font_size in the target.
+ *       - Tie + both explicit → either; tie + at least one implicit
+ *         → no font_size (prefer the cleanest gap).
  *
- * For qualifying gaps, three independent rules apply to the gap
- * chars (never the bookends):
+ * For each touched type: if the type IS in the target, `addMark` it
+ * over the gap range (idempotent if already there with same attrs;
+ * replaces attrs if different); if the type is NOT in the target,
+ * `removeMark` it (idempotent if absent). PM tracks zero-step
+ * transactions, so gaps whose marks already match the target
+ * produce no actual transaction work.
  *
- *   - Named-style bridge: both-same → that mark; mixed
- *     underline+emphasis → underline (Verbatim's "underline wins on
- *     mixed", `Formatting.bas:1071-1074`).
- *   - highlight / shading: bridged ONLY when both bookends carry
- *     the same mark type. First bookend's color wins on a color
- *     mismatch.
- *   - font_size: always cleared (a stale shrunken-size mark in the
- *     gap shouldn't survive the bridge); if BOTH bookends carry
- *     explicit font_size, additionally assign the gap the SMALLER
- *     halfPoints value (a shrunken bookend pulls the gap down to
- *     match instead of the gap standing out at the larger size).
- *
- * No-op (returns false) when no gap in scope qualifies, or when
- * every qualifying gap's bridge action collapses to a no-op
- * because the marks the bridge would assign are already there.
+ * No-op (returns false) when every gap in scope already matches its
+ * target.
  */
-export function fixFormattingGaps(): Command {
+export function fixFormattingGaps(
+  effectivePt: (node: PMNode | null, parent: PMNode) => number,
+): Command {
   return (state, dispatch) => {
     const sel = state.selection;
     const from = sel.empty ? 0 : sel.from;
@@ -2159,81 +2163,66 @@ export function fixFormattingGaps(): Command {
 
         const fm = firstNode.marks;
         const lm = lastNode.marks;
-        const fmHasUnderline = fm.some((mk) => mk.type === underlineType);
-        const fmHasEmphasis = fm.some((mk) => mk.type === emphasisType);
-        const fmHasCite = fm.some((mk) => mk.type === citeType);
-        const lmHasUnderline = lm.some((mk) => mk.type === underlineType);
-        const lmHasEmphasis = lm.some((mk) => mk.type === emphasisType);
-        const lmHasCite = lm.some((mk) => mk.type === citeType);
-
-        // Gate every gap action behind the named-style qualifier.
-        // Only these five bookend combinations count as a "gap to
-        // operate on": underline/underline, emphasis/emphasis,
-        // cite/cite, underline+emphasis, emphasis+underline. Any
-        // other pair (named-style abutting plain text, or just
-        // shrunken text, etc.) leaves the gap untouched. This keeps
-        // the highlight / shading / font_size rules from acting on
-        // gaps the user didn't intend them for.
-        //
-        // Underline "wins" on mixed underline+emphasis bookends —
-        // Verbatim parity (`Formatting.bas:1071-1074`); the milder,
-        // more inclusive style is the safer default when the gap
-        // could plausibly belong to either argument run. The three
-        // named-style marks are mutually exclusive via the schema's
-        // `excludes`, so the bridged mark sits cleanly in the gap.
-        let bridgedNamedStyle: Mark | null = null;
-        if (fmHasUnderline && lmHasUnderline) {
-          bridgedNamedStyle = underlineType.create();
-        } else if (fmHasEmphasis && lmHasEmphasis) {
-          bridgedNamedStyle = emphasisType.create();
-        } else if (fmHasCite && lmHasCite) {
-          bridgedNamedStyle = citeType.create();
-        } else if (
-          (fmHasUnderline && lmHasEmphasis) ||
-          (fmHasEmphasis && lmHasUnderline)
-        ) {
-          bridgedNamedStyle = underlineType.create();
-        }
-        if (!bridgedNamedStyle) continue;
-
-        const marksToAdd: Mark[] = [bridgedNamedStyle];
-        const marksToRemove: MarkType[] = [];
-
-        // Color-bearing marks: bridge ONLY when both bookends have
-        // the same mark type. Uses the FIRST bookend's attrs if the
-        // colors differ (Verbatim's `c.Item(1).HighlightColorIndex`
-        // choice).
-        for (const t of [highlightType, shadingType]) {
-          const firstMk = fm.find((mk) => mk.type === t);
-          const lastMk = lm.find((mk) => mk.type === t);
-          if (firstMk && lastMk) {
-            marksToAdd.push(t.create(firstMk.attrs));
-          }
-        }
-
-        // Font size on the gap: always clear; if BOTH bookends carry
-        // explicit font_size, additionally assign the smaller
-        // halfPoints. "Smaller wins" is the conservative choice — a
-        // shrunken bookend pulls the gap down to match instead of
-        // the gap standing out at the larger size. (Only acts on
-        // qualifying gaps per the gate above.)
-        let gapHasFontSize = false;
-        for (let i = gapStartIdx; i <= gapEndIdx; i++) {
-          const gn = charNode[i];
-          if (gn && gn.marks.some((mk) => mk.type === fontSizeType)) {
-            gapHasFontSize = true;
-            break;
-          }
-        }
-        if (gapHasFontSize) marksToRemove.push(fontSizeType);
+        const fmU = fm.some((mk) => mk.type === underlineType);
+        const fmE = fm.some((mk) => mk.type === emphasisType);
+        const fmC = fm.some((mk) => mk.type === citeType);
+        const lmU = lm.some((mk) => mk.type === underlineType);
+        const lmE = lm.some((mk) => mk.type === emphasisType);
+        const lmC = lm.some((mk) => mk.type === citeType);
+        const fmHl = fm.find((mk) => mk.type === highlightType);
+        const lmHl = lm.find((mk) => mk.type === highlightType);
+        const fmSh = fm.find((mk) => mk.type === shadingType);
+        const lmSh = lm.find((mk) => mk.type === shadingType);
         const fmFs = fm.find((mk) => mk.type === fontSizeType);
         const lmFs = lm.find((mk) => mk.type === fontSizeType);
-        if (fmFs && lmFs) {
-          const fHp = Number(fmFs.attrs['halfPoints'] ?? 22);
-          const lHp = Number(lmFs.attrs['halfPoints'] ?? 22);
-          marksToAdd.push(
-            fontSizeType.create({ halfPoints: Math.min(fHp, lHp) }),
-          );
+        const fmEpt = effectivePt(firstNode, node);
+        const lmEpt = effectivePt(lastNode, node);
+
+        const marksToAdd: Mark[] = [];
+        const marksToRemove: MarkType[] = [];
+
+        // Named-style target: same on both → that mark; mixed u/e →
+        // underline; otherwise → none (and strip any stale named-
+        // style mark from the gap).
+        let namedStyle: MarkType | null = null;
+        if (fmU && lmU) namedStyle = underlineType;
+        else if (fmE && lmE) namedStyle = emphasisType;
+        else if (fmC && lmC) namedStyle = citeType;
+        else if ((fmU && lmE) || (fmE && lmU)) namedStyle = underlineType;
+        if (namedStyle) {
+          // The schema's `excludes` on the three named-style marks
+          // strips the other two automatically when this one is
+          // added in the gap range, so we don't need explicit
+          // removeMark calls for them.
+          marksToAdd.push(namedStyle.create());
+        } else {
+          marksToRemove.push(underlineType, emphasisType, citeType);
+        }
+
+        // highlight / shading: bridge when BOTH bookends have it,
+        // first bookend's color wins on mismatch. Otherwise strip.
+        if (fmHl && lmHl) marksToAdd.push(highlightType.create(fmHl.attrs));
+        else marksToRemove.push(highlightType);
+        if (fmSh && lmSh) marksToAdd.push(shadingType.create(fmSh.attrs));
+        else marksToRemove.push(shadingType);
+
+        // Font size: pick the bookend with the smaller effective
+        // pt; that bookend's explicit mark (if any) becomes the
+        // target. Ties: prefer the implicit side unless both are
+        // explicit (in which case either works, halfPoints are the
+        // same).
+        let targetFs: Mark | null = null;
+        if (fmEpt < lmEpt) {
+          if (fmFs) targetFs = fmFs;
+        } else if (lmEpt < fmEpt) {
+          if (lmFs) targetFs = lmFs;
+        } else if (fmFs && lmFs) {
+          targetFs = fmFs;
+        }
+        if (targetFs) {
+          marksToAdd.push(fontSizeType.create(targetFs.attrs));
+        } else {
+          marksToRemove.push(fontSizeType);
         }
 
         adds.push({ from: gapFrom, to: gapTo, marksToAdd, marksToRemove });
@@ -2241,25 +2230,19 @@ export function fixFormattingGaps(): Command {
       return false;
     });
 
-    if (adds.length === 0) return false;
-    if (!dispatch) return true;
-
+    // Always build the tr so the no-op detection is accurate. Every
+    // matched gap queues both addMark and removeMark calls; PM's
+    // ops are idempotent for marks already-present (addMark) or
+    // already-absent (removeMark), so a gap whose marks already
+    // match the target produces no actual step. `tr.steps.length`
+    // is the truth.
     const tr = state.tr;
     for (const { from: f, to: t, marksToAdd, marksToRemove } of adds) {
-      // Removes first (clear the gap's stale font_size if present)
-      // then adds (named-style / highlight / shading bridge + any
-      // bookend-derived font_size). PM's removeMark is idempotent if
-      // the mark isn't present, so a gap with no font_size silently
-      // contributes no step here.
       for (const mt of marksToRemove) tr.removeMark(f, t, mt);
       for (const m of marksToAdd) tr.addMark(f, t, m);
     }
-    // Pre-empt empty-TR dispatches: most gaps don't actually carry a
-    // font_size mark to clear, so even though we queue a removeMark
-    // for every match the final TR may still be empty. Skipping the
-    // dispatch in that case keeps history clean and lets the return
-    // value continue to mean "did anything happen?"
     if (tr.steps.length === 0) return false;
+    if (!dispatch) return true;
     dispatch(tr);
     return true;
   };
@@ -3019,7 +3002,7 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'convertAnalyticsToTags':
       return convertAnalyticsToTags();
     case 'fixFormattingGaps':
-      return fixFormattingGaps();
+      return fixFormattingGaps(ctx.effectivePtForNode);
   }
 }
 

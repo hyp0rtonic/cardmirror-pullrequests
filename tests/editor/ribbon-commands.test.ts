@@ -2985,6 +2985,31 @@ describe('convertAnalyticsToTags', () => {
 // ---- fixFormattingGaps ----
 
 describe('fixFormattingGaps', () => {
+  // Mirror the production `effectivePtForNode` resolver from
+  // index.ts but with hardcoded defaults so tests don't depend on
+  // the live settings store.
+  const effectivePt = (
+    node: import('prosemirror-model').Node | null,
+    parent: import('prosemirror-model').Node,
+  ): number => {
+    const parentDefault: Record<string, number> = {
+      pocket: 26, hat: 22, block: 16, tag: 13, analytic: 13, undertag: 12,
+    };
+    const namedDefault: Record<string, number> = {
+      cite_mark: 13, underline_mark: 11, emphasis_mark: 11,
+      undertag_mark: 12, analytic_mark: 13,
+    };
+    const fallback = parentDefault[parent.type.name] ?? 11;
+    if (!node || !node.isText) return fallback;
+    const fs = node.marks.find((m) => m.type.name === 'font_size');
+    if (fs) return Number(fs.attrs['halfPoints']) / 2;
+    for (const m of node.marks) {
+      const d = namedDefault[m.type.name];
+      if (d != null) return d;
+    }
+    return fallback;
+  };
+
   function underline(text: string) {
     return schema.text(text, [schema.marks['underline_mark']!.create()]);
   }
@@ -3027,14 +3052,14 @@ describe('fixFormattingGaps', () => {
   it('is a no-op when no bridgeable gap exists', () => {
     const doc = makeDoc(p(schema.text('plain text here')));
     const state = EditorState.create({ doc, schema });
-    expect(fixFormattingGaps()(state, undefined)).toBe(false);
+    expect(fixFormattingGaps(effectivePt)(state, undefined)).toBe(false);
   });
 
   it('bridges underline_mark across a single-space gap', () => {
     const doc = makeDoc(p(underline('foo'), schema.text(' '), underline('bar')));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(next).not.toBeNull();
     const chars = marksByChar(next!.doc);
     // every char including the space carries underline_mark.
@@ -3047,7 +3072,7 @@ describe('fixFormattingGaps', () => {
     const doc = makeDoc(p(emphasis('alpha'), schema.text(', '), emphasis('beta')));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     const chars = marksByChar(next!.doc);
     for (const c of chars) {
       expect(c.marks.has('emphasis_mark')).toBe(true);
@@ -3066,7 +3091,7 @@ describe('fixFormattingGaps', () => {
     );
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     const chars = marksByChar(next!.doc);
     for (const c of chars) {
       expect(c.marks.has('cite_mark')).toBe(true);
@@ -3109,7 +3134,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(colorAt(next!.doc, 'highlight', 4)).toBe('yellow');
     const chars = marksByChar(next!.doc);
     for (const c of chars) expect(c.marks.has('highlight')).toBe(true);
@@ -3124,29 +3149,71 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(colorAt(next!.doc, 'shading', 4)).toBe('C0C0C0');
     expect(colorAt(next!.doc, 'shading', 5)).toBe('C0C0C0');
     const chars = marksByChar(next!.doc);
     for (const c of chars) expect(c.marks.has('shading')).toBe(true);
   });
 
-  it('does NOT bridge highlight when neither bookend has a qualifying named-style mark', () => {
-    // Both bookends carry only highlight — no underline / emphasis /
-    // cite. With the gating change the gap is not operated on at all.
+  it('bridges highlight even when neither bookend carries a named-style mark', () => {
+    // Under the unified intersection rule, every shared mark on the
+    // bookends gets bridged regardless of named-style — there's no
+    // qualifying gate anymore. Two highlight-only bookends → gap
+    // gets highlight.
     const doc = makeDoc(p(
       withHighlight('aaa', 'yellow'),
       schema.text(' '),
       withHighlight('bbb', 'yellow'),
     ));
     const state = EditorState.create({ doc, schema });
-    expect(fixFormattingGaps()(state, undefined)).toBe(false);
+    let next: EditorState | null = null;
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
+    expect(next).not.toBeNull();
+    expect(colorAt(next!.doc, 'highlight', 4)).toBe('yellow');
+  });
+
+  it('strips a stale named-style mark from a gap whose bookends do not share it', () => {
+    // Cleanup behavior: bookends are plain text, but the gap carries
+    // a stale underline_mark (perhaps from earlier editing). The new
+    // unified rule strips it.
+    const doc = makeDoc(p(
+      schema.text('foo'),
+      schema.text(' ', [schema.marks['underline_mark']!.create()]),
+      schema.text('bar'),
+    ));
+    const state = EditorState.create({ doc, schema });
+    let next: EditorState | null = null;
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
+    expect(next).not.toBeNull();
+    const chars = marksByChar(next!.doc);
+    expect(chars[3]!.marks.has('underline_mark')).toBe(false);
+  });
+
+  it('strips highlight from a gap whose bookends do not share it', () => {
+    const u = schema.marks['underline_mark']!.create();
+    // Bookends both underlined, but only the left bookend has
+    // highlight. The gap (also highlighted) should lose its
+    // highlight since right bookend doesn't have it.
+    const doc = makeDoc(p(
+      schema.text('foo', [u, schema.marks['highlight']!.create({ color: 'yellow' })]),
+      schema.text(' ', [schema.marks['highlight']!.create({ color: 'yellow' })]),
+      schema.text('bar', [u]),
+    ));
+    const state = EditorState.create({ doc, schema });
+    let next: EditorState | null = null;
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
+    const chars = marksByChar(next!.doc);
+    // Gap (index 3) should NOT have highlight anymore; should still
+    // have underline (bridged from both bookends).
+    expect(chars[3]!.marks.has('highlight')).toBe(false);
+    expect(chars[3]!.marks.has('underline_mark')).toBe(true);
   });
 
   it('does not bridge when only one bookend has the mark', () => {
     const doc = makeDoc(p(underline('foo'), schema.text(' bar')));
     const state = EditorState.create({ doc, schema });
-    expect(fixFormattingGaps()(state, undefined)).toBe(false);
+    expect(fixFormattingGaps(effectivePt)(state, undefined)).toBe(false);
   });
 
   it('does not cross paragraph breaks', () => {
@@ -3155,7 +3222,7 @@ describe('fixFormattingGaps', () => {
       p(underline('bar')),
     );
     const state = EditorState.create({ doc, schema });
-    expect(fixFormattingGaps()(state, undefined)).toBe(false);
+    expect(fixFormattingGaps(effectivePt)(state, undefined)).toBe(false);
   });
 
   it('respects selection scope', () => {
@@ -3171,7 +3238,7 @@ describe('fixFormattingGaps', () => {
       state0.tr.setSelection(TextSelection.create(state0.doc, selStart, selEnd)),
     );
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     // Para1 bridged; para2 untouched.
     const para1Chars = marksByChar(next!.doc.child(0));
     for (const c of para1Chars) expect(c.marks.has('underline_mark')).toBe(true);
@@ -3198,7 +3265,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     const chars = marksByChar(next!.doc);
     for (const c of chars) {
       expect(c.marks.has('underline_mark')).toBe(true);
@@ -3217,7 +3284,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(next).not.toBeNull();
     // 'foo' keeps underline_mark, 'bar' keeps emphasis_mark, and the
     // space gains underline_mark.
@@ -3241,7 +3308,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     const chars = marksByChar(next!.doc);
     // Gap is at index 3 (after 'foo').
     expect(chars[3]!.marks.has('underline_mark')).toBe(true);
@@ -3296,7 +3363,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(next).not.toBeNull();
     // Char index 3 = the space.
     expect(fontSizeAtChar(next!.doc, 3)).toBeNull();
@@ -3314,7 +3381,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     // Gap font_size cleared (was 16, now null).
     expect(fontSizeAtChar(next!.doc, 3)).toBeNull();
     // First bookend keeps its 22.
@@ -3335,7 +3402,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(fontSizeAtChar(next!.doc, 0)).toBe(22);
     expect(fontSizeAtChar(next!.doc, 3)).toBe(16);
     expect(fontSizeAtChar(next!.doc, 4)).toBe(16);
@@ -3356,7 +3423,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     // 'foo' stays yellow, 'bar' stays green, gap gets yellow (first
     // bookend wins).
     let fooColor: string | null = null;
@@ -3398,7 +3465,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(next).not.toBeNull();
     const chars = marksByChar(next!.doc);
     // Positions: foo(0..2), gap1(3), a(4), gap2(5), bar(6..8).
@@ -3420,7 +3487,7 @@ describe('fixFormattingGaps', () => {
     ));
     const state = EditorState.create({ doc, schema });
     let next: EditorState | null = null;
-    fixFormattingGaps()(state, (tr) => { next = state.apply(tr); });
+    fixFormattingGaps(effectivePt)(state, (tr) => { next = state.apply(tr); });
     expect(next).not.toBeNull();
     // The space (char index 3) should have gained underline_mark.
     const chars = marksByChar(next!.doc);
@@ -3439,6 +3506,6 @@ describe('fixFormattingGaps', () => {
       schema.text('bar', [schema.marks['font_size']!.create({ halfPoints: 16 })]),
     ));
     const state = EditorState.create({ doc, schema });
-    expect(fixFormattingGaps()(state, undefined)).toBe(false);
+    expect(fixFormattingGaps(effectivePt)(state, undefined)).toBe(false);
   });
 });
