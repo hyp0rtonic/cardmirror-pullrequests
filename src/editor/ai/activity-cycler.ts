@@ -1,0 +1,61 @@
+/**
+ * Cycling activity-text "stage" used by the comments-column
+ * Thinking… placeholder and the cite-creator tooltip.
+ *
+ * The stage is a small fixed-height container. At any time it
+ * holds one line "at rest" (the current activity). On `cycleActivityText`
+ * we insert a new line at the bottom (translated 100% down, opacity 0),
+ * shift it into the rest position, and simultaneously slide the
+ * old line out the top (translate -100%, opacity 0). When the old
+ * line's transition finishes it's removed.
+ */
+
+/** Build a fresh stage element pre-populated with one resting line. */
+export function makeActivityStage(initialText: string): HTMLSpanElement {
+  const stage = document.createElement('span');
+  stage.className = 'pmd-activity-stage';
+  const line = document.createElement('span');
+  line.className = 'pmd-activity-line pmd-activity-rest';
+  line.textContent = initialText;
+  stage.appendChild(line);
+  return stage;
+}
+
+/** Swap the stage's current text for `newText` with an animated
+ *  scroll-up transition. Safe to call repeatedly — each call
+ *  cleans up the previous outgoing line before the next starts.
+ *  No-op when `newText` is the same as the current line. */
+export function cycleActivityText(stage: HTMLElement, newText: string): void {
+  const current = stage.querySelector<HTMLElement>(
+    '.pmd-activity-line.pmd-activity-rest',
+  );
+  if (current && current.textContent === newText) return;
+
+  const next = document.createElement('span');
+  next.className = 'pmd-activity-line pmd-activity-in';
+  next.textContent = newText;
+  stage.appendChild(next);
+  // Force a layout read so the `.pmd-activity-in` (translated down,
+  // opacity 0) state actually commits before we ask the browser to
+  // animate to the rest state. Without this read the browser may
+  // collapse the two style changes into a single jump.
+  void next.getBoundingClientRect();
+  next.classList.remove('pmd-activity-in');
+  next.classList.add('pmd-activity-rest');
+
+  if (current) {
+    current.classList.remove('pmd-activity-rest');
+    current.classList.add('pmd-activity-out');
+    let removed = false;
+    const remove = (): void => {
+      if (removed) return;
+      removed = true;
+      current.remove();
+    };
+    current.addEventListener('transitionend', remove, { once: true });
+    // Belt-and-suspenders: drop the element after the transition
+    // duration even if `transitionend` doesn't fire (e.g. the
+    // browser threw the tab into background mid-transition).
+    window.setTimeout(remove, 600);
+  }
+}

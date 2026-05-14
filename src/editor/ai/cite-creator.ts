@@ -28,6 +28,7 @@ import {
   pickRandomActivity,
   personalizeActivity,
 } from './clod.js';
+import { makeActivityStage, cycleActivityText } from './activity-cycler.js';
 import { getAiPersona } from '../comments-ui.js';
 import { showToast } from '../toast.js';
 
@@ -238,12 +239,14 @@ class CiteTooltip {
     const left = anchor.left + window.scrollX;
     el.style.top = `${top}px`;
     el.style.left = `${left}px`;
-    el.textContent = this.currentText();
+    el.appendChild(makeActivityStage(this.currentText()));
     document.body.appendChild(el);
     this.el = el;
 
     this.ticker = window.setInterval(() => {
-      if (this.el) this.el.textContent = this.currentText();
+      if (!this.el) return;
+      const stage = this.el.querySelector<HTMLElement>('.pmd-activity-stage');
+      if (stage) cycleActivityText(stage, this.currentText());
     }, ACTIVITY_TICK_MS);
   }
 

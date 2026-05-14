@@ -2884,6 +2884,44 @@ body.pmd-nav-resize-active {
   display: none !important;
 }
 
+/* ---------------------------------------------- Activity cycler */
+
+/* Small fixed-height container that holds one resting line at a
+   time. New activity slides up from the bottom while the old one
+   slides off the top. Used by both the Thinking… placeholder in
+   the comments column and the cite-creator tooltip. */
+.pmd-activity-stage {
+  position: relative;
+  display: inline-block;
+  vertical-align: bottom;
+  overflow: hidden;
+  height: 1.3em;
+  line-height: 1.3em;
+}
+.pmd-activity-line {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: transform 280ms ease-out, opacity 280ms ease-out;
+}
+.pmd-activity-line.pmd-activity-rest {
+  transform: translateY(0);
+  opacity: 1;
+}
+.pmd-activity-line.pmd-activity-in {
+  transform: translateY(100%);
+  opacity: 0;
+}
+.pmd-activity-line.pmd-activity-out {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
 /* ---------------------------------------------- AI cite tooltip */
 
 /* Pinned near the user's selection while the cite-creator is

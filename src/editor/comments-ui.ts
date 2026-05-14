@@ -35,6 +35,7 @@ import {
   PRONOUN_PRESETS,
   type AiPersona,
 } from './ai/clod.js';
+import { makeActivityStage, cycleActivityText } from './ai/activity-cycler.js';
 import { showToast } from './toast.js';
 
 /** Resolve the configured AI persona (name + pronouns) from
@@ -471,14 +472,19 @@ export class CommentsColumn {
     block.appendChild(header);
     const body = document.createElement('div');
     body.className = 'pmd-comment-body';
+    // Wrap the activity text in a paragraph for layout parity with
+    // a real comment body. The stage element provides its own
+    // fixed-height clipping so the slide-in/out animation has room
+    // to play without pushing surrounding content around.
     const line = document.createElement('p');
     line.className = 'pmd-comment-ai-thinking-dots';
-    line.textContent = this.inFlightActivityText();
+    const stage = makeActivityStage(this.inFlightActivityText());
+    line.appendChild(stage);
     body.appendChild(line);
     block.appendChild(body);
     // Tag with `data-activity-target` so the activity-cycling tick
-    // can swap the text without re-rendering the whole column.
-    line.dataset['activityTarget'] = '1';
+    // can find this stage without re-rendering the whole column.
+    stage.dataset['activityTarget'] = '1';
     return block;
   }
 
@@ -501,8 +507,10 @@ export class CommentsColumn {
         this.stopActivityTicker();
         return;
       }
-      const targets = this.root.querySelectorAll<HTMLElement>('[data-activity-target]');
-      for (const el of targets) el.textContent = this.inFlightActivityText();
+      const stages = this.root.querySelectorAll<HTMLElement>('[data-activity-target]');
+      for (const stage of stages) {
+        cycleActivityText(stage, this.inFlightActivityText());
+      }
     };
     this.activityTimer = window.setInterval(tick, ACTIVITY_TICK_MS);
   }
