@@ -146,6 +146,11 @@ export class CommentsColumn {
     for (const l of layouts) {
       const actualTop = Math.max(l.desiredTop, cursor);
       l.card.style.top = `${actualTop}px`;
+      // `pmd-laid-out` flips visibility to visible — until this
+      // point the card was hidden so the brief top:0 default
+      // before measurement didn't flash a visible card at the top
+      // of the column on every doc edit.
+      l.card.classList.add('pmd-laid-out');
       cursor = actualTop + l.height + minGap;
     }
     // Ensure the column itself is tall enough to contain the last

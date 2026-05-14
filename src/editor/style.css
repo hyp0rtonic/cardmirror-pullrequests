@@ -2595,8 +2595,12 @@ body.pmd-nav-resize-active {
   left: 0.6rem;
   right: 0.6rem;
   /* `top` is set inline by `CommentsColumn.layoutCards` after each
-     render. Default 0 so the very first paint doesn't pile cards
-     at the same spot before measurement runs. */
+     render. No CSS transition — every render rebuilds card DOM
+     from scratch (top defaults to 0 until the JS measurement
+     pass runs), so a transition produces an animated fly-in from
+     the top on every doc edit. We accept the one-frame flash of
+     top:0 before the rAF measurement writes the final top.
+     `visibility: hidden` until that pass runs hides the flash. */
   top: 0;
   background: var(--pmd-c-bg, #fff);
   border: 1px solid var(--pmd-c-border-soft, rgba(0, 0, 0, 0.12));
@@ -2606,9 +2610,10 @@ body.pmd-nav-resize-active {
   flex-direction: column;
   gap: 0.4rem;
   cursor: pointer;
-  /* Smooth out the layout pass so cards animate to their new
-     anchored positions on doc edits rather than jumping. */
-  transition: top 0.12s ease-out;
+  visibility: hidden;
+}
+.pmd-comment-thread.pmd-laid-out {
+  visibility: visible;
 }
 .pmd-comment-thread:hover {
   border-color: var(--pmd-c-border, #888);
