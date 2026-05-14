@@ -15,6 +15,7 @@ import { baseKeymap } from 'prosemirror-commands';
 import { Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocx, toDocx } from '../index.js';
+import { transformForExport } from '../export/transform-for-export.js';
 import { NavigationPanel } from './nav-panel.js';
 import { openSettings } from './settings-ui.js';
 import { openReference } from './reference-ui.js';
@@ -1130,7 +1131,13 @@ exportBtn.addEventListener('click', async () => {
   if (!choice) return;
 
   try {
-    const bytes = await toDocx(currentDoc);
+    const exportDocNode = transformForExport(currentDoc, {
+      includeComments: choice.includeComments,
+      includeAnalytics: choice.includeAnalytics,
+      includeUndertags: choice.includeUndertags,
+      readMode: choice.readMode,
+    });
+    const bytes = await toDocx(exportDocNode);
     // Copy into a regular ArrayBuffer for Blob's BlobPart contract.
     const ab = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(ab).set(bytes);

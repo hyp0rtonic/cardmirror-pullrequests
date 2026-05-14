@@ -2606,9 +2606,6 @@ body.pmd-nav-resize-active {
   outline-offset: -1px;
 }
 
-/* Options container — empty for now, so it collapses out of the
-   layout. Future option rows will be flex children with their own
-   margin / padding rules. */
 .pmd-save-as-options:empty {
   display: none;
 }
@@ -2616,7 +2613,40 @@ body.pmd-nav-resize-active {
 .pmd-save-as-options {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.25rem;
+}
+
+.pmd-save-as-options-heading {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pmd-c-text-muted);
+  margin-bottom: 0.1rem;
+}
+
+.pmd-save-as-option {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pmd-save-as-option input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.pmd-save-as-option-disabled {
+  color: var(--pmd-c-text-muted);
+  cursor: not-allowed;
+}
+
+.pmd-save-as-option-disabled input[type="checkbox"] {
+  cursor: not-allowed;
 }
 
 .pmd-save-as-footer {

@@ -1806,6 +1806,44 @@ inside the protected range. Doubles listed before singles so the
 longer match wins on overlap, matching the rest of the file's
 ordering convention.
 
+## 2026-05-13: Save As — inclusion checkboxes + Read Mode export
+
+The Save As dialog gains four checkboxes governing what survives
+into the exported docx:
+
+  - **Include comments** — placeholder; no-op until comments import
+    lands (planned next step). Kept in the UI so the dialog shape
+    doesn't shift between releases.
+  - **Include analytics** — when unchecked, doc-level
+    `analytic_unit`s drop wholesale and in-card `analytic` children
+    drop. The owning card survives unless empty.
+  - **Include undertags** — when unchecked, `undertag` nodes drop
+    everywhere (doc-level, inside cards, inside analytic_units).
+  - **Read mode** — mutually exclusive with the three above. Mirrors
+    what the user sees with read mode enabled in the editor: keeps
+    headings (pocket / hat / block) and structural tag / analytic
+    paragraphs whole; filters `cite_paragraph` to text carrying
+    `cite_mark`; filters `card_body` / `paragraph` / `undertag` to
+    text carrying `highlight`; drops tables. Containers (card /
+    analytic_unit) survive as long as at least one filtered child
+    remains.
+
+Mutual exclusion: ticking Read Mode unchecks + disables the three
+include-* boxes; ticking any of them unticks Read Mode and re-
+enables them. The result object's three include-* flags are forced
+to `false` whenever Read Mode is on, so any downstream consumer
+sees a self-consistent state.
+
+Pipeline shape: a new `transformForExport(doc, opts)` in
+`src/export/transform-for-export.ts` runs BEFORE `toDocx`. The
+exporter itself stays option-agnostic — strip / filter logic lives
+in one focused module that can grow as we add features.
+
+Read-mode keep/hide rules deliberately mirror the runtime
+`read-mode-plugin.ts` keep/hide rules so "save what you see"
+holds. The unit tests in `tests/export/transform-for-export.test.ts`
+lock the parity.
+
 ## 2026-05-13: In-app Save As dialog (replaces `window.prompt` fallback)
 
 The export-button flow previously used `window.prompt` whenever the
