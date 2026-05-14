@@ -652,7 +652,17 @@ function parseRPr(rPr: XmlNode): ParsedRPr {
         }
         break;
       }
-      // Other rPr props (lang, vertAlign, etc.) — drop.
+      case 'w:vertAlign': {
+        const v = a['w:val'];
+        if (v === 'superscript') {
+          marks.push(schema.marks['superscript']!.create());
+        } else if (v === 'subscript') {
+          marks.push(schema.marks['subscript']!.create());
+        }
+        // 'baseline' (the explicit normal) and unknown values: drop.
+        break;
+      }
+      // Other rPr props (lang, etc.) — drop.
     }
   }
 

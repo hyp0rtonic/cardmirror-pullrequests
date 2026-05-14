@@ -2799,6 +2799,8 @@ export type RibbonCommandId =
   | StructuralRibbonCommandId
   | 'toggleBold'
   | 'toggleItalic'
+  | 'toggleSuperscript'
+  | 'toggleSubscript'
   | 'applyCite'
   | 'applyUnderline'
   | 'applyEmphasis'
@@ -2850,6 +2852,8 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   ...STRUCTURAL_RIBBON_COMMAND_IDS,
   'toggleBold',
   'toggleItalic',
+  'toggleSuperscript',
+  'toggleSubscript',
   'applyCite',
   'applyUnderline',
   'applyEmphasis',
@@ -2898,6 +2902,8 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   setUndertag: 'Apply Undertag style',
   toggleBold: 'Bold',
   toggleItalic: 'Italic',
+  toggleSuperscript: 'Superscript',
+  toggleSubscript: 'Subscript',
   applyCite: 'Apply Cite style',
   applyUnderline: 'Toggle Underline',
   applyEmphasis: 'Apply Emphasis style',
@@ -2954,6 +2960,8 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   setUndertag: 'Mod-F8',
   toggleBold: 'Mod-b',
   toggleItalic: 'Mod-i',
+  toggleSuperscript: 'Mod-Shift-=',
+  toggleSubscript: 'Mod-=',
   applyCite: 'F8',
   applyUnderline: ['F9', 'Mod-u'],
   applyEmphasis: 'F10',
@@ -3088,6 +3096,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'setUndertag': return setUndertag();
     case 'toggleBold': return shadowAwareToggleMark(schema.marks['bold']!);
     case 'toggleItalic': return shadowAwareToggleMark(schema.marks['italic']!);
+    case 'toggleSuperscript': return shadowAwareToggleMark(schema.marks['superscript']!);
+    case 'toggleSubscript': return shadowAwareToggleMark(schema.marks['subscript']!);
     case 'applyCite': return applyCite();
     case 'applyUnderline': return applyUnderline(ctx.clearFormattingOnNamedStyleToggleOff);
     case 'applyEmphasis': return applyEmphasis();

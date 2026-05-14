@@ -456,6 +456,11 @@ class DocxExporter {
     if (marks.some((m) => m.type.name === 'strikethrough')) {
       props.push('<w:strike/>');
     }
+    if (marks.some((m) => m.type.name === 'superscript')) {
+      props.push(emptyEl('w:vertAlign', { 'w:val': 'superscript' }));
+    } else if (marks.some((m) => m.type.name === 'subscript')) {
+      props.push(emptyEl('w:vertAlign', { 'w:val': 'subscript' }));
+    }
 
     // undertag_mark style implies italic display; emit italic for parity
     // (per DECISIONS.md: dual-encoding precedent set by underline_mark).

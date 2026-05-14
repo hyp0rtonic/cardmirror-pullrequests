@@ -258,6 +258,46 @@ describe('importer — marks from rPr', () => {
     expect(marks.some((m) => m.type.name === 'italic')).toBe(true);
   });
 
+  it('extracts superscript from <w:vertAlign w:val="superscript"/>', () => {
+    const marks = importInline('<w:vertAlign w:val="superscript"/>');
+    expect(marks.some((m) => m.type.name === 'superscript')).toBe(true);
+  });
+
+  it('extracts subscript from <w:vertAlign w:val="subscript"/>', () => {
+    const marks = importInline('<w:vertAlign w:val="subscript"/>');
+    expect(marks.some((m) => m.type.name === 'subscript')).toBe(true);
+  });
+
+  it('ignores <w:vertAlign w:val="baseline"/> (the normal default)', () => {
+    const marks = importInline('<w:vertAlign w:val="baseline"/>');
+    expect(marks.some((m) => m.type.name === 'superscript')).toBe(false);
+    expect(marks.some((m) => m.type.name === 'subscript')).toBe(false);
+  });
+
+  it('round-trips superscript and subscript through the exporter', () => {
+    const xml = bodyXml(`
+      <w:p>
+        <w:r><w:t>H</w:t></w:r>
+        <w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t>2</w:t></w:r>
+        <w:r><w:t>O, E=mc</w:t></w:r>
+        <w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>2</w:t></w:r>
+      </w:p>
+    `);
+    const original = importDoc(xml);
+    const { documentXml } = exportDoc(original);
+    expect(documentXml).toContain('<w:vertAlign w:val="subscript"/>');
+    expect(documentXml).toContain('<w:vertAlign w:val="superscript"/>');
+    const re = importDoc(documentXml);
+    let subFound = false, supFound = false;
+    re.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((m) => m.type.name === 'subscript') && node.text === '2') subFound = true;
+      if (node.marks.some((m) => m.type.name === 'superscript') && node.text === '2') supFound = true;
+    });
+    expect(subFound).toBe(true);
+    expect(supFound).toBe(true);
+  });
+
   it('extracts highlight color', () => {
     const marks = importInline('<w:highlight w:val="yellow"/>');
     const hl = marks.find((m) => m.type.name === 'highlight');

@@ -32,7 +32,7 @@ const GROUPS: ShortcutGroup[] = [
   },
   {
     title: 'Inline formatting',
-    commands: ['toggleBold', 'toggleItalic'],
+    commands: ['toggleBold', 'toggleItalic', 'toggleSuperscript', 'toggleSubscript'],
   },
   {
     title: 'Condense',

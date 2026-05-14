@@ -102,7 +102,10 @@ describe('mark fidelity — real docs', () => {
       it('preserves direct-formatting marks through round-trip', () => {
         const before = countMarks(imported);
         const after = countMarks(roundTripped);
-        for (const name of ['highlight', 'font_color', 'font_size', 'shading', 'bold', 'italic']) {
+        for (const name of [
+          'highlight', 'font_color', 'font_size', 'shading',
+          'bold', 'italic', 'superscript', 'subscript',
+        ]) {
           expect(after[name] ?? 0, `${name} count must survive round-trip`).toBe(before[name] ?? 0);
         }
       });

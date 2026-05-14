@@ -1768,3 +1768,29 @@ emitting `<w:noBreakHyphen/>` / `<w:softHyphen/>` between the surrounding
 Round-trip is symmetric: a doc whose only hyphen content is U+2011 /
 U+00AD passes through editor → docx → editor with identical text
 content and identical OOXML hyphen-element placement.
+
+## 2026-05-13: Superscript / subscript marks
+
+Two new direct-formatting marks: `superscript` ↔
+`<w:vertAlign w:val="superscript"/>` and `subscript` ↔
+`<w:vertAlign w:val="subscript"/>`. Separate marks (not one mark with
+a value attr) so the ProseMirror lifecycle handles toggle and mutual
+exclusion natively — each declares `excludes: 'superscript subscript'`
+so applying one strips the other automatically.
+
+Renders as native `<sup>` / `<sub>`, letting the browser handle the
+baseline shift and ~0.83em font scaling without per-mark CSS. Both
+are `inclusive: true`, matching bold / italic / strikethrough: typing
+adjacent to a run carrying the mark inherits it.
+
+Two new ribbon commands — `toggleSuperscript` and `toggleSubscript`
+— wired through the standard `shadowAwareToggleMark` so the
+shadow-selection (`getOperatingRanges`) path applies uniformly.
+Defaults follow Word: `Mod-Shift-=` for superscript, `Mod-=` for
+subscript. Listed in the reference cheat sheet under "Inline
+formatting" alongside bold / italic.
+
+Importer reads `<w:vertAlign w:val="…"/>` inside `<w:rPr>` (the line
+that previously dropped `vertAlign` with a `// drop` comment).
+Exporter emits the right `<w:vertAlign/>` whenever either mark is
+present; the `excludes` schema guarantee means at most one will be.

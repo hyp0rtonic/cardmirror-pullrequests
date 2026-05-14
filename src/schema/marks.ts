@@ -14,6 +14,8 @@
  * 2. Direct-formatting marks — round-trip to OOXML run properties:
  *    - bold      ↔ <w:b/>
  *    - italic    ↔ <w:i/> + <w:iCs/>
+ *    - superscript ↔ <w:vertAlign w:val="superscript"/>
+ *    - subscript ↔ <w:vertAlign w:val="subscript"/>
  *    - link      ↔ <w:hyperlink>...</w:hyperlink>  (URL in attrs)
  *    - highlight ↔ <w:highlight w:val="..."/>      (named color)
  *    - font_color ↔ <w:color w:val="..."/>         (RGB hex)
@@ -184,6 +186,34 @@ export const marks: { [name: string]: MarkSpec } = {
       { style: 'text-decoration', getAttrs: (v) => /line-through/.test(String(v)) && null },
     ],
     toDOM: () => ['s', 0],
+  },
+
+  /**
+   * Vertical alignment — `<w:vertAlign w:val="superscript|subscript"/>`
+   * in OOXML. Two separate marks so the natural ProseMirror mark
+   * lifecycle (toggle, exclude) handles mutual exclusion; a single
+   * baseline of normal is the absence of either mark. Renders as
+   * native `<sup>` / `<sub>` so browsers handle the baseline shift
+   * and ~0.83em font scaling without per-mark CSS.
+   */
+  superscript: {
+    inclusive: true,
+    excludes: 'superscript subscript',
+    parseDOM: [
+      { tag: 'sup' },
+      { style: 'vertical-align', getAttrs: (v) => /super/.test(String(v)) && null },
+    ],
+    toDOM: () => ['sup', 0],
+  },
+
+  subscript: {
+    inclusive: true,
+    excludes: 'superscript subscript',
+    parseDOM: [
+      { tag: 'sub' },
+      { style: 'vertical-align', getAttrs: (v) => /sub/.test(String(v)) && null },
+    ],
+    toDOM: () => ['sub', 0],
   },
 
   link: {
