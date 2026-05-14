@@ -88,19 +88,21 @@ Important:
 - Do not add any information to the citation that was not included in the submission.
 - If the title or publication or names or qualifications are in another language, translate them to English.
 
-Respond with VALID JSON ONLY — no prose around it, no \`\`\`json fences. Shape:
-{
-  "cite": "<the full reformatted citation, exactly as you'd otherwise have returned it>",
-  "tokens": ["<verbatim substring(s) of 'cite' to highlight in cite style>"]
-}
+Respond using the delimited block format below — no JSON, no quoting, no escaping. Quotes inside the cite (around the title, for instance) just appear literally; the parser splits on the markers, not the punctuation.
 
-The "tokens" array lists every substring that should be highlighted with the F8 cite mark. The highlighted portion is the LASTNAME(s) + SHORTDATE of the leading author block; firstnames stay unmarked.
+[[CITE]]
+<the full reformatted citation, exactly as you'd otherwise have returned it>
+[[TOKENS]]
+<one token per line>
+[[END]]
 
-  - One author ("Michael Townsend 25"): tokens = ["Townsend 25"]
-  - Two authors ("Laura Weiss & John Bresnahan 3/26"): tokens = ["Weiss & ", "Bresnahan 3/26"]
-  - Three+ authors ("Carla Norrlöf et al. 24"): tokens = ["Norrlöf et al. 24"]
+The TOKENS section lists every substring that should be highlighted with the F8 cite mark. The highlighted portion is the LASTNAME(s) + SHORTDATE of the leading author block; firstnames stay unmarked.
 
-For the two-author case, the first token ends with "& " (ampersand + trailing space) and the second token starts with the second lastname — the firstname between them stays unmarked. For "et al." cases the whole "Lastname et al. Date" is one contiguous token. Each entry MUST be a verbatim substring of "cite" so the editor can locate it.`;
+  - One author ("Michael Townsend 25"): TOKENS = "Townsend 25"
+  - Two authors ("Laura Weiss & John Bresnahan 3/26"): TOKENS = "Weiss & " then "Bresnahan 3/26" on the next line
+  - Three+ authors ("Carla Norrlöf et al. 24"): TOKENS = "Norrlöf et al. 24"
+
+For the two-author case, the first token ends with "& " (ampersand + trailing space) and the second token starts with the second lastname — the firstname between them stays unmarked. For "et al." cases the whole "Lastname et al. Date" is one contiguous token. Each token MUST be a verbatim substring of the cite so the editor can locate it.`;
 
 export interface AiCiteResult {
   cite: string;
@@ -118,39 +120,52 @@ export function resolveCitePrompt(template: string, now: Date = new Date()): str
   return template.split(DATE_PLACEHOLDER).join(today);
 }
 
-/** Parse the model's JSON reply. Throws on any shape we can't
- *  use. Strips a leading ```json fence if the model adds one. */
+/** Parse the model's delimited-block reply. The format dodges all
+ *  the JSON escape edge cases — cites with embedded quotes,
+ *  curly punctuation, etc. just appear literally between the
+ *  section markers. Throws on missing sections or empty cite. */
 export function parseCiteResponse(text: string): AiCiteResult {
-  let body = text.trim();
-  // Some models like to wrap JSON in ```json fences even when asked
-  // not to. Peel them off if present.
-  if (body.startsWith('```')) {
-    body = body.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
-    body = body.trim();
+  // Tolerate stray prose / code fences around the block by
+  // anchoring on the marker words. Markers are case-insensitive
+  // and a leading hash / dash / etc. before the section header
+  // is ignored, in case the model decorates them slightly.
+  const citeIdx = findMarker(text, 'CITE');
+  const tokensIdx = findMarker(text, 'TOKENS');
+  const endIdx = findMarker(text, 'END');
+  if (citeIdx === -1 || tokensIdx === -1 || tokensIdx < citeIdx) {
+    throw new Error("Cite response missing the [[CITE]] / [[TOKENS]] markers.");
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body);
-  } catch (e) {
-    throw new Error(
-      `Couldn't parse cite JSON: ${e instanceof Error ? e.message : String(e)}`,
-    );
+  const citeBody = text
+    .slice(citeIdx, tokensIdx)
+    .replace(/^[^\n]*\n/, '') // drop the [[CITE]] header line itself
+    .trim();
+  if (!citeBody) {
+    throw new Error('Cite response had an empty cite section.');
   }
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Cite response was not a JSON object.');
-  }
-  const obj = parsed as { cite?: unknown; tokens?: unknown };
-  if (typeof obj.cite !== 'string' || !obj.cite.trim()) {
-    throw new Error('Cite response missing "cite" string field.');
-  }
-  if (!Array.isArray(obj.tokens)) {
-    throw new Error('Cite response missing "tokens" array.');
-  }
-  const tokens: string[] = [];
-  for (const t of obj.tokens) {
-    if (typeof t === 'string' && t.trim()) tokens.push(t);
-  }
-  return { cite: obj.cite, tokens };
+  const tokensSliceEnd = endIdx > tokensIdx ? endIdx : text.length;
+  const tokensBody = text
+    .slice(tokensIdx, tokensSliceEnd)
+    .replace(/^[^\n]*\n/, '') // drop the [[TOKENS]] header line
+    .trim();
+  // One token per line. Skip blanks and any stray "[[END]]" line
+  // that snuck into the tokens block. Do NOT trim trailing
+  // whitespace — the two-author convention has the first token
+  // end with "& " (trailing space) and the parser must preserve
+  // it so the substring match in the editor still works.
+  const tokens = tokensBody
+    .split(/\r?\n/)
+    .filter((s) => s.trim().length > 0 && !/\[\[\s*END\s*\]\]/i.test(s));
+  return { cite: citeBody, tokens };
+}
+
+/** Locate the FIRST occurrence of a section marker like `[[CITE]]`.
+ *  Tolerates single brackets and surrounding whitespace just in
+ *  case the model wobbles on the exact punctuation. Returns -1
+ *  when not found. */
+function findMarker(text: string, name: string): number {
+  const re = new RegExp(`\\[\\[\\s*${name}\\s*\\]\\]`, 'i');
+  const m = re.exec(text);
+  return m ? m.index : -1;
 }
 
 /** Apply the cite to the editor: replace [from, to] with `cite`

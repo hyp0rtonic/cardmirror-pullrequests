@@ -198,33 +198,62 @@ describe('hasAiMention', () => {
 });
 
 describe('cite-creator response parsing', () => {
-  it('parses a clean JSON reply with cite + tokens', async () => {
+  it('parses a clean delimited-block reply', async () => {
     const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
-    const text = JSON.stringify({
-      cite: 'Smith 24 (UCLA), "Title," Foreign Affairs, 5-12-2024, https://x, accessed 5-14-2026.',
-      tokens: ['Smith 24'],
-    });
+    const text = [
+      '[[CITE]]',
+      'Michael Townsend 25, ..., "Edgy Investors Waiting...," Schwab, 01/16/2025, https://x',
+      '[[TOKENS]]',
+      'Townsend 25',
+      '[[END]]',
+    ].join('\n');
     const out = parseCiteResponse(text);
-    expect(out.cite).toContain('Smith 24');
-    expect(out.tokens).toEqual(['Smith 24']);
+    expect(out.cite).toContain('Townsend 25');
+    expect(out.cite).toContain('"Edgy Investors Waiting...,"');
+    expect(out.tokens).toEqual(['Townsend 25']);
   });
 
-  it('strips a fenced ```json wrapper if the model adds one', async () => {
+  it('handles quotes inside the cite without any escaping required', async () => {
     const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
-    const text = '```json\n{"cite":"Smith 24, ...","tokens":["Smith 24"]}\n```';
+    // The exact failure mode the user reported with the Hayward
+    // cite — title with literal quotes that would have broken JSON.
+    const text = [
+      '[[CITE]]',
+      'Keith Hayward & Matthijs Maas 21, Hayward is Faculty of Law at University of Copenhagen; Maas is Senior Research Fellow, "Artificial intelligence and crime: A primer for criminologists," Volume 17, Issue 2, p. 209-233',
+      '[[TOKENS]]',
+      'Hayward & ',
+      'Maas 21',
+      '[[END]]',
+    ].join('\n');
+    const out = parseCiteResponse(text);
+    expect(out.cite).toContain('"Artificial intelligence and crime: A primer for criminologists,"');
+    expect(out.tokens).toEqual(['Hayward & ', 'Maas 21']);
+  });
+
+  it('tolerates the optional [[END]] marker being absent', async () => {
+    const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
+    const text = '[[CITE]]\nSmith 24, ...\n[[TOKENS]]\nSmith 24\n';
     const out = parseCiteResponse(text);
     expect(out.cite).toBe('Smith 24, ...');
     expect(out.tokens).toEqual(['Smith 24']);
   });
 
-  it('throws on missing cite field', async () => {
+  it('tolerates prose / fences before and after the block', async () => {
     const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
-    expect(() => parseCiteResponse('{"tokens":["X"]}')).toThrow(/cite/i);
+    const text = 'Here is the cite:\n```\n[[CITE]]\nSmith 24\n[[TOKENS]]\nSmith 24\n[[END]]\n```\n';
+    const out = parseCiteResponse(text);
+    expect(out.cite).toBe('Smith 24');
+    expect(out.tokens).toEqual(['Smith 24']);
   });
 
-  it('throws on missing tokens array', async () => {
+  it('throws when the [[CITE]] marker is missing', async () => {
     const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
-    expect(() => parseCiteResponse('{"cite":"X"}')).toThrow(/tokens/i);
+    expect(() => parseCiteResponse('Smith 24')).toThrow(/markers/i);
+  });
+
+  it('throws when the cite section is empty', async () => {
+    const { parseCiteResponse } = await import('../../src/editor/ai/cite-creator.js');
+    expect(() => parseCiteResponse('[[CITE]]\n\n[[TOKENS]]\nSmith 24\n[[END]]')).toThrow(/empty/i);
   });
 
   it('substitutes {DATE} placeholder for today', async () => {
