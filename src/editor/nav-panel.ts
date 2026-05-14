@@ -98,11 +98,18 @@ export class NavigationPanel {
   private boundOnDragKey = (e: KeyboardEvent) => this.onDragKey(e);
   private boundOnDragKeyUp = (e: KeyboardEvent) => this.onDragKey(e);
 
+  /** When set (multi-pane sections), the outline-level filter is
+   *  per-instance instead of shared via the `navMaxLevel` setting. */
+  private localMaxLevel: number | null = null;
   private get maxLevel(): number {
+    if (this.localMaxLevel != null) return this.localMaxLevel;
     return settings.get('navMaxLevel');
   }
 
-  constructor(parent: HTMLElement) {
+  constructor(parent: HTMLElement, opts?: { localMaxLevel?: boolean; initialMaxLevel?: number }) {
+    if (opts?.localMaxLevel) {
+      this.localMaxLevel = opts.initialMaxLevel ?? settings.get('navMaxLevel');
+    }
     this.root = document.createElement('aside');
     this.root.className = 'pmd-nav-panel';
 
@@ -252,9 +259,10 @@ export class NavigationPanel {
   private hitTestDropIndicators(
     clientX: number,
     clientY: number,
-  ): { el: HTMLElement; insertPos: number; dy: number } | null {
+  ): { el: HTMLElement; insertPos: number; dy: number; view?: EditorView } | null {
     const session = dragController.getSession();
     if (!session) return null;
+    const myView = this.view ?? undefined;
 
     // Horizontal gate: pointer must be inside the nav panel column.
     // (Use the panel root rather than each indicator's rect so a
@@ -265,12 +273,19 @@ export class NavigationPanel {
 
     type Cand = { el: HTMLElement; insertPos: number; centerY: number; dy: number };
     const valid: Cand[] = [];
+    // For same-view drops, skip indicators that fall inside the
+    // dragged source range (would be a no-op). For cross-view drops
+    // every indicator is a valid landing point — the source ranges
+    // refer to a different doc.
+    const sameDoc = session.view === this.view;
     for (const indicator of this.dropIndicators) {
       const insertPos = parseInt(indicator.dataset['insertPos'] ?? '-1', 10);
-      const onSelf = session.items.some(
-        (it) => insertPos > it.from && insertPos < it.to,
-      );
-      if (onSelf) continue;
+      if (sameDoc) {
+        const onSelf = session.items.some(
+          (it) => insertPos > it.from && insertPos < it.to,
+        );
+        if (onSelf) continue;
+      }
       const rect = indicator.getBoundingClientRect();
       const centerY = (rect.top + rect.bottom) / 2;
       valid.push({ el: indicator, insertPos, centerY, dy: Math.abs(clientY - centerY) });
@@ -283,7 +298,7 @@ export class NavigationPanel {
       if (v.dy > 24) continue;
       if (!best || v.dy < best.dy) best = v;
     }
-    if (best) return { el: best.el, insertPos: best.insertPos, dy: best.dy };
+    if (best) return { el: best.el, insertPos: best.insertPos, dy: best.dy, view: myView };
 
     // Fall-through: pointer is above the topmost or below the
     // bottommost indicator. Snap to that extreme so dragging into
@@ -296,10 +311,10 @@ export class NavigationPanel {
       if (v.centerY > bottomMost.centerY) bottomMost = v;
     }
     if (clientY > bottomMost.centerY) {
-      return { el: bottomMost.el, insertPos: bottomMost.insertPos, dy: bottomMost.dy };
+      return { el: bottomMost.el, insertPos: bottomMost.insertPos, dy: bottomMost.dy, view: myView };
     }
     if (clientY < topMost.centerY) {
-      return { el: topMost.el, insertPos: topMost.insertPos, dy: topMost.dy };
+      return { el: topMost.el, insertPos: topMost.insertPos, dy: topMost.dy, view: myView };
     }
     return null;
   }
@@ -1051,6 +1066,15 @@ export class NavigationPanel {
     // synchronously and triggers render — so collapsed needs to be
     // up-to-date before that render happens.
     this.applyMaxLevelToCollapseState(level);
+    if (this.localMaxLevel != null) {
+      // Multi-pane: per-instance max level. Update locally; the
+      // settings subscriber doesn't drive us (each pane's filter
+      // is independent).
+      this.localMaxLevel = level;
+      this.updateLevelButtonsActive();
+      if (this.currentDoc) this.render(this.currentDoc);
+      return;
+    }
     if (isAlreadyAtLevel) {
       // Settings.set short-circuits when the value is unchanged, so no
       // subscriber would fire and the freshly-reset collapse state

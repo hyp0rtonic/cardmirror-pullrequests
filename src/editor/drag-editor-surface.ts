@@ -36,7 +36,7 @@ interface HoveredContainer {
   label: string;
 }
 
-class EditorDragSurface implements DragSurface {
+export class EditorDragSurface implements DragSurface {
   private view: EditorView | null = null;
   private host: HTMLElement | null = null;
   private indicators: IndicatorRecord[] = [];
@@ -130,7 +130,7 @@ class EditorDragSurface implements DragSurface {
 
   // ---- DragSurface implementation ----
 
-  hitTest(clientX: number, clientY: number): { el: HTMLElement; insertPos: number; dy: number } | null {
+  hitTest(clientX: number, clientY: number): { el: HTMLElement; insertPos: number; dy: number; view?: EditorView } | null {
     if (!this.host) return null;
     const hostRect = this.host.getBoundingClientRect();
     // Horizontal gate only — vertically the pointer can fall past the
@@ -162,13 +162,14 @@ class EditorDragSurface implements DragSurface {
     }
     if (valid.length === 0) return null;
 
+    const view = this.view ?? undefined;
     // Preferred: closest indicator within 32px band.
     let best: Cand | null = null;
     for (const v of valid) {
       if (v.dy > 32) continue;
       if (!best || v.dy < best.dy) best = v;
     }
-    if (best) return { el: best.el, insertPos: best.insertPos, dy: best.dy };
+    if (best) return { el: best.el, insertPos: best.insertPos, dy: best.dy, view };
 
     // Fall-through: pointer is above the topmost or below the
     // bottommost indicator (e.g., empty page space at the bottom).
@@ -180,10 +181,10 @@ class EditorDragSurface implements DragSurface {
       if (v.centerY > bottomMost.centerY) bottomMost = v;
     }
     if (clientY > bottomMost.centerY) {
-      return { el: bottomMost.el, insertPos: bottomMost.insertPos, dy: bottomMost.dy };
+      return { el: bottomMost.el, insertPos: bottomMost.insertPos, dy: bottomMost.dy, view };
     }
     if (clientY < topMost.centerY) {
-      return { el: topMost.el, insertPos: topMost.insertPos, dy: topMost.dy };
+      return { el: topMost.el, insertPos: topMost.insertPos, dy: topMost.dy, view };
     }
     return null;
   }

@@ -385,6 +385,17 @@ export interface Settings {
    *  full textarea makes more sense than an inline input. Empty
    *  string falls back to `DEFAULT_AI_CITE_PROMPT`. */
   aiCitePrompt: string;
+  /** Master switch for the multi-doc workspace shell — three slots,
+   *  each holding a stack of 0+ docs. Toggling this requires a
+   *  page reload to (re)build the editor shell. Comments are
+   *  unavailable while this is on. See SPEC-multi-pane.md. */
+  multiDocWorkspace: boolean;
+  /** When `multiDocWorkspace` is on and three slots are populated:
+   *  `compact` shows all three panes side by side; `wide` widens
+   *  each pane and lets the user paged-scroll between them
+   *  (2 full + edge of 3rd visible). With 1 or 2 active slots the
+   *  two modes render identically. */
+  multiDocLayoutMode: 'compact' | 'wide';
 }
 
 /** Open-delimiter options for "Condense with warning" markers. The
@@ -489,6 +500,8 @@ const DEFAULTS: Settings = {
     reflexive: 'themself',
   },
   aiCitePrompt: '',
+  multiDocWorkspace: false,
+  multiDocLayoutMode: 'compact',
 };
 
 /** Public read-only view of the built-in defaults — handy for any UI
@@ -522,13 +535,28 @@ export interface SettingMeta {
     | 'text'
     | 'password'
     | 'clod'
-    | 'aiCitePrompt';
+    | 'aiCitePrompt'
+    | 'multiDocLayoutMode';
   /** Setting depends on the AI master toggle — greyed out and
    *  disabled in the UI when `aiFeaturesEnabled` is false. */
   aiOnly?: boolean;
 }
 
 export const SETTING_METADATA: SettingMeta[] = [
+  {
+    key: 'multiDocWorkspace',
+    label: 'Multi-doc workspace',
+    description:
+      'Enable a three-slot side-by-side workspace for working with up to three documents at once. Comments are unavailable while this is on. Reload the page after toggling for the change to take effect.',
+    kind: 'toggle',
+  },
+  {
+    key: 'multiDocLayoutMode',
+    label: 'Multi-doc layout',
+    description:
+      'When three docs are open, choose compact (all three visible at once, narrow) or wide-scroll (two full panes + edge of third; click the peek to snap). With 1 or 2 docs open, both modes render identically.',
+    kind: 'multiDocLayoutMode',
+  },
   {
     key: 'showCitePreview',
     label: 'Cite preview on hover',
@@ -897,6 +925,11 @@ function sanitize(s: Settings): Settings {
     aiPersonaCustomPronouns: sanitizeCustomPronouns(s.aiPersonaCustomPronouns),
     aiCitePrompt:
       typeof s.aiCitePrompt === 'string' ? s.aiCitePrompt : DEFAULTS.aiCitePrompt,
+    multiDocWorkspace: !!s.multiDocWorkspace,
+    multiDocLayoutMode:
+      s.multiDocLayoutMode === 'wide' || s.multiDocLayoutMode === 'compact'
+        ? s.multiDocLayoutMode
+        : DEFAULTS.multiDocLayoutMode,
   };
 }
 

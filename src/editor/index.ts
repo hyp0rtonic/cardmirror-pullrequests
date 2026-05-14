@@ -110,6 +110,61 @@ const zoomPct = document.getElementById('zoom-pct')!;
 let view: EditorView | null = null;
 let currentDoc: PMNode = makeStarterDoc();
 
+/** Multi-doc workspace gate. When true, the multi-pane shell has
+ *  taken over the main shell — it manages its own EditorViews and
+ *  pushes the focused pane's view into the module-level `view`
+ *  variable below via `setActiveView`. The single-doc dropzone and
+ *  mountView path become no-ops. */
+let multiDocActive = false;
+/** When the multi-pane shell is active, this delegates file-open
+ *  routing to its prompt-for-slot flow. */
+let multiDocOnFileOpen: ((file: File) => Promise<void> | void) | null = null;
+
+/** Multi-pane shell hooks. Called by `multi-pane-shell.ts` at boot
+ *  to install the override that redirects the single-doc dropzone
+ *  + mountView paths into per-pane routing. */
+export function enableMultiDocMode(opts: {
+  onFileOpen: (file: File) => Promise<void> | void;
+}): void {
+  multiDocActive = true;
+  multiDocOnFileOpen = opts.onFileOpen;
+  // Hide the single-doc surfaces. The multi-pane shell mounts its
+  // own DOM into #app, alongside #editor + #comments-column which
+  // we hide here.
+  editorEl.hidden = true;
+  if (commentsColumnEl) commentsColumnEl.hidden = true;
+  // Hide the single-pane comments toggle/add buttons — comments are
+  // unavailable in multi-doc mode.
+  if (commentsToggleBtn) commentsToggleBtn.style.display = 'none';
+  if (commentsAddBtn) commentsAddBtn.style.display = 'none';
+  // Hide the global single-pane nav panel; the multi-pane shell
+  // renders its own per-section nav.
+  navEl.hidden = true;
+  document.body.classList.add('pmd-multi-doc');
+  // The shared exportBtn is enabled by the multi-pane shell once
+  // any pane has a view focused — for safety, enable it here too.
+  exportBtn.disabled = false;
+}
+
+/** Used by the multi-pane shell: route the shared ribbon /
+ *  chrome through the currently-focused pane's view. */
+export function setActiveView(v: EditorView | null): void {
+  view = v;
+  if (v) {
+    currentDoc = v.state.doc;
+  }
+  // Re-sync the chrome that depends on `view` (font-size chip,
+  // word-count display, paragraph integrity indicator, etc.).
+  refreshFontSizeDisplay();
+  refreshWordCount();
+}
+
+/** Read-only accessor for the active view — exposed so other
+ *  modules (multi-pane shell) can register listeners that need it. */
+export function getActiveView(): EditorView | null {
+  return view;
+}
+
 // Live context for ribbon commands that read settings at keypress
 // time — active highlight / shading color for F11 / Mod-F11; condense
 // behavior flags for F3 / Alt-F3 / Mod-Alt-F3.
@@ -562,7 +617,12 @@ function applyZoom(pct: number): void {
  * updating these variables retypes the whole editor.
  */
 function applyDisplaySizes(sizes: DisplaySizes): void {
+  // Set on documentElement so the multi-pane shell's editors (which
+  // aren't descendants of #editor) inherit the same custom props.
+  // The single-doc #editor still inherits from documentElement, so
+  // single-doc behavior is unchanged.
   for (const key of DISPLAY_SIZE_KEYS) {
+    document.documentElement.style.setProperty(`--pmd-size-${key}`, `${sizes[key]}pt`);
     editorEl.style.setProperty(`--pmd-size-${key}`, `${sizes[key]}pt`);
   }
 }
@@ -582,12 +642,14 @@ function applyDisplayTypography(t: DisplayTypography): void {
   editorEl.classList.toggle('pmd-undertag-italic', t.undertagItalic);
   editorEl.classList.toggle('pmd-undertag-bold', t.undertagBold);
   editorEl.style.setProperty('--pmd-emphasis-box-size', `${t.emphasisBoxSize}pt`);
+  document.documentElement.style.setProperty('--pmd-emphasis-box-size', `${t.emphasisBoxSize}pt`);
   // Mirror the undertag/cite/emphasis flags to documentElement so the
   // ribbon's formatting-panel preview (which lives outside #editor)
   // can react to the same settings.
   document.documentElement.classList.toggle('pmd-undertag-italic', t.undertagItalic);
   document.documentElement.classList.toggle('pmd-undertag-bold', t.undertagBold);
   document.documentElement.classList.toggle('pmd-cite-underlined', t.citeUnderlined);
+  document.documentElement.classList.toggle('pmd-underline-bold', t.underlineBold);
   document.documentElement.classList.toggle('pmd-emphasis-bold', t.emphasisBold);
   document.documentElement.classList.toggle('pmd-emphasis-italic', t.emphasisItalic);
   document.documentElement.classList.toggle('pmd-emphasis-box', t.emphasisBox);
@@ -618,20 +680,33 @@ function applyBodyFont(font: string): void {
   // unquoted form for generic categories. Inline style on #editor wins
   // over the stylesheet rule and inherits to all descendants.
   const head = GENERIC_FONT_KEYWORDS.has(font) ? font : `"${font}"`;
-  editorEl.style.fontFamily = `${head}, 'Helvetica Neue', sans-serif`;
+  const value = `${head}, 'Helvetica Neue', sans-serif`;
+  editorEl.style.fontFamily = value;
+  // Mirror to a CSS custom property on documentElement so the multi-
+  // pane shell's editor surfaces (not descendants of #editor) can pick
+  // up the body font via `font-family: var(--pmd-body-font)`.
+  document.documentElement.style.setProperty('--pmd-body-font', value);
 }
 
 function applyLineHeight(_multiplier: number): void {
   // The runtime override now sets each of the six per-paragraph-type
   // line-height variables from its corresponding setting, so every
   // knob in the Settings dialog flows through to the editor surface.
+  // Set on BOTH #editor (single-doc) and documentElement (so the
+  // multi-pane shell's editors inherit them).
   const s = settings.all();
-  editorEl.style.setProperty('--pmd-line-height', String(s.lineHeight));
-  editorEl.style.setProperty('--pmd-line-height-cite', String(s.lineHeightCite));
-  editorEl.style.setProperty('--pmd-line-height-tag', String(s.lineHeightTag));
-  editorEl.style.setProperty('--pmd-line-height-analytic', String(s.lineHeightAnalytic));
-  editorEl.style.setProperty('--pmd-line-height-heading', String(s.lineHeightHeading));
-  editorEl.style.setProperty('--pmd-line-height-undertag', String(s.lineHeightUndertag));
+  const pairs: [string, string][] = [
+    ['--pmd-line-height', String(s.lineHeight)],
+    ['--pmd-line-height-cite', String(s.lineHeightCite)],
+    ['--pmd-line-height-tag', String(s.lineHeightTag)],
+    ['--pmd-line-height-analytic', String(s.lineHeightAnalytic)],
+    ['--pmd-line-height-heading', String(s.lineHeightHeading)],
+    ['--pmd-line-height-undertag', String(s.lineHeightUndertag)],
+  ];
+  for (const [k, v] of pairs) {
+    editorEl.style.setProperty(k, v);
+    document.documentElement.style.setProperty(k, v);
+  }
 }
 
 // Track the last applied ribbon-key override map so the settings
@@ -948,7 +1023,7 @@ function ptForRun(text: PMNode, parent: PMNode): { pt: number; direct: boolean }
  * when the run has no explicit `font_size` mark. `node === null`
  * means "no adjacent text" — fall through to the parent default.
  */
-function effectivePtForNode(node: PMNode | null, parent: PMNode): number {
+export function effectivePtForNode(node: PMNode | null, parent: PMNode): number {
   if (node && node.isText) return ptForRun(node, parent).pt;
   return paragraphDefaultPt(parent.type.name);
 }
@@ -1088,8 +1163,11 @@ function makeStarterDoc(): PMNode {
  * the only delta when overrides change is the ribbon keymap plugin,
  * but PM doesn't let you splice a single plugin, so the whole list is
  * rebuilt and the view is `reconfigure`d in place.
+ *
+ * Exported so the multi-pane shell can build per-pane EditorViews
+ * using the exact same plugin stack as the single-doc shell.
  */
-function buildEditorPlugins(): Plugin[] {
+export function buildEditorPlugins(): Plugin[] {
   return [
     history(),
     keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
@@ -1234,6 +1312,21 @@ let currentDocFilename: string | null = null;
 dropzone.addEventListener('change', async () => {
   const file = dropzone.files?.[0];
   if (!file) return;
+  // Multi-doc mode delegates routing to the multi-pane shell (which
+  // shows the "Send to slot 1/2/3" inline picker before loading).
+  if (multiDocActive && multiDocOnFileOpen) {
+    try {
+      await multiDocOnFileOpen(file);
+    } catch (err) {
+      console.error('Multi-doc open failed:', err);
+      alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      // Reset the file input so picking the same filename twice still
+      // fires `change` the second time.
+      dropzone.value = '';
+    }
+    return;
+  }
   const buf = await file.arrayBuffer();
   try {
     const { doc, threads } = await fromDocxFull(new Uint8Array(buf));
@@ -1266,7 +1359,11 @@ exportBtn.addEventListener('click', async () => {
   if (!choice) return;
 
   try {
-    const exportDocNode = transformForExport(currentDoc, {
+    // In multi-doc mode the focused pane drives Save — read its
+    // doc directly so we always export the right one regardless
+    // of when `currentDoc` was last synced.
+    const docToExport = view ? view.state.doc : currentDoc;
+    const exportDocNode = transformForExport(docToExport, {
       includeComments: choice.includeComments,
       includeAnalytics: choice.includeAnalytics,
       includeUndertags: choice.includeUndertags,
@@ -1358,4 +1455,10 @@ function countSummary(doc: PMNode): string {
     .join(' ');
 }
 
-mountView(currentDoc);
+// Boot: if multi-doc workspace is enabled, hand off to the multi-pane
+// shell. Otherwise mount the starter doc in the single-doc shell.
+if (settings.get('multiDocWorkspace')) {
+  void import('./multi-pane-shell.js').then((m) => m.mountMultiPaneShell());
+} else {
+  mountView(currentDoc);
+}

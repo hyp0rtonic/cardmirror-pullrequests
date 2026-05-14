@@ -3505,3 +3505,372 @@ body.pmd-nav-resize-active {
   z-index: 2;
 }
 
+
+/* ============================================================
+   Multi-pane workspace shell
+   ------------------------------------------------------------
+   Active only when settings.multiDocWorkspace is true. Rendered
+   by `multi-pane-shell.ts` into #app, alongside the (hidden)
+   single-doc surfaces. The shell takes over the editor area;
+   the shared ribbon and status bar at the top/bottom of the
+   window stay in place and route through the focused pane's
+   view via `setActiveView` in `editor/index.ts`. */
+
+/* Hide single-doc artifacts when multi-doc is on. The shell
+ * module also flips the `hidden` attribute on these directly,
+ * but the body class keeps things consistent if other styles
+ * try to reach in.
+ */
+body.pmd-multi-doc #editor,
+body.pmd-multi-doc #comments-column,
+body.pmd-multi-doc #nav-panel {
+  display: none !important;
+}
+body.pmd-multi-doc #app {
+  /* The hidden single-doc nav panel reserved `var(--nav-width)`
+   * of left margin. In multi-doc mode the new nav rail sits
+   * at the window edge and is sized by its own dataset. */
+  margin-left: var(--nav-width);
+}
+body.pmd-multi-doc #status-bar {
+  left: var(--nav-width);
+}
+
+/* ---- Nav rail (one section per active slot) ---- */
+
+.pmd-multi-nav {
+  position: fixed;
+  top: var(--ribbon-height);
+  bottom: var(--status-bar-height);
+  left: 0;
+  width: var(--nav-width);
+  background: var(--pmd-c-surface-2, var(--pmd-c-surface));
+  border-right: 1px solid var(--pmd-c-border-soft);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  overflow: hidden;
+}
+.pmd-multi-nav-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--pmd-c-border-soft);
+  overflow: hidden;
+}
+.pmd-multi-nav-section:first-child {
+  border-top: none;
+}
+.pmd-multi-nav-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* The per-section NavigationPanel mounts its `<aside class="pmd-nav-panel">`
+ * inside `.pmd-multi-nav-body`. Strip the fixed-position styling the
+ * single-doc nav panel uses; in multi-doc the section IS the layout
+ * anchor. */
+.pmd-multi-nav-body .pmd-nav-panel {
+  position: static;
+  width: auto;
+  height: auto;
+  border-right: none;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pmd-multi-nav-body .pmd-nav-resize-handle {
+  display: none;
+}
+/* Each section's list scrolls independently. */
+.pmd-multi-nav-body .pmd-nav-list {
+  overflow: auto;
+}
+
+/* ---- Multi-pane shell ---- */
+
+.pmd-multi-shell {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pmd-multi-row {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Compact layout — each non-hidden pane gets a share of the row.
+ * 1 active → full width; 2 → halves; 3 → thirds. */
+.pmd-multi-row[data-layout="compact"] .pmd-pane {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Wide-scroll layout — each pane is 45% of the viewport, the row
+ * scrolls horizontally with scroll-snap so clicking the visible
+ * peek snaps it to the center. (3 active slots only — with 1 or
+ * 2 active slots there's nothing to scroll, the flex layout fills.)
+ */
+.pmd-multi-row[data-layout="wide"] {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}
+.pmd-multi-row[data-layout="wide"][data-active="3"] .pmd-pane {
+  flex: 0 0 45%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+/* With 1 or 2 active slots, wide-scroll still flex-fills. */
+.pmd-multi-row[data-layout="wide"]:not([data-active="3"]) .pmd-pane {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pmd-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--pmd-c-border-soft);
+  background: var(--pmd-c-bg, #fff);
+  position: relative;
+}
+.pmd-pane:last-child { border-right: none; }
+.pmd-pane[hidden] { display: none; }
+
+.pmd-pane-focused {
+  box-shadow: inset 0 2px 0 0 var(--pmd-c-accent, #4a90e2);
+}
+
+/* Title chip — small, ~22px tall. Way smaller than the original
+ * sketch's full-width box; just a thin header above the editor. */
+.pmd-pane-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  background: var(--pmd-c-surface-2, var(--pmd-c-surface));
+  border-bottom: 1px solid var(--pmd-c-border-soft);
+  font-size: 0.78rem;
+  line-height: 1;
+  min-height: 22px;
+}
+.pmd-pane-chip-name {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--pmd-c-text);
+}
+.pmd-pane-chip-stack {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  font-size: 0.7rem;
+  color: var(--pmd-c-text-muted);
+  cursor: pointer;
+}
+.pmd-pane-chip-stack:hover { background: var(--pmd-c-surface-3, var(--pmd-c-surface)); }
+.pmd-pane-chip-stack[hidden] { display: none; }
+.pmd-pane-chip-close {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.pmd-pane-chip-close:hover { color: var(--pmd-c-danger, #c00); }
+
+/* Stack dropdown — floats over the chip when the user clicks ▾. */
+.pmd-pane-chip-dropdown {
+  background: var(--pmd-c-bg, #fff);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  min-width: 180px;
+  z-index: 600;
+  padding: 0.2rem 0;
+}
+.pmd-pane-chip-dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.pmd-pane-chip-dropdown-row:hover { background: var(--pmd-c-surface-2, var(--pmd-c-surface)); }
+.pmd-pane-chip-dropdown-row.pmd-active { font-weight: 600; }
+.pmd-pane-chip-dropdown-name {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pmd-pane-chip-dropdown-close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.9rem;
+}
+.pmd-pane-chip-dropdown-close:hover { color: var(--pmd-c-danger, #c00); }
+
+/* Editor body — fills the rest of the pane height. */
+.pmd-pane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+.pmd-pane-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+/* Re-use the global editor styling for the per-pane ProseMirror
+ * surface (the ProseMirror's own root element gets class
+ * `ProseMirror`). The pane wrapper here just provides scrolling. */
+.pmd-pane-editor .ProseMirror {
+  outline: none;
+  min-height: 100%;
+  padding: 1rem;
+  /* Inherit the body font picked in Settings. `--pmd-body-font` is
+   * set on documentElement by `applyBodyFont`, so it cascades here
+   * even though `.pmd-pane-editor` is not a descendant of #editor. */
+  font-family: var(--pmd-body-font, "Calibri", "Helvetica Neue", sans-serif);
+}
+
+/* Footer with word count + open file button. */
+.pmd-pane-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.4rem;
+  background: var(--pmd-c-surface-2, var(--pmd-c-surface));
+  border-top: 1px solid var(--pmd-c-border-soft);
+  font-size: 0.72rem;
+  min-height: 22px;
+}
+.pmd-pane-wc {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-pane-open {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.72rem;
+  color: var(--pmd-c-text);
+  cursor: pointer;
+}
+.pmd-pane-open:hover { background: var(--pmd-c-surface-3, var(--pmd-c-surface)); }
+
+/* ---- Routing prompt overlay ---- */
+
+.pmd-route-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--pmd-c-overlay, rgba(0,0,0,0.35));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.pmd-route-dialog {
+  background: var(--pmd-c-bg, #fff);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 360px;
+}
+.pmd-route-header {
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.pmd-route-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+.pmd-route-btn {
+  flex: 1 1 0;
+  background: var(--pmd-c-surface-2, var(--pmd-c-surface));
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: var(--pmd-c-text);
+}
+.pmd-route-btn strong { font-size: 0.9rem; }
+.pmd-route-btn span { color: var(--pmd-c-text-muted); }
+.pmd-route-btn:hover { background: var(--pmd-c-surface-3, var(--pmd-c-surface)); }
+.pmd-route-cancel {
+  align-self: flex-end;
+  background: transparent;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-route-cancel:hover { color: var(--pmd-c-text); }
+
+/* ---- Multi-pane: typography parity ----
+ *
+ * The single-doc editor scopes typography-flag rules to `#editor.X`.
+ * For the multi-pane shell, the same flags are mirrored to
+ * documentElement by `applyDisplayTypography`, so we re-apply the
+ * same predicates to `.pmd-pane-editor` here.
+ */
+html.pmd-undertag-italic .pmd-pane-editor .pmd-undertag,
+html.pmd-undertag-italic .pmd-pane-editor .pmd-undertag-mark {
+  font-style: italic;
+}
+html.pmd-undertag-bold .pmd-pane-editor .pmd-undertag,
+html.pmd-undertag-bold .pmd-pane-editor .pmd-undertag-mark {
+  font-weight: bold;
+}
+html.pmd-cite-underlined .pmd-pane-editor .pmd-cite {
+  text-decoration: underline;
+}
+html.pmd-underline-bold .pmd-pane-editor .pmd-underline {
+  font-weight: bold;
+}
+html.pmd-emphasis-bold .pmd-pane-editor .pmd-emphasis {
+  font-weight: bold;
+}
+html.pmd-emphasis-italic .pmd-pane-editor .pmd-emphasis {
+  font-style: italic;
+}
+html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
+  border: var(--pmd-emphasis-box-size, 0.5pt) solid currentColor;
+  padding: 0 0.1em;
+  border-radius: 1px;
+}

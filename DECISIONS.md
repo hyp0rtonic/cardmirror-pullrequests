@@ -3,6 +3,112 @@
 Append-only log of implementation decisions and their rationale. Each
 entry has a date, a one-line summary, and the reasoning.
 
+## 2026-05-14: Multi-pane workspace (prototype)
+
+First-cut implementation of SPEC-multi-pane.md. Lives on the
+`multi-pane` branch. Gated by a single boolean setting
+(`multiDocWorkspace`) — toggling requires a page reload to (re)build
+the shell. With it OFF, today's single-doc shell loads as-is. With
+it ON, the single-doc surfaces (`#editor`, `#nav-panel`,
+`#comments-column`, the comments ribbon buttons) are hidden and a
+new multi-pane shell takes over.
+
+### Architecture
+
+  - `src/editor/multi-pane-shell.ts` owns the shell. Three slots
+    (`slot1` / `slot2` / `slot3`); each slot is a stack of 0+ live
+    DocRecords (per-stack EditorView + NavigationPanel + per-pane
+    drag surface). Hidden stack members keep their views in memory
+    (Q14: live-view, no serialize). Active slots render in numeric
+    order, left → right; empty slots take no space.
+  - `editor/index.ts` keeps most of the chrome wiring unchanged.
+    Three new exports — `setActiveView`, `getActiveView`,
+    `enableMultiDocMode` plus `buildEditorPlugins` and
+    `effectivePtForNode` — let the multi-pane module build per-pane
+    views with the exact same plugin stack as the single-doc shell
+    and steer the shared ribbon / status bar at the focused pane.
+  - The shell's `enableMultiDocMode` flips a `multiDocActive` flag
+    in `editor/index.ts` and registers a `multiDocOnFileOpen` hook;
+    the existing `dropzone.change` handler delegates to that hook
+    instead of running `mountView` when the flag is set.
+
+### Layout cells
+
+CSS-driven: the `.pmd-multi-row` has a `data-active` attribute (1 /
+2 / 3) that flex sizing reads. With `data-layout="compact"`, each
+active pane gets a fair share of the row (1 = full, 2 = halves, 3
+= thirds). With `data-layout="wide"` and three active panes, panes
+become 45% wide and the row is `overflow-x: auto;
+scroll-snap-type: x mandatory` — clicking the visible peek snaps
+to that pane. With 1 or 2 panes under wide-scroll, the layout
+collapses to the same flex sizing as compact (nothing to scroll).
+
+### Drag-and-drop
+
+`drag-controller.ts`'s commit branch now handles cross-view drops
+by always copying. The source slice's heading IDs are rewritten
+(same `rewriteHeadingIds` the in-doc copy-drag uses) so the
+workspace's id-uniqueness invariant holds. `DragSurface.hitTest`
+returns an optional `view` so a cross-pane surface can declare
+which doc the drop lands in. The editor surface (`drag-editor-
+surface.ts`) and nav surface (`nav-panel.ts`) both populate it.
+The nav surface also skips the same-doc "drop-on-self" guard when
+the drop is cross-view (since the source range refers to a
+different doc).
+
+### Per-section nav outline filter
+
+`NavigationPanel`'s constructor accepts `{ localMaxLevel: true }`.
+When set, the 1/2/3/4 buttons toggle a per-instance level rather
+than writing to the global `navMaxLevel` setting. Each pane's
+section is independent — matches Q2.
+
+### Typography / sizing inheritance
+
+The single-doc shell scopes typography flags to `#editor.X`. The
+multi-pane editors aren't descendants of `#editor`, so they
+wouldn't pick up these rules. Two changes:
+
+  - `applyDisplaySizes` / `applyLineHeight` / `applyBodyFont` now
+    set their CSS custom properties on `documentElement` as well
+    as on `#editor`. The single-doc behavior is unchanged
+    (documentElement is an ancestor of `#editor`); the multi-pane
+    editors inherit the same vars.
+  - Mirror `pmd-cite-underlined` / `pmd-undertag-italic` / etc. to
+    documentElement (most were already mirrored; added
+    `pmd-underline-bold`). New CSS rules at the end of style.css
+    duplicate the `#editor.X .pmd-Y` typography selectors for the
+    multi-pane surface: `html.X .pmd-pane-editor .pmd-Y`.
+
+### Routing prompt
+
+Inline overlay (`promptForSlot`) showing three slot buttons +
+Cancel. Each button labels its slot ("Slot 1") and shows the
+current contents in a smaller line below ("(empty)" or
+"filename" or "filename (+N)" for stacks). The per-pane "+ Open
+file" footer button shortcuts past the prompt by setting
+`pendingRoute` before triggering the picker.
+
+### Comments off
+
+`enableMultiDocMode` hides the comments toggle / add buttons and
+the column itself. The comments plugin still runs in each pane's
+state (cheap, and avoids re-shaping the plugin stack) — it just
+has no UI to render against.
+
+### Known limitations (prototype scope)
+
+  - Toggling the master switch requires a page reload (acceptable
+    per session).
+  - `applyReadMode` only re-runs against `getActiveView()`. The
+    other panes don't see the toggle until they're refocused —
+    not a problem in practice since read-mode toggles are global
+    via the setting and are cheap to re-apply on focus.
+  - Find / Replace, AI flows, and the Doc / Card / Table menus
+    all route through the focused pane only.
+  - Live-view stacks consume per-doc memory. For a typical
+    workspace of 3–6 docs this is well within budget.
+
 ## 2026-05-08: TypeScript + raw ProseMirror + Vite + Vitest
 
 **Stack:**
