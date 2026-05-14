@@ -67,9 +67,36 @@ export class EditorDragSurface implements DragSurface {
   private boundOnDocMove = (e: PointerEvent) => this.onDocPointerMoveDuringDrag(e);
   private boundOnDocUp = (e: PointerEvent) => this.onDocPointerUpDuringDrag(e);
 
+  /** Cached scroll-gate element (the nearest scrolling ancestor of
+   *  host, or host itself). Reused by every hit-test so we don't
+   *  walk the DOM on every pointermove. */
+  private scrollGateEl: HTMLElement | null = null;
+
+  /** Return the host's own scroller if it has one, otherwise the
+   *  nearest ancestor whose `overflow-y` allows scrolling. Used by
+   *  `hitTest` to decide whether the cursor is "inside the editor's
+   *  visible drop region" — see the comment in `hitTest`. */
+  private findScrollGate(): HTMLElement {
+    if (this.scrollGateEl && this.scrollGateEl.isConnected) return this.scrollGateEl;
+    let cur: HTMLElement | null = this.host;
+    while (cur && cur !== document.body) {
+      const overflow = getComputedStyle(cur).overflowY;
+      if (overflow === 'auto' || overflow === 'scroll') {
+        this.scrollGateEl = cur;
+        return cur;
+      }
+      cur = cur.parentElement;
+    }
+    // Fall back to host (e.g., single-doc host that doesn't scroll
+    // either, or a detached host during teardown).
+    this.scrollGateEl = this.host;
+    return this.host!;
+  }
+
   attach(view: EditorView, hostEl: HTMLElement): void {
     this.view = view;
     this.host = hostEl;
+    this.scrollGateEl = null;
     if (!hostEl.style.position) hostEl.style.position = 'relative';
 
     this.unregisterSurface = dragController.registerSurface(this);
@@ -138,17 +165,21 @@ export class EditorDragSurface implements DragSurface {
 
   hitTest(clientX: number, clientY: number): { el: HTMLElement; insertPos: number; dy: number; view?: EditorView } | null {
     if (!this.host) return null;
-    const hostRect = this.host.getBoundingClientRect();
-    // Horizontal gate only — vertically the pointer can fall past the
-    // last indicator (mostly-empty doc, dragging into the open space
-    // below) and we still want to snap to the bottom.
-    if (clientX < hostRect.left || clientX > hostRect.right) {
+    // For the hit-test gate, use the nearest SCROLLING ancestor — in
+    // single-doc that's the host itself (`#editor` has overflow:auto),
+    // in multi-doc that's the pane body (the host `.pmd-pane-editor`
+    // has overflow:visible and its element box is locked to the
+    // body's visible height while PM's content overflows further
+    // down). Using the host's own rect rejects every cursor below
+    // its box even though the editor content extends past it.
+    const gateRect = this.findScrollGate().getBoundingClientRect();
+    if (clientX < gateRect.left || clientX > gateRect.right) {
       return null;
     }
     // Generous vertical clamp so we don't claim drops far outside the
     // editor's visible area (e.g., user dragging over a totally
     // unrelated page region above or below).
-    if (clientY < hostRect.top - 64 || clientY > hostRect.bottom + 64) {
+    if (clientY < gateRect.top - 64 || clientY > gateRect.bottom + 64) {
       return null;
     }
 
