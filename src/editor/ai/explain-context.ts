@@ -25,6 +25,10 @@ export interface ExplainContext {
   /** Verbatim text of an in-card analytic paragraph or the
    *  analytic_unit's header analytic, if any. */
   analytic: string | null;
+  /** All undertag paragraphs in the containing container, in
+   *  document order. Undertags follow the tag / analytic and refine
+   *  the card's claim — explicit context the AI should see. */
+  undertags: string[];
   /** All cite paragraphs in the containing container, in document
    *  order. Concatenated and shown to the model as a single block. */
   cites: string[];
@@ -75,23 +79,27 @@ export function buildExplainContext(state: EditorState): ExplainContext | null {
   });
 
   if (!container) {
-    return { selection, paragraphs, tag: null, analytic: null, cites: [] };
+    return { selection, paragraphs, tag: null, analytic: null, undertags: [], cites: [] };
   }
 
   let tag: string | null = null;
   let analytic: string | null = null;
+  const undertags: string[] = [];
   const cites: string[] = [];
   container.forEach((child) => {
     if (child.type.name === 'tag' && tag === null) {
       tag = child.textContent.trim() || null;
     } else if (child.type.name === 'analytic' && analytic === null) {
       analytic = child.textContent.trim() || null;
+    } else if (child.type.name === 'undertag') {
+      const t = child.textContent.trim();
+      if (t) undertags.push(t);
     } else if (child.type.name === 'cite_paragraph') {
       const t = child.textContent.trim();
       if (t) cites.push(t);
     }
   });
-  return { selection, paragraphs, tag, analytic, cites };
+  return { selection, paragraphs, tag, analytic, undertags, cites };
 }
 
 /** Format the context into a single user-message string. The shape
@@ -121,11 +129,12 @@ export function formatExplainPrompt(
       parts.push('"""');
     }
   }
-  if (ctx.tag || ctx.analytic || ctx.cites.length > 0) {
+  if (ctx.tag || ctx.analytic || ctx.undertags.length > 0 || ctx.cites.length > 0) {
     parts.push('');
     parts.push('Surrounding context (from the card this selection is part of):');
     if (ctx.tag) parts.push(`Tag: ${ctx.tag}`);
     if (ctx.analytic) parts.push(`Analytic: ${ctx.analytic}`);
+    for (const undertag of ctx.undertags) parts.push(`Undertag: ${undertag}`);
     for (const cite of ctx.cites) parts.push(`Cite: ${cite}`);
   }
   return parts.join('\n');

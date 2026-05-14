@@ -2908,6 +2908,12 @@ body.pmd-nav-resize-active {
 .pmd-ai-cite-tooltip {
   position: absolute;
   z-index: 900;
+  /* `min-width` is what gives the inner activity-stage something
+     to fill. The stage's only children are `position: absolute`, so
+     they don't contribute intrinsic width — without a min-width on
+     this container the tooltip + stage both collapse to zero and
+     the activity text disappears. */
+  min-width: 18rem;
   max-width: 22rem;
   padding: 0.35rem 0.7rem;
   background: rgba(139, 92, 246, 0.95);

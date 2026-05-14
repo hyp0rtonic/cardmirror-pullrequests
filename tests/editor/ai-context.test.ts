@@ -97,6 +97,26 @@ describe('buildExplainContext', () => {
     expect(ctx!.cites).toEqual(['Smith 2024', 'Jones 2023']);
   });
 
+  it('captures every undertag from the containing card', () => {
+    const undertag = (t: string) =>
+      schema.nodes['undertag']!.create(null, schema.text(t));
+    const doc = makeDoc(
+      card(
+        tag('My Tag'),
+        undertag('first undertag'),
+        undertag('second undertag'),
+        cardBody('body text'),
+      ),
+    );
+    let from = 0, to = 0;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'body text') { from = p + 1; to = p + 5; }
+    });
+    const state = selectionAt(doc, from, to);
+    const ctx = buildExplainContext(state);
+    expect(ctx!.undertags).toEqual(['first undertag', 'second undertag']);
+  });
+
   it('inside an analytic_unit returns the analytic in the analytic slot', () => {
     const doc = makeDoc(
       analyticUnit(
@@ -122,6 +142,7 @@ describe('formatExplainPrompt', () => {
       paragraphs: [],
       tag: null,
       analytic: null,
+      undertags: [],
       cites: [],
     });
     expect(out).toContain('Question: what does this mean?');
@@ -137,10 +158,12 @@ describe('formatExplainPrompt', () => {
       paragraphs: [],
       tag: 'My Tag',
       analytic: 'My Analytic',
+      undertags: ['Underly bit'],
       cites: ['Cite A', 'Cite B'],
     });
     expect(out).toContain('Tag: My Tag');
     expect(out).toContain('Analytic: My Analytic');
+    expect(out).toContain('Undertag: Underly bit');
     expect(out).toContain('Cite: Cite A');
     expect(out).toContain('Cite: Cite B');
   });
@@ -151,6 +174,7 @@ describe('formatExplainPrompt', () => {
       paragraphs: ['half a sentence inside a longer paragraph'],
       tag: null,
       analytic: null,
+      undertags: [],
       cites: [],
     });
     expect(out).toContain('Source paragraph(s):');
