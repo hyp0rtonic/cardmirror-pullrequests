@@ -243,6 +243,14 @@ class Slot {
    *  becomes the visible one; previously-visible (if any) drops into
    *  the stack but its EditorView stays live (memory-resident). */
   push(record: DocRecord): void {
+    // Detach the OLD visible record first — `detachVisible` reads
+    // `this.visible`, which derives from `visibleIndex`, so it has
+    // to run before we push the new record and shift the index.
+    // Without this the old record's `editorEl` stayed in `bodyEl`
+    // and `mountVisible` below appended the new one alongside it,
+    // so both docs rendered on top of each other until the stack
+    // switcher forced a re-mount.
+    this.detachVisible();
     this.stack.push(record);
     this.visibleIndex = this.stack.length - 1;
     this.mountVisible();
