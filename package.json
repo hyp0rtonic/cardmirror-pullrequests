@@ -2,6 +2,7 @@
   "name": "cardmirror",
   "version": "0.0.0",
   "description": "CardMirror — ProseMirror-based editor that interoperates with Advanced Verbatim",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "private": true,
   "scripts": {
