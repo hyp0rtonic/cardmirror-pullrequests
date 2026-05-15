@@ -29,6 +29,7 @@ import { Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull } from '../index.js';
 import { settings } from './settings.js';
+import { getHost, type OpenedFile } from './host/index.js';
 import { NavigationPanel } from './nav-panel.js';
 import { EditorDragSurface } from './drag-editor-surface.js';
 import { dragController, rewriteHeadingIds } from './drag-controller.js';
@@ -198,7 +199,7 @@ class Slot {
     openBtn.addEventListener('mousedown', (e) => e.preventDefault());
     openBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.shell.openFileIntoSlot(this.id);
+      void this.shell.openFileIntoSlot(this.id);
     });
     footer.appendChild(openBtn);
     this.paneEl.appendChild(footer);
@@ -927,28 +928,29 @@ class MultiPaneShell {
     setActiveView(null);
   }
 
-  /** Trigger the OS file picker, routed to a known slot (no prompt
-   *  since the user clicked that slot's Open button). */
-  openFileIntoSlot(target: SlotId): void {
-    pendingRoute = target;
-    triggerFilePicker();
-  }
-
-  /** Called by the global dropzone change handler (delegated through
-   *  `enableMultiDocMode`) when a file is picked. */
-  async onFileOpen(file: File): Promise<void> {
-    // If the user reached here via an Open-into-this-slot button,
-    // skip the inline picker and route to the chosen slot.
-    if (pendingRoute) {
-      const target = pendingRoute;
-      pendingRoute = null;
-      await this.loadFileIntoSlot(file, target);
+  /** Ask the host for a file and load it straight into the named
+   *  slot — no slot picker, since the user explicitly clicked that
+   *  slot's Open button. */
+  async openFileIntoSlot(target: SlotId): Promise<void> {
+    let opened: OpenedFile | null;
+    try {
+      opened = await getHost().openFile();
+    } catch (err) {
+      console.error('Open failed:', err);
+      alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
       return;
     }
-    // Otherwise show the inline routing picker first.
-    const choice = await this.promptForSlot(file.name);
+    if (!opened) return;
+    await this.loadOpenedIntoSlot(opened, target);
+  }
+
+  /** Called from the ribbon's Open button via `enableMultiDocMode`'s
+   *  `onFileOpen` callback. The shell shows the inline slot picker
+   *  before loading, since the user didn't pre-choose a destination. */
+  async onFileOpen(opened: OpenedFile): Promise<void> {
+    const choice = await this.promptForSlot(opened.name);
     if (!choice) return;
-    await this.loadFileIntoSlot(file, choice);
+    await this.loadOpenedIntoSlot(opened, choice);
   }
 
   /** Show the inline "Send to slot…" picker; resolves with the
@@ -1005,12 +1007,12 @@ class MultiPaneShell {
     });
   }
 
-  /** Parse + import + mount a file into the given slot. */
-  private async loadFileIntoSlot(file: File, target: SlotId): Promise<void> {
-    const buf = await file.arrayBuffer();
-    const { doc } = await fromDocxFull(new Uint8Array(buf));
+  /** Parse + import + mount the host-provided OpenedFile into the
+   *  given slot. */
+  private async loadOpenedIntoSlot(opened: OpenedFile, target: SlotId): Promise<void> {
+    const { doc } = await fromDocxFull(opened.bytes);
     const slot = this.slots[target];
-    const record = buildDocRecord(file.name, doc, slot);
+    const record = buildDocRecord(opened.name, doc, slot);
     slot.push(record);
   }
 
@@ -1358,16 +1360,6 @@ function makeSpeechBlankDoc(title: string): PMNode {
 /** Single shell instance — multi-pane is a binary mode, so one is
  *  enough. */
 let shell: MultiPaneShell | null = null;
-
-/** Track which slot to open into when the next file-pick fires.
- *  Set by the per-pane Open button so it can skip the inline picker. */
-let pendingRoute: SlotId | null = null;
-
-/** Trigger the global dropzone's file picker. */
-function triggerFilePicker(): void {
-  const dropzone = document.getElementById('dropzone') as HTMLInputElement | null;
-  if (dropzone) dropzone.click();
-}
 
 /** Build a fresh DocRecord — wraps the per-doc PM state, nav panel,
  *  editor drag surface, and DOM containers needed for slot mounting. */

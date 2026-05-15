@@ -78,10 +78,10 @@ import {
 import { openWordCount } from './word-count-ui.js';
 import { wireColorPanel } from './color-panel.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
+import { getHost, type OpenedFile } from './host/index.js';
 
 const editorEl = document.getElementById('editor')!;
 const navEl = document.getElementById('nav-panel')!;
-const dropzone = document.getElementById('dropzone') as HTMLInputElement;
 const openBtn = document.getElementById('open-btn') as HTMLButtonElement;
 const newBtn = document.getElementById('new-btn') as HTMLButtonElement | null;
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
@@ -149,12 +149,12 @@ let currentDoc: PMNode = makeStarterDoc();
 /** Multi-doc workspace gate. When true, the multi-pane shell has
  *  taken over the main shell — it manages its own EditorViews and
  *  pushes the focused pane's view into the module-level `view`
- *  variable below via `setActiveView`. The single-doc dropzone and
- *  mountView path become no-ops. */
+ *  variable below via `setActiveView`. The single-doc open / mount
+ *  paths delegate to the shell instead. */
 let multiDocActive = false;
 /** When the multi-pane shell is active, this delegates file-open
  *  routing to its prompt-for-slot flow. */
-let multiDocOnFileOpen: ((file: File) => Promise<void> | void) | null = null;
+let multiDocOnFileOpen: ((opened: OpenedFile) => Promise<void> | void) | null = null;
 /** When the multi-pane shell is active, this delegates the
  *  "New doc" ribbon button to the shell's slot-routing flow. */
 let multiDocOnNewDoc: (() => Promise<void> | void) | null = null;
@@ -178,10 +178,10 @@ let multiDocGetFocusedFilename: (() => string | null) | null = null;
 let multiDocSetFocusedFilename: ((name: string) => void) | null = null;
 
 /** Multi-pane shell hooks. Called by `multi-pane-shell.ts` at boot
- *  to install the override that redirects the single-doc dropzone
- *  + mountView paths into per-pane routing. */
+ *  to install the overrides that redirect the single-doc open /
+ *  mountView paths into per-pane routing. */
 export function enableMultiDocMode(opts: {
-  onFileOpen: (file: File) => Promise<void> | void;
+  onFileOpen: (opened: OpenedFile) => Promise<void> | void;
   onNewDoc?: () => Promise<void> | void;
   toggleReadMode?: () => void;
   newSpeechDocument?: () => void;
@@ -359,7 +359,7 @@ const ribbonContext: RibbonContext = {
     void onNewDocClicked();
   },
   openFile: () => {
-    dropzone.click();
+    void runOpenFlow();
   },
   saveAs: () => {
     void runSaveAsFlow();
@@ -385,7 +385,9 @@ const ribbonContext: RibbonContext = {
   },
 };
 
-openBtn.addEventListener('click', () => dropzone.click());
+openBtn.addEventListener('click', () => {
+  void runOpenFlow();
+});
 if (newBtn) {
   newBtn.addEventListener('click', () => {
     void onNewDocClicked();
@@ -1935,35 +1937,39 @@ function scheduleHeavyUpdate(): void {
  *  its name. Set on import, untouched by export. */
 let currentDocFilename: string | null = null;
 
-dropzone.addEventListener('change', async () => {
-  const file = dropzone.files?.[0];
-  if (!file) return;
-  // Multi-doc mode delegates routing to the multi-pane shell (which
-  // shows the "Send to slot 1/2/3" inline picker before loading).
+/** The "open a .docx" flow. Asks the host for a file, then routes
+ *  it: multi-doc mode hands the result to the multi-pane shell
+ *  (which shows the "send to slot N" inline picker); single-doc
+ *  mode mounts it as the current view. */
+async function runOpenFlow(): Promise<void> {
+  let opened: OpenedFile | null;
+  try {
+    opened = await getHost().openFile();
+  } catch (err) {
+    console.error('Open failed:', err);
+    alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
+    return;
+  }
+  if (!opened) return;
   if (multiDocActive && multiDocOnFileOpen) {
     try {
-      await multiDocOnFileOpen(file);
+      await multiDocOnFileOpen(opened);
     } catch (err) {
       console.error('Multi-doc open failed:', err);
       alert(`Failed to open: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      // Reset the file input so picking the same filename twice still
-      // fires `change` the second time.
-      dropzone.value = '';
     }
     return;
   }
-  const buf = await file.arrayBuffer();
   try {
-    const { doc, threads } = await fromDocxFull(new Uint8Array(buf));
+    const { doc, threads } = await fromDocxFull(opened.bytes);
     mountView(doc, threads);
-    currentDocFilename = file.name;
-    console.log(`Loaded ${file.name}: ${countSummary(doc)}`);
+    currentDocFilename = opened.name;
+    console.log(`Loaded ${opened.name}: ${countSummary(doc)}`);
   } catch (err) {
     console.error('Failed to load docx:', err);
     alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
   }
-});
+}
 
 /** Default Save-As filename: the focused pane's filename in
  *  multi-doc, the imported file's name in single-doc, falling
@@ -2022,68 +2028,14 @@ async function runSaveAsFlow(): Promise<boolean> {
       ? Array.from(getCommentsState(view.state).threads.values())
       : undefined;
     const bytes = await toDocx(exportDocNode, threads ? { threads } : undefined);
-    // Copy into a regular ArrayBuffer for Blob's BlobPart contract.
-    const ab = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(ab).set(bytes);
-    const blob = new Blob([ab], {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
 
-    // Preferred path: File System Access API (`showSaveFilePicker`).
-    // Gives the user a native save dialog with our chosen name pre-
-    // filled, and writes straight to disk. Chromium-based browsers
-    // (Chrome / Edge / Opera / Zen). Other browsers fall back to a
-    // synthesized download link with the chosen name verbatim.
-    const showSaveFilePicker = (window as unknown as {
-      showSaveFilePicker?: (opts: {
-        suggestedName?: string;
-        types?: { description: string; accept: Record<string, string[]> }[];
-      }) => Promise<{
-        createWritable(): Promise<{
-          write(data: Blob | ArrayBuffer | Uint8Array): Promise<void>;
-          close(): Promise<void>;
-        }>;
-        name?: string;
-      }>;
-    }).showSaveFilePicker;
-
-    if (typeof showSaveFilePicker === 'function') {
-      let handle;
-      try {
-        handle = await showSaveFilePicker({
-          suggestedName: choice.filename,
-          types: [
-            {
-              description: 'Word document',
-              accept: {
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-              },
-            },
-          ],
-        });
-      } catch (e) {
-        // AbortError = user cancelled the OS dialog. Quietly bail.
-        if (e instanceof DOMException && e.name === 'AbortError') return false;
-        throw e;
-      }
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      // Remember the user's chosen name as the new default — so a
-      // second Save As prefills the renamed file, and (in
-      // multi-doc) the chip label updates immediately to match.
-      if (handle.name) rememberSavedFilename(handle.name);
-      return true;
-    }
-
-    // Fallback: synthesize a download link with the chosen name.
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = choice.filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    rememberSavedFilename(choice.filename);
+    // Route through the platform host. BrowserHost uses File System
+    // Access API where available, falls back to a download link.
+    // Future ElectronHost / TauriHost write to the OS-chosen path
+    // and hand back a handle for future in-place saves.
+    const result = await getHost().saveAs(choice.filename, bytes);
+    if (!result) return false; // user cancelled
+    rememberSavedFilename(result.name);
     return true;
   } catch (err) {
     console.error('Save failed:', err);
