@@ -1,4 +1,4 @@
-# prosemirror-debate
+# CardMirror
 
 A ProseMirror-based text editor for competitive debate, designed to
 interoperate with **Advanced Verbatim** — the project owner's forked build
@@ -80,7 +80,7 @@ referenced files.
   send-to-speech, search results, drag-between-panes, transclusion.
   The three-slot workspace shell (compact + wide-scroll layouts, per-
   slot stacks, drag-copy between panes) is shipped. —
-  `ARCHITECTURE.md` §7, [`SPEC-multi-pane.md`](./SPEC-multi-pane.md).
+  `ARCHITECTURE.md` §7.
 - **Editor UI surfaces** — pageless web-view as default, Word-style
   navigation panel for outline manipulation, faithful render fixtures
   for Pocket/Emphasis boxes. — `ARCHITECTURE.md` §8.

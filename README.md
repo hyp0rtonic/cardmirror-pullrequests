@@ -1,109 +1,130 @@
-# prosemirror-debate
+# CardMirror
 
 A ProseMirror-based editor that interoperates with **Advanced Verbatim**
 (the project owner's fork of [Verbatim](https://github.com/ashtarcommunications/verbatim),
 the de facto Microsoft Word add-in for US policy/LD/PF debate).
 
-Project status: **active development.** Schema, lossless docx round-trip
-(including tables, cell/table properties, indent, paragraph spacing,
-hyperlinks via element + field-code forms, super/sub/strike, and more),
-the editor UI ribbon (style hotkeys, color pickers, formatting panel,
-Doc / Card / Table dropdown menus, keybinding editor, read mode,
-shrink/condense pipeline, Select Similar Formatting, Fix Formatting
-Gaps, Convert Analytics to Tags, Remove Hyperlinks), a nav-pane outline
-with copy-drag, the multi-doc workspace (three configurable slots, with
-compact and wide-scroll layouts), send-to-speech (backtick / Alt-`),
-per-doc read mode, image insertion (paste + ribbon button), AI image
-features (right-click an image for alt-text / table-from-image), and a
-CLI for manual verification are all landed. Workspace search and
-transclusion remain on the roadmap.
-
 ## Where to read
 
 - [`PROJECT.md`](./PROJECT.md) — high-level orientation, headline design decisions.
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full design: schema, multi-doc workspace, read mode, send-to-speech, integration boundaries.
-- [`SPEC-multi-pane.md`](./SPEC-multi-pane.md) — multi-pane workspace spec (the design behind the implementation).
 - [`NOTES-verbatim.md`](./NOTES-verbatim.md) — Verbatim's docx data model + real-world observations from the example docs.
 - [`NOTES-custom-macros.md`](./NOTES-custom-macros.md) — Advanced Verbatim's custom macros, effect-level inventory.
 - [`DECISIONS.md`](./DECISIONS.md) — append-only implementation decision log.
 
 ## Installing and running (first-time guide)
 
-These steps assume you've never run code off GitHub before. They're
-written for macOS, Windows, and Linux. The commands look the same on
-all three; only the install steps differ.
+This guide assumes **no prior experience** with the command line,
+GitHub, or any of the tooling. You'll do four things: install Node.js,
+download the code, open a "terminal" inside the folder, and run two
+commands.
 
 ### 1. Install Node.js
 
-This project is a JavaScript / TypeScript app that needs Node.js
-version **22 or newer** (we test on Node 24 LTS).
+CardMirror is built with JavaScript / TypeScript and needs **Node.js**
+to run. Node is a regular desktop installer.
 
-- **macOS** — download the **LTS** installer from
-  [nodejs.org](https://nodejs.org/) and double-click it; or, if you
-  have Homebrew, run `brew install node`.
-- **Windows** — download the **LTS** installer from
-  [nodejs.org](https://nodejs.org/) and click through it.
-- **Linux** — your distro's package manager probably has an outdated
-  Node. Use the official Node installer per
-  [nodejs.org/en/download/package-manager](https://nodejs.org/en/download/package-manager)
-  or, easier, install [`nvm`](https://github.com/nvm-sh/nvm) and run
-  `nvm install --lts`.
+- **macOS** — open [nodejs.org](https://nodejs.org/) in your browser
+  and click the big green **"LTS"** download button. Open the `.pkg`
+  file from Downloads and click through the installer (Continue,
+  Continue, Agree, Install, enter your password if asked, Close).
+- **Windows** — open [nodejs.org](https://nodejs.org/) and click the
+  green **"LTS"** download button. Open the `.msi` file from
+  Downloads and click through the installer (Next, accept the
+  license, Next, Next, Install, Finish).
+- **Linux** — the easiest path is the official installer at
+  [nodejs.org/en/download](https://nodejs.org/en/download/) — pick
+  your distro and follow the few commands it shows.
 
-Verify it worked. Open a terminal and run:
+You don't need to verify the install — if the next step works, Node
+is installed.
 
-```sh
-node --version
+### 2. Download CardMirror
+
+1. Open
+   [the CardMirror page on GitHub](https://github.com/ant981228/prosemirror-debate)
+   in your browser.
+2. Click the **green `<> Code` button** near the top of the file list
+   (right side, above the file table).
+3. In the dropdown that opens, click **"Download ZIP"** at the bottom.
+4. A file called `prosemirror-debate-main.zip` lands in your Downloads
+   folder. Double-click it to unzip.
+5. You'll get a folder called **`prosemirror-debate-main`**. Move it
+   somewhere you can find later — your **Desktop** is fine, or
+   **Documents**. The exact location doesn't matter, only that you
+   can get back to it.
+
+### 3. Open a "terminal" inside that folder
+
+A "terminal" is a window where you can type a command and the
+computer runs it. You're going to open one *already pointed at the
+CardMirror folder*, so you don't have to navigate anywhere.
+
+- **macOS** —
+  1. Open **System Settings** → **Keyboard** → **Keyboard
+     Shortcuts…** → **Services** → **Files and Folders**.
+  2. Tick the box next to **"New Terminal at Folder"** (this is a
+     one-time setup; macOS hides it by default).
+  3. Close Settings.
+  4. Open **Finder** and navigate to the `prosemirror-debate-main`
+     folder you unzipped.
+  5. **Right-click** (or Control-click) the folder itself — *not*
+     double-click — and choose **Services → New Terminal at
+     Folder**.
+  6. A black or white **Terminal** window opens. The folder name
+     should appear in its title bar.
+
+- **Windows** —
+  1. Open **File Explorer** and navigate into the
+     `prosemirror-debate-main` folder (so you can see `package.json`,
+     `README.md`, etc. in the file list).
+  2. Click the **address bar** at the top of the File Explorer window
+     once so the path becomes editable.
+  3. Type `cmd` and press **Enter**. A black **Command Prompt**
+     window opens with the folder path on the prompt line. (Alternate
+     route: hold **Shift**, right-click an empty area of the folder,
+     and pick **"Open in Terminal"** or **"Open PowerShell window
+     here"**.)
+
+- **Linux** — most file managers (Nautilus / Dolphin / Thunar) have an
+  **"Open Terminal Here"** entry in the right-click menu. Right-click
+  inside the `prosemirror-debate-main` folder and pick that. If your
+  file manager doesn't offer it, open a terminal manually and type
+  `cd ` (note the trailing space), then drag the folder from the
+  file manager onto the terminal window — the path gets pasted in
+  — then press **Enter**.
+
+You should now have a terminal window open, "inside" the
+CardMirror folder. The next two steps are just two commands you
+type into that window.
+
+### 4. Install CardMirror's pieces
+
+In the terminal you just opened, **type** (or copy-paste) this and
+press **Enter**:
+
 ```
-
-You should see something like `v22.x.x` or `v24.x.x`. If you see
-`v20.x.x` or older, install a newer version before continuing.
-
-### 2. Get the code
-
-You have two options. The first (git) lets you pull future updates
-with one command. The second (download zip) is simpler if you've
-never used git.
-
-**Option A — clone with git** (recommended):
-
-If you don't have git installed, get it from
-[git-scm.com](https://git-scm.com/) (mac/win) or your distro's
-package manager (linux).
-
-```sh
-git clone https://github.com/ant981228/prosemirror-debate.git
-cd prosemirror-debate
-```
-
-**Option B — download a zip**:
-
-1. Open [the repo page on GitHub](https://github.com/ant981228/prosemirror-debate)
-   in a browser.
-2. Click the green **`<> Code`** button → **Download ZIP**.
-3. Unzip it somewhere convenient (e.g. your Desktop).
-4. Open a terminal in that folder. On macOS, right-click the
-   folder in Finder → **Services** → **New Terminal at Folder**.
-   On Windows, hold Shift and right-click inside the folder → **Open
-   PowerShell window here** (or open a terminal and `cd` into it).
-
-### 3. Install dependencies
-
-In the project folder (the one with `package.json`), run:
-
-```sh
 npm install
 ```
 
-This downloads everything the editor needs into a `node_modules/`
-folder. Takes a minute or two the first time.
+This downloads everything CardMirror depends on into a `node_modules`
+folder. It prints a lot of text. **Wait for the prompt to come back**
+(usually 30 seconds to a couple of minutes). You're done with this
+step when you can type into the terminal again.
 
-### 4. Start the editor
+It's normal to see warnings about deprecated packages — those don't
+matter. If you see a red **`error`** line that stops the install,
+make sure Node.js installed correctly in step 1.
 
-```sh
+### 5. Start CardMirror
+
+In the same terminal window, type:
+
+```
 npm run dev
 ```
 
-This starts the local dev server. You should see something like:
+After a few seconds you'll see something like:
 
 ```
   VITE v...  ready in ... ms
@@ -111,11 +132,16 @@ This starts the local dev server. You should see something like:
   ➜  Local:   http://localhost:5173/
 ```
 
-Open `http://localhost:5173/` in a browser. The editor loads with an
-empty starter doc. Drag a `.docx` onto the page (or click the 📂 icon
-in the ribbon) to open a real file.
+Open your browser, type `http://localhost:5173/` into the address
+bar, and press Enter. **CardMirror loads.** You'll see an empty
+starter doc. Drag a `.docx` file onto the page (or click the 📂 icon
+in the ribbon) to open a real document.
 
-### 5. (Optional) Set up AI features
+**Leave the terminal window open while you use the editor.** Closing
+the terminal stops CardMirror. To stop it intentionally, click the
+terminal window and press **Ctrl-C**.
+
+### 6. (Optional) Set up AI features
 
 A few features call out to Anthropic's Claude API:
 
@@ -127,9 +153,9 @@ To enable them:
 
 1. Get an API key from
    [console.anthropic.com](https://console.anthropic.com/) (you'll
-   need to top up a small amount of credit — Anthropic doesn't have a
-   free tier for the API).
-2. In the editor, click the ⚙ gear icon in the ribbon.
+   need to top up a small amount of credit — Anthropic doesn't have
+   a free tier for the API).
+2. In CardMirror, click the ⚙ gear icon in the ribbon.
 3. Toggle **AI features** on and paste your API key into the
    **Anthropic API key** field.
 
@@ -139,24 +165,24 @@ feature. It never travels through a third-party server.
 
 ### Coming back later
 
-Once you've installed everything, getting the editor running again
-just takes one command from the project folder:
+Open a terminal in the same folder (step 3 above), and type:
 
-```sh
+```
 npm run dev
 ```
 
-If you cloned with git, pull updates with:
+That's it — CardMirror starts again at `http://localhost:5173/`.
 
-```sh
-git pull
-npm install   # only needed if dependencies changed
-npm run dev
-```
+To grab a newer version of the code, download the ZIP again (step 2)
+into a fresh folder, and run `npm install` then `npm run dev` in
+that new folder.
 
 ## Other commands
 
-```sh
+These all run inside the terminal pointed at the CardMirror folder
+(same setup as the install steps above):
+
+```
 npm test            # run all tests
 npm run test:bench  # performance benchmarks
 npm run typecheck   # strict TypeScript check
@@ -173,7 +199,7 @@ npm run round-trip path/to/input.docx [path/to/output.docx]
 
 The output is fully native to Verbatim — same canonical style ids, same
 direct-formatting conventions. Stylepox and other non-Verbatim cruft is
-dropped on import (per [`ARCHITECTURE.md §3, §16`](./ARCHITECTURE.md)).
+dropped on import (per [`ARCHITECTURE.md §3`](./ARCHITECTURE.md)).
 
 ## Public API
 
@@ -185,13 +211,13 @@ import {
   exportDoc,     // schema doc → { documentXml, relsXml }
   importDoc,     // document.xml → schema doc
   newHeadingId,  // generate a fresh stable heading UUID
-} from 'prosemirror-debate';
+} from 'cardmirror';
 ```
 
 ### Example: read a docx, modify, write it back
 
 ```ts
-import { fromDocx, toDocx } from 'prosemirror-debate';
+import { fromDocx, toDocx } from 'cardmirror';
 import { readFile, writeFile } from 'node:fs/promises';
 
 const buf = await readFile('input.docx');
@@ -238,20 +264,6 @@ formatting `bold`, `italic`, `strikethrough`, `superscript`,
 
 See [`src/schema/`](./src/schema/) for full specs and
 [`ARCHITECTURE.md §4`](./ARCHITECTURE.md) for design rationale.
-
-## Round-trip fidelity
-
-Verified on three real working docs from the project owner
-(`reference-docs/example docs/`):
-
-| File                          | Cards | Heading IDs | Highlights | Underlines | #555555 refs | #D2D2D2 shading |
-|-------------------------------|------:|------------:|-----------:|-----------:|-------------:|----------------:|
-| Aff - Merp! (1.8 MB)          |   362 |    preserved|     10,903 |     17,791 |        2,621 |             684 |
-| DA - Reconciliation (1.0 MB)  |   321 |    preserved|     11,035 |     15,350 |          ≥1k |             411 |
-| CP - Bifurcation PIC (252 KB) |    50 |    preserved|      1,481 |      1,807 |            0 |               0 |
-
-All counts survive round-trip exactly. See `tests/round-trip/` for the
-verifying tests.
 
 ## Performance baseline
 

@@ -1,7 +1,7 @@
 {
-  "name": "prosemirror-debate",
+  "name": "cardmirror",
   "version": "0.0.0",
-  "description": "ProseMirror-based editor that interoperates with Advanced Verbatim",
+  "description": "CardMirror — ProseMirror-based editor that interoperates with Advanced Verbatim",
   "type": "module",
   "private": true,
   "scripts": {

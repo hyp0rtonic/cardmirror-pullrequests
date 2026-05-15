@@ -1,6 +1,6 @@
 # Architecture
 
-Design decisions for the prosemirror-debate editor. This file captures the
+Design decisions for the CardMirror editor. This file captures the
 *editor's* design choices — schema shape, rendering model, multi-doc
 architecture, integration boundaries. Verbatim's own data model lives in
 [`NOTES-verbatim.md`](./NOTES-verbatim.md); macro effects we're trying to
@@ -318,8 +318,7 @@ operations":
 A single-pane editor would have to be retrofitted for all of these.
 Building the multi-pane scaffolding from day one avoided that retrofit.
 
-The shipped shell is a three-slot workspace (per
-[`SPEC-multi-pane.md`](./SPEC-multi-pane.md)). Two layouts switch
+The shipped shell is a three-slot workspace. Two layouts switch
 automatically based on viewport width: **compact** (vertical stack,
 narrow viewports) and **wide-scroll** (slots side-by-side at a fixed
 target width, the workspace overflow-scrolls horizontally when more
@@ -953,22 +952,11 @@ Rationale: see `DECISIONS.md` 2026-05-10 "Tag boundary editing rules."
 
 The user maintains several companion tools today (referenced in
 `https://debate-decoded.ghost.io/leveling-up-verbatim/` and elsewhere).
-Per-tool integration assessment:
-
-| Tool | Status | Rationale |
-|------|--------|-----------|
-| Block Search | **Integrate (workspace v1, corpus v2)** | Schema-aware search is a major win; current tool exists because Word lacks the primitives. |
-| Fast Debate Paste — smart-paste pipeline | **Integrate** | Pure text-transformation; portable to both web and desktop. |
-| Fast Debate Paste — cross-app capture | **Desktop-only integration** | Global hotkeys + foreground-app reads aren't possible from a web app. |
-| AI cites/quals/translate/explain | **Integrate** | Pure LLM commands; cleaner UX with direct schema awareness. Degrades when offline. |
-| Stylepox Cleaner | **Stay external** | Legacy-file remediation runs once before adoption; our outputs are clean by construction. |
-| Tabroom Pairings highlighter | **Stay external** | Browser bookmarklet for tournament pairings; not a doc-editing tool. |
-
-Meta-observation: most of these tools are *patches around Word's
-limitations*. In a purpose-built editor, many of them stop being
-external tools and become features of the platform. The integration
-question is "what gap in Word did this tool exist to fill, and does our
-editor close that gap natively?"
+Most of these tools are *patches around Word's limitations*. In a
+purpose-built editor, many of them stop being external tools and
+become features of the platform. The integration question is "what
+gap in Word did this tool exist to fill, and does our editor close
+that gap natively?"
 
 ### Verbatim ribbon-command parity
 
@@ -1287,7 +1275,7 @@ Mod+Alt+F3 / Mod+Alt+Shift+F3 rebinding.)
 Images live in the schema as an `image` inline atom — base64 PNG/JPEG
 bytes, EMU width/height (round-tripped through OOXML's
 `<wp:inline>` / `<wp:extent>`), and an `alt` attribute (round-tripped
-through `<wp:docPr descr>`, per §18). Insertion paths:
+through `<wp:docPr descr>`, per §17). Insertion paths:
 
 - **Ribbon insert-image button** (next to the table dropdown in the
   formatting panel) opens a file picker, reads the blob via
@@ -1340,18 +1328,7 @@ Shipped commands:
   `italic` marks and `gridSpan` / `vMerge` attrs for merged cells)
   and inserted below the image.
 
-## 16. Stylepox handling
-
-Cleanup on import is *opt-in by configuration but defaults to on*.
-Documents we save out are stylepox-free by construction (the schema
-doesn't admit unrecognized styles in the first place). Documents we
-import get normalized: unrecognized styles collapse to direct formatting
-or get dropped, depending on what they look like.
-
-The *legacy-remediation* path — cleaning a polluted file before
-adoption — stays as the existing standalone Stylepox Cleaner.
-
-## 17. Tournament reliability
+## 16. Tournament reliability
 
 The desktop edition is the production surface for tournament use.
 Hard requirements:
@@ -1375,7 +1352,7 @@ Hard requirements:
 The web edition is explicitly not for tournament use; its target is
 collaboration and accessibility for users without full desktop machines.
 
-## 18. Accessibility and customization
+## 17. Accessibility and customization
 
 Accessibility is a baseline requirement, not a deferred polish task. Two
 specific things need to be true from the ground up:
@@ -1438,7 +1415,7 @@ should be a CSS variable for it (or a setting that drives one). The
 cost of doing this on the way in is roughly zero; the cost of
 retrofitting it later is high and tends not to happen.
 
-## 19. Out of scope for v1
+## 18. Out of scope for v1
 
 - Multi-user real-time collaboration (transclusion option 1, live
   shared cards). Defers to a phase that has backend infrastructure.

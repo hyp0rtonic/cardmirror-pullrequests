@@ -452,7 +452,7 @@ reduced-motion respect, screen-reader semantics polish. All of these
 are alternate values for the existing variable / setting surfaces or
 small additions to already-typed nodes.
 
-See `ARCHITECTURE.md §18` for the full inventory.
+See `ARCHITECTURE.md §17` for the full inventory.
 
 ## 2026-05-10: Drag-and-drop infrastructure
 

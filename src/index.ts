@@ -1,5 +1,5 @@
 /**
- * Public API for prosemirror-debate.
+ * Public API for CardMirror.
  *
  * Three layers:
  *   - Schema:   the ProseMirror schema (typed-tree document model).

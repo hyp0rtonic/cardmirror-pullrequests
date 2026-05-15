@@ -1489,7 +1489,7 @@ const navPanel = new NavigationPanel(navEl);
 
 function makeStarterDoc(): PMNode {
   return schema.nodes['doc']!.createChecked(null, [
-    schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text('prosemirror-debate playground')),
+    schema.nodes['pocket']!.create({ id: newHeadingId() }, schema.text('CardMirror playground')),
     schema.nodes['paragraph']!.create(null, [
       schema.text('Drop a .docx in the input above to load it. The schema renders here as the canonical Verbatim layout (Pocket = box, Hat = centered double underline, Block = centered single underline, Tag = inline-bold).'),
     ]),

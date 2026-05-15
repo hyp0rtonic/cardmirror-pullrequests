@@ -1,5 +1,5 @@
 /**
- * The prosemirror-debate schema.
+ * The CardMirror schema.
  *
  * Top-level export. See ARCHITECTURE.md §4 for the design rationale,
  * NOTES-verbatim.md for the docx data model this schema is shaped to
