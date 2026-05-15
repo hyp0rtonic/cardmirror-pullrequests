@@ -97,6 +97,10 @@ class Slot {
   private chipNameEl: HTMLElement;
   /** Title chip stack dropdown trigger (shown when stack has 2+). */
   private chipStackBtn: HTMLButtonElement;
+  /** Title chip expand / restore toggle — fills this pane to the
+   *  full editor + nav-rail surface while the others stay loaded
+   *  but hidden, and back. */
+  private chipExpandBtn: HTMLButtonElement;
   /** Title chip × close button. */
   private chipCloseBtn: HTMLButtonElement;
   /** Editor body — DocRecord.editorEl mounts here. */
@@ -149,6 +153,18 @@ class Slot {
     this.chipNameEl = document.createElement('span');
     this.chipNameEl.className = 'pmd-pane-chip-name';
     chip.appendChild(this.chipNameEl);
+    this.chipExpandBtn = document.createElement('button');
+    this.chipExpandBtn.type = 'button';
+    this.chipExpandBtn.className = 'pmd-pane-chip-expand';
+    this.chipExpandBtn.title = 'Expand this pane to fill the workspace';
+    this.chipExpandBtn.textContent = '⛶';
+    this.chipExpandBtn.setAttribute('aria-pressed', 'false');
+    this.chipExpandBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    this.chipExpandBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.shell.toggleExpanded(this);
+    });
+    chip.appendChild(this.chipExpandBtn);
     this.chipCloseBtn = document.createElement('button');
     this.chipCloseBtn.type = 'button';
     this.chipCloseBtn.className = 'pmd-pane-chip-close';
@@ -203,6 +219,15 @@ class Slot {
     this.navBodyEl = document.createElement('div');
     this.navBodyEl.className = 'pmd-multi-nav-body';
     this.navSectionEl.appendChild(this.navBodyEl);
+  }
+
+  /** Sync the chip's expand button to the shell's current expand
+   *  state. Driven by `MultiPaneShell.applyExpandedState`. */
+  setExpandButtonPressed(pressed: boolean): void {
+    this.chipExpandBtn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    this.chipExpandBtn.title = pressed
+      ? 'Restore the multi-pane layout'
+      : 'Expand this pane to fill the workspace';
   }
 
   /** Read the visible ProseMirror element's content-area width and
@@ -264,9 +289,11 @@ class Slot {
     this.stack.push(record);
     this.visibleIndex = this.stack.length - 1;
     this.mountVisible();
-    this.paneEl.hidden = false;
-    this.navSectionEl.hidden = false;
-    this.shell.refreshLayout();
+    // Visibility is owned by the shell: when expand mode is active,
+    // a newly-populated non-expanded slot stays hidden until the
+    // user restores the multi-pane layout. The shell's
+    // notifySlotPopulated does the right thing either way.
+    this.shell.notifySlotPopulated(this);
     this.shell.focusSlot(this);
   }
 
@@ -306,6 +333,9 @@ class Slot {
       this.visibleIndex = -1;
       this.paneEl.hidden = true;
       this.navSectionEl.hidden = true;
+      // If this empty slot was the expanded one, exit expand mode —
+      // no doc to expand any more.
+      this.shell.notifySlotEmptied(this);
       this.shell.refreshLayout();
       // If this slot was focused, hand focus to the next active slot.
       this.shell.handleSlotEmptied(this);
@@ -474,6 +504,11 @@ class MultiPaneShell {
   private rowEl: HTMLElement;
   private focusedSlot: Slot | null = null;
   private layoutMode: 'compact' | 'wide';
+  /** When non-null, the named slot is "expanded" — visible on its
+   *  own with every other pane + nav-section hidden, regardless of
+   *  whether those slots have docs loaded. Click the chip's expand
+   *  button again to restore the normal multi-pane layout. */
+  private expandedSlot: Slot | null = null;
   private unsubscribeSettings: (() => void) | null = null;
 
   constructor() {
@@ -658,11 +693,64 @@ class MultiPaneShell {
   /** Refresh the data-attribute count on the row, used by CSS to
    *  size each pane based on how many slots are active. */
   refreshLayout(): void {
-    const active = SLOT_IDS.filter((id) => this.slots[id].stack.length > 0).length;
+    // When a slot is expanded, the layout collapses to "one active
+    // pane" regardless of how many other slots have docs loaded —
+    // those panes are hidden but kept around so the user can pop
+    // back to the normal layout with the same docs intact.
+    const active = this.expandedSlot
+      ? 1
+      : SLOT_IDS.filter((id) => this.slots[id].stack.length > 0).length;
     this.rowEl.dataset['active'] = String(active);
     this.navRailEl.dataset['active'] = String(active);
     // Active-count change → pane widths change → re-sync.
     this.scheduleSyncAllCardIntrinsicWidths();
+  }
+
+  /** Toggle expand mode on `slot`. If the same slot is already
+   *  expanded, this restores the normal layout. If a different slot
+   *  is expanded, the expansion moves to the new slot. */
+  toggleExpanded(slot: Slot): void {
+    if (this.expandedSlot === slot) this.setExpandedSlot(null);
+    else this.setExpandedSlot(slot);
+  }
+
+  /** Set (or clear) the expanded slot and re-apply hidden states
+   *  and CSS hooks on every pane + nav section. */
+  private setExpandedSlot(slot: Slot | null): void {
+    // A slot with an empty stack has nothing to show — refuse the
+    // request rather than expanding to a blank pane.
+    if (slot && slot.stack.length === 0) return;
+    this.expandedSlot = slot;
+    this.applyExpandedState();
+  }
+
+  /** Reconcile per-slot pane / nav-section visibility with the
+   *  current expand state. When `expandedSlot` is set, only that
+   *  slot's pane + nav section are shown; otherwise visibility
+   *  reverts to "has a doc loaded → shown". Also keeps every
+   *  chip's expand-button aria-pressed flag in sync, and writes a
+   *  `data-expanded` attribute on the row + nav rail so CSS can
+   *  hook on it. Refreshes the layout count afterwards. */
+  private applyExpandedState(): void {
+    const expanded = this.expandedSlot;
+    for (const id of SLOT_IDS) {
+      const slot = this.slots[id];
+      const show = expanded
+        ? slot === expanded
+        : slot.stack.length > 0;
+      slot.paneEl.hidden = !show;
+      slot.navSectionEl.hidden = !show;
+      slot.setExpandButtonPressed(slot === expanded);
+    }
+    if (expanded) {
+      this.rowEl.dataset['expanded'] = expanded.id;
+      this.navRailEl.dataset['expanded'] = expanded.id;
+    } else {
+      delete this.rowEl.dataset['expanded'];
+      delete this.navRailEl.dataset['expanded'];
+    }
+    this.refreshLayout();
+    if (expanded) this.focusSlot(expanded);
   }
 
   /** Pending rAF id for the next card-intrinsic-width batch. */
@@ -704,7 +792,13 @@ class MultiPaneShell {
     const slot = this.slots[SLOT_IDS[idx]!];
     if (slot.stack.length === 0) return;
     e.preventDefault();
-    this.focusSlot(slot);
+    // If a slot is currently expanded, Mod-N moves the expansion to
+    // the target slot (so the keyboard stays useful in expand mode).
+    if (this.expandedSlot && this.expandedSlot !== slot) {
+      this.setExpandedSlot(slot);
+    } else {
+      this.focusSlot(slot);
+    }
     slot.visible?.view.focus();
   };
 
@@ -795,6 +889,28 @@ class MultiPaneShell {
     if (!rec) return;
     rec.filename = name;
     slot.refreshChipFilename();
+  }
+
+  /** A slot's stack just became empty. If it was the expanded
+   *  slot, drop expand mode — no doc to expand any more. */
+  notifySlotEmptied(slot: Slot): void {
+    if (this.expandedSlot === slot) this.setExpandedSlot(null);
+  }
+
+  /** A slot's stack just got a fresh doc. If we're in expand mode
+   *  and a *different* slot is expanded, keep this newcomer hidden
+   *  for now (the user can pop back to multi-pane to see it). If
+   *  the populated slot is the expanded one (or if expand mode is
+   *  off), show it. */
+  notifySlotPopulated(slot: Slot): void {
+    if (this.expandedSlot && this.expandedSlot !== slot) {
+      slot.paneEl.hidden = true;
+      slot.navSectionEl.hidden = true;
+    } else {
+      slot.paneEl.hidden = false;
+      slot.navSectionEl.hidden = false;
+    }
+    this.refreshLayout();
   }
 
   /** Handle a slot becoming empty — if it had focus, transfer to

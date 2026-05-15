@@ -306,6 +306,12 @@ and history modules — is ProseMirror's. The work in this repo is a
 debate-domain editor *on top of* that substrate, not a reinvention
 of it.
 
+If you're curious how ProseMirror works under the hood,
+[Marijn's launch post](https://marijnhaverbeke.nl/blog/prosemirror-1.html)
+is the best high-level introduction, and
+[the ProseMirror docs](https://prosemirror.net/docs/) cover the
+APIs in depth.
+
 Thank you to Marijn and the ProseMirror community for the years of
 careful library design that made this project tractable. If
 ProseMirror has been useful to you too, Marijn's work is supported

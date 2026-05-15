@@ -1509,34 +1509,54 @@ function makeStarterDoc(): PMNode {
     marks && marks.length ? schema.text(text, marks) : schema.text(text);
   const para = (...children: PMNode[]) => n['paragraph']!.create(null, children);
   const paraText = (text: string) => n['paragraph']!.create(null, schema.text(text));
+  /** Indented body paragraph (0.5" = 720 dxa). Used for the F-key
+   *  shortcut list so it visually reads as a sub-block under the
+   *  surrounding prose. */
+  const paraIndented = (text: string) =>
+    n['paragraph']!.create({ indent: 720 }, schema.text(text));
+  /** Empty paragraph spacer — gives a blank line between content
+   *  blocks so the onboarding doc reads less wall-of-text. */
+  const blank = () => n['paragraph']!.create(null);
 
   return n['doc']!.createChecked(null, [
     n['pocket']!.create({ id: newHeadingId() }, schema.text('Welcome to CardMirror')),
     paraText(
       'This is the live web preview of CardMirror — a ProseMirror-based editor that round-trips Microsoft Word .docx files against Verbatim and Advanced Verbatim. The boxed heading above is a Pocket: Verbatim\'s name for a top-level argument section. The structures below are interactive — type, edit, and try the keyboard shortcuts as you read.',
     ),
+    blank(),
     paraText(
       'One bit of vocabulary first: this guide writes "Mod" for the platform\'s primary modifier key — Ctrl on Windows and Linux, ⌘ Cmd on macOS. So "Mod-Shift-S" means Ctrl-Shift-S or ⌘-Shift-S depending on what you\'re running.',
     ),
+    blank(),
 
     // Section 1: Try it
     n['hat']!.create({ id: newHeadingId() }, schema.text('1. Try it with your own files')),
     paraText(
       'Click the 📂 folder icon in the ribbon to open one of your real Verbatim files. The editor renders styles, marks, and structure with full fidelity, and Save As (💾 in the ribbon, or Mod-Shift-S) round-trips back to a Verbatim-native .docx.',
     ),
+    blank(),
     paraText(
       'Heads up: this is the alpha web preview. Edits live only in this tab — there\'s no autosave yet, so use Save As before you close the page if you want to keep what you\'ve done. Don\'t use this for important work.',
     ),
+    blank(),
 
     // Section 2: Structural styles
     n['hat']!.create({ id: newHeadingId() }, schema.text('2. Structural styles')),
     paraText(
       'CardMirror uses the same four-level hierarchy as Verbatim — Pocket → Hat → Block → Tag — plus body paragraphs, Analytics, and Undertags. Each lives behind a function key (defaults; all rebindable in Settings → Keyboard shortcuts):',
     ),
-    paraText('F4 = Pocket  ·  F5 = Hat  ·  F6 = Block  ·  F7 = Tag  ·  Mod-F7 = Analytic  ·  Mod-F8 = Undertag'),
+    blank(),
+    paraIndented('F4 = Pocket'),
+    paraIndented('F5 = Hat'),
+    paraIndented('F6 = Block'),
+    paraIndented('F7 = Tag'),
+    paraIndented('Mod-F7 = Analytic'),
+    paraIndented('Mod-F8 = Undertag'),
+    blank(),
     paraText(
       'Click a paragraph and press the matching key to convert it. Multi-paragraph selections convert every touched paragraph in one go. F12 clears formatting back to plain body text.',
     ),
+    blank(),
 
     n['block']!.create({ id: newHeadingId() }, schema.text('Blocks group related cards under a Hat')),
     paraText(
@@ -1565,6 +1585,7 @@ function makeStarterDoc(): PMNode {
         ),
       ]),
     ]),
+    blank(),
 
     n['analytic_unit']!.create(null, [
       n['analytic']!.create(
@@ -1578,39 +1599,55 @@ function makeStarterDoc(): PMNode {
         ),
       ),
     ]),
+    blank(),
 
     // Section 3: Moving things around
     n['hat']!.create({ id: newHeadingId() }, schema.text('3. Moving things around')),
     paraText(
-      'The nav pane on the left shows your doc\'s outline. Click any entry to jump to it. Ctrl-click adds an entry to the current selection; Shift-click selects a contiguous range. To reorder, just drag a nav entry (or your multi-selection) up or down — that picks up the whole heading and its contents (Pocket and everything under it, Hat and its blocks, etc.) and drops them somewhere schema-legal. Hold Ctrl (or Alt on macOS) while dragging to copy instead of move.',
+      'The nav pane on the left shows your doc\'s outline. Click any entry to jump to it. Double-click an entry to collapse or expand its sub-tree in the nav (Pocket folds away its Hats and so on); the editor content is unchanged, just the outline view. The row of numbered buttons at the top of the nav pane (1 · 2 · 3 · 4) sets the deepest heading level shown — click "2" to see only Pockets and Hats, "4" to see everything down through Tags.',
     ),
+    blank(),
+    paraText(
+      'Ctrl-click adds a nav entry to the current selection; Shift-click selects a contiguous range. To reorder, just drag a nav entry (or your multi-selection) up or down — that picks up the whole heading and its contents (Pocket and everything under it, Hat and its blocks, etc.) and drops them somewhere schema-legal. Hold Ctrl (or Alt on macOS) while dragging to copy instead of move.',
+    ),
+    blank(),
     paraText(
       'To pick up a card or analytic directly from the editor surface (not the nav pane), hold Mod + Shift + Alt and click-and-drag it. While the modifier is held the cursor switches to a grab cursor and hovering a card highlights its boundary. Drag-and-drop is schema-aware throughout: drop targets that would produce an invalid structure don\'t light up, and invalid drops are refused.',
     ),
+    blank(),
 
     // Section 4: Read mode
     n['hat']!.create({ id: newHeadingId() }, schema.text('4. Read mode')),
     paraText(
       'When it\'s time to read at the podium, click 👁️ in the ribbon to enter Read mode. Non-read-aloud content (loose paragraphs, undertags, plain text without highlights) hides; only Tags, Cites, Analytics, and highlighted body text stay visible. Keyboard input is locked down so stray keystrokes can\'t edit the doc. Click 👁️ again or Esc to exit.',
     ),
+    blank(),
+    paraText(
+      'At the bottom of the window the status bar shows live read-time estimates for your two top-of-list readers — how long the visible (read-aloud) content of the current doc would take each of them to deliver. The numbers update as you edit, highlight, and trim. Tune each reader\'s name and words-per-minute rate in ⚙ → General → "Readers for read-time estimates"; the first two readers in the list are the ones that surface in the status bar.',
+    ),
+    blank(),
 
     // Section 5: Multi-doc workspace
     n['hat']!.create({ id: newHeadingId() }, schema.text('5. Multi-doc workspace')),
     paraText(
       'Open ⚙ → General → Multi-doc workspace and reload the page to switch into the three-slot side-by-side layout. Each slot is independent: it has its own ribbon focus, its own nav-pane section, its own word-count strip in the footer, and its own doc stack (back / forward / close-and-restore history). Mod-1, Mod-2, and Mod-3 focus the corresponding slot from the keyboard.',
     ),
+    blank(),
     paraText(
       'Two layouts apply when all three slots are filled: Compact (all three visible side by side, narrow) and Wide-scroll (two full panes plus the edge of a third; click the peek to snap). Pick which one in ⚙ → General → Multi-doc layout. With only one or two docs open the modes look identical.',
     ),
+    blank(),
     paraText(
       'To get content from one slot to another, drag a card or a nav-pane heading across — cross-pane drops always copy (the source pane keeps its content). Comments are disabled while multi-doc is on, so the comments column and the comment / AI-ask shortcuts go inert until you switch back.',
     ),
+    blank(),
 
     // Section 6: Settings
     n['hat']!.create({ id: newHeadingId() }, schema.text('6. Customize everything')),
     paraText(
       'Click the ⚙ icon in the ribbon to open Settings. Click 📖 to open the keyboard-shortcut reference any time.',
     ),
+    blank(),
     paraText(
       'When you\'re ready, open a real .docx with the 📂 icon — or just start editing this one. Welcome aboard!',
     ),

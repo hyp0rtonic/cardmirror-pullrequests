@@ -3941,22 +3941,35 @@ body.pmd-multi-doc #word-count-display {
   color: #fff;
 }
 .pmd-pane-focused .pmd-pane-chip-close,
-.pmd-pane-focused .pmd-pane-chip-stack {
+.pmd-pane-focused .pmd-pane-chip-stack,
+.pmd-pane-focused .pmd-pane-chip-expand {
   color: #fff;
 }
+.pmd-pane-focused .pmd-pane-chip-expand[aria-pressed="true"] {
+  /* Active-state accent reads as too-similar to the focused-pane
+   * blue background; switch to white + a subtle box to flag the
+   * pressed state instead. */
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+}
 
-/* Title chip — small, ~22px tall. Way smaller than the original
- * sketch's full-width box; just a thin header above the editor. */
+/* Title chip — fixed height so the strip stays the same regardless
+ * of content. Some name decorations (the 🎤 speech-doc prefix,
+ * emoji in filenames, the ⛶ glyph) render at heights that grow
+ * the chip when sizing is content-driven; pinning the height
+ * makes the strip consistent. */
 .pmd-pane-chip {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.15rem 0.4rem;
+  padding: 0 0.4rem;
   background: var(--pmd-c-surface-2, var(--pmd-c-surface));
   border-bottom: 1px solid var(--pmd-c-border-soft);
   font-size: 0.78rem;
   line-height: 1;
-  min-height: 22px;
+  height: 26px;
+  flex: 0 0 26px;
 }
 .pmd-pane-chip-name {
   flex: 1 1 auto;
@@ -3987,20 +4000,38 @@ body.pmd-multi-doc #word-count-display {
 }
 .pmd-pane-chip-stack {
   flex: 0 0 auto;
+  height: 18px;
   background: transparent;
   border: 1px solid var(--pmd-c-border-soft);
   border-radius: 3px;
   padding: 0 0.3rem;
   font-size: 0.7rem;
+  line-height: 1;
   color: var(--pmd-c-text-muted);
   cursor: pointer;
 }
 .pmd-pane-chip-stack:hover { background: var(--pmd-c-surface-3, var(--pmd-c-surface)); }
 .pmd-pane-chip-stack[hidden] { display: none; }
+.pmd-pane-chip-expand {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.pmd-pane-chip-expand:hover { color: var(--pmd-c-text-strong); }
+.pmd-pane-chip-expand[aria-pressed="true"] {
+  color: var(--pmd-c-accent);
+}
 .pmd-pane-chip-close {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   background: transparent;
   border: none;
@@ -4010,6 +4041,21 @@ body.pmd-multi-doc #word-count-display {
   line-height: 1;
 }
 .pmd-pane-chip-close:hover { color: var(--pmd-c-danger, #c00); }
+
+/* Expand mode — exactly one pane is visible at a time. The hidden
+ * panes / nav-sections already collapse via [hidden]; the row's
+ * `data-active="1"` (driven by `refreshLayout` while expanded) makes
+ * the visible pane flex-fill regardless of wide-scroll layout, so
+ * the user gets the same full-width feel as a single-doc workspace.
+ *
+ * The expanded-slot data attribute is exposed purely as a hook for
+ * future styling (focus rings, transitions, etc.); the visibility
+ * itself is driven by per-element [hidden]. */
+.pmd-multi-row[data-expanded] .pmd-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  scroll-snap-align: none;
+}
 
 /* Stack dropdown — floats over the chip when the user clicks ▾. */
 .pmd-pane-chip-dropdown {
