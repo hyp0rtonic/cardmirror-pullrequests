@@ -99,17 +99,10 @@ class Slot {
   readonly navSectionEl: HTMLElement;
   /** Nav body — DocRecord.navEl mounts here. */
   private navBodyEl: HTMLElement;
-  /** ResizeObserver tracking the pane body's width, driving the
-   *  per-pane `--pmd-card-intrinsic-width` CSS variable. */
-  private bodyResizeObserver: ResizeObserver;
-  /** Last width we wrote into `--pmd-card-intrinsic-width`. Used to
-   *  short-circuit no-op observations and prevent feedback loops
-   *  where setting the variable triggers a layout pass that fires
-   *  the observer again. */
+  /** Last width we wrote into `--pmd-card-intrinsic-width`. Skips
+   *  no-op writes on repeated sync calls (e.g. multiple events
+   *  firing in one frame for the same final width). */
   private lastIntrinsicWidth = -1;
-  /** Pending rAF id for the next intrinsic-width sync. Coalesces
-   *  bursts of observer fires into one write per animation frame. */
-  private intrinsicWidthRaf: number | null = null;
 
   /** Live stack. Index 0 = bottom (least recently active);
    *  `visibleIndex` is the doc currently shown. */
@@ -194,46 +187,44 @@ class Slot {
     this.navBodyEl = document.createElement('div');
     this.navBodyEl.className = 'pmd-multi-nav-body';
     this.navSectionEl.appendChild(this.navBodyEl);
-
-    // Keep `--pmd-card-intrinsic-width` on the pane root in sync
-    // with the pane body's current clientWidth. Cards inside use
-    // this variable for `contain-intrinsic-width` so that when
-    // `content-visibility: auto` skips them off-screen they render
-    // their placeholder box at the right width for THIS pane (not
-    // a fixed pixel fallback that'd be wrong for narrow multi-pane
-    // slots). ResizeObserver covers every resize: layout-mode
-    // toggle, active-count change, window resize, nav drag.
-    this.bodyResizeObserver = new ResizeObserver((entries) => {
-      this.scheduleCardIntrinsicWidthSync(entries[0]);
-    });
-    this.bodyResizeObserver.observe(this.bodyEl);
   }
 
-  /** Coalesce a burst of observer fires into one write per animation
-   *  frame, and bail when the width is unchanged. Reads the body's
-   *  border-box width from the entry (or falls back to offsetWidth)
-   *  rather than clientWidth — clientWidth shrinks by the scrollbar
-   *  gutter when vertical scrolling kicks in, and that change was
-   *  triggering the feedback loop: variable write → relayout →
-   *  scrollbar toggles → clientWidth shifts → observer re-fires.
-   *  Border-box size is scrollbar-independent, so the cache check
-   *  actually stabilizes. */
-  private scheduleCardIntrinsicWidthSync(entry?: ResizeObserverEntry): void {
-    if (this.intrinsicWidthRaf !== null) return;
-    this.intrinsicWidthRaf = requestAnimationFrame(() => {
-      this.intrinsicWidthRaf = null;
-      let width = 0;
-      const box = entry?.borderBoxSize?.[0];
-      if (box) {
-        width = Math.round(box.inlineSize);
-      } else {
-        width = Math.round(this.bodyEl.offsetWidth);
-      }
-      if (width <= 0) return;
-      if (width === this.lastIntrinsicWidth) return;
-      this.lastIntrinsicWidth = width;
-      this.paneEl.style.setProperty('--pmd-card-intrinsic-width', `${width}px`);
-    });
+  /** Read the visible ProseMirror element's content-area width and
+   *  write it into `--pmd-card-intrinsic-width` on the pane root.
+   *  Cards inside use this variable as the fallback for
+   *  `contain-intrinsic-width` (paired with the `auto` keyword) so
+   *  off-screen-never-rendered cards in a narrow multi-pane slot
+   *  size close to the real card width rather than a fixed 600px.
+   *
+   *  Measuring the PM root (not `bodyEl`) is deliberate — bodyEl's
+   *  `offsetWidth` includes scrollbar gutter AND doesn't subtract
+   *  the editor's inner padding, so it overshoots a card's actual
+   *  width by enough to be visible at the doc edge. PM root's
+   *  `clientWidth` is scrollbar-independent and we subtract its
+   *  computed padding to land exactly on the content box where
+   *  cards lay out.
+   *
+   *  Called explicitly on (a) push, (b) shell window resize, (c)
+   *  layout-mode change, (d) active-count change. Deliberately NOT
+   *  driven by ResizeObserver — the variable write triggers a
+   *  layout pass on every card, and ResizeObserver-driven updates
+   *  produced a hard feedback loop where the pane body's measured
+   *  width kept growing each iteration after the user clicked into
+   *  the editor. Explicit triggers can't re-fire from our own
+   *  mutations. */
+  syncCardIntrinsicWidth(): void {
+    if (this.paneEl.hidden) return;
+    const rec = this.visible;
+    if (!rec) return;
+    const pmEl = rec.view.dom as HTMLElement;
+    const cs = getComputedStyle(pmEl);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const width = Math.round(pmEl.clientWidth - padL - padR);
+    if (width <= 0) return;
+    if (width === this.lastIntrinsicWidth) return;
+    this.lastIntrinsicWidth = width;
+    this.paneEl.style.setProperty('--pmd-card-intrinsic-width', `${width}px`);
   }
 
   /** The currently-visible doc record (or null when stack is empty). */
@@ -475,6 +466,10 @@ class MultiPaneShell {
         this.layoutMode = s.multiDocLayoutMode;
         this.shellEl.dataset['layout'] = this.layoutMode;
         this.rowEl.dataset['layout'] = this.layoutMode;
+        // Layout mode swap → pane widths change → re-sync card
+        // intrinsic widths so skipped cards aren't sized for the
+        // OLD layout's pane width.
+        this.scheduleSyncAllCardIntrinsicWidths();
       }
       // Pane word counts depend on reader settings.
       for (const id of SLOT_IDS) this.slots[id].refreshWordCount();
@@ -488,7 +483,14 @@ class MultiPaneShell {
           rec.view.dom.setAttribute('spellcheck', spellcheck);
         }
       }
+      // Nav drag changes available pane width — re-sync.
+      this.scheduleSyncAllCardIntrinsicWidths();
     });
+
+    // Window resize is the other event that legitimately changes
+    // pane widths. Deliberately NOT a ResizeObserver — see the doc
+    // comment on Slot.syncCardIntrinsicWidth for why.
+    window.addEventListener('resize', this.onWindowResize);
 
     // Drag-hover focus + post-drop collapse:
     //
@@ -554,7 +556,29 @@ class MultiPaneShell {
     const active = SLOT_IDS.filter((id) => this.slots[id].stack.length > 0).length;
     this.rowEl.dataset['active'] = String(active);
     this.navRailEl.dataset['active'] = String(active);
+    // Active-count change → pane widths change → re-sync.
+    this.scheduleSyncAllCardIntrinsicWidths();
   }
+
+  /** Pending rAF id for the next card-intrinsic-width batch. */
+  private syncIntrinsicRaf: number | null = null;
+
+  /** Coalesce multiple sync triggers landing in the same tick into a
+   *  single rAF read, so we measure once after layout settles rather
+   *  than mid-flight. The cache check inside `syncCardIntrinsicWidth`
+   *  is doing the no-op short-circuit; this just avoids stacking
+   *  redundant rAFs. */
+  scheduleSyncAllCardIntrinsicWidths(): void {
+    if (this.syncIntrinsicRaf !== null) return;
+    this.syncIntrinsicRaf = requestAnimationFrame(() => {
+      this.syncIntrinsicRaf = null;
+      for (const id of SLOT_IDS) this.slots[id].syncCardIntrinsicWidth();
+    });
+  }
+
+  private onWindowResize = (): void => {
+    this.scheduleSyncAllCardIntrinsicWidths();
+  };
 
   /** Mark `slot` as focused. The shared ribbon / chrome will route
    *  through its visible doc's EditorView. In wide-scroll layout

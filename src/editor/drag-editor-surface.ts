@@ -19,9 +19,10 @@
  */
 
 import type { EditorView } from 'prosemirror-view';
-import { collectHeadings, computeHeadingRange, TYPE_TO_LEVEL } from './headings.js';
+import { collectHeadings, headingInsertPos, TYPE_TO_LEVEL } from './headings.js';
 import { dragController, type DragItem, type DragSurface } from './drag-controller.js';
 import { settings } from './settings.js';
+import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 
 interface IndicatorRecord {
   el: HTMLElement;
@@ -71,6 +72,37 @@ export class EditorDragSurface implements DragSurface {
    *  host, or host itself). Reused by every hit-test so we don't
    *  walk the DOM on every pointermove. */
   private scrollGateEl: HTMLElement | null = null;
+
+  // ---- Heading-visibility tracking (for drop-indicator rendering) ----
+  //
+  // Cards / heading containers have `content-visibility: auto`, which
+  // means off-screen subtrees are skipped from layout. Querying
+  // `offsetTop` of a descendant of a skipped subtree forces the
+  // browser to materialize that subtree's layout — and the
+  // drop-indicator code does that for every heading in the doc.
+  // On a long doc this is hundreds of ms of forced layout.
+  //
+  // Solution: maintain an IntersectionObserver continuously, tracking
+  // which heading elements are currently within (or near) the
+  // viewport. Drop indicators are rendered ONLY for the visible
+  // subset — those elements are already laid out so the offsetTop
+  // reads are fast. As the user scrolls during a drag, the IO fires
+  // and we re-render indicators for the newly-visible subset.
+  /** Per-element visibility flag, fed by the IntersectionObserver. */
+  private visibleHeadings: Set<HTMLElement> = new Set();
+  /** Whether `view.dom.lastElementChild` is currently in viewport.
+   *  Drives whether the doc-end indicator renders. */
+  private visibleLastChild = false;
+  /** The set of elements currently observed by the IO. Refreshed
+   *  whenever PM mutates the doc structure. */
+  private observedHeadings: Set<HTMLElement> = new Set();
+  private observedLastChild: HTMLElement | null = null;
+  private headingIO: IntersectionObserver | null = null;
+  /** MutationObserver watching `view.dom` for added / removed
+   *  heading nodes. Fires after every PM transaction — debounced
+   *  via the idle scheduler so we don't pay this cost per keystroke. */
+  private headingMutObserver: MutationObserver | null = null;
+  private refreshHeadingObsHandle: IdleHandle | null = null;
 
   /** Return the host's own scroller if it has one, otherwise the
    *  nearest ancestor whose `overflow-y` allows scrolling. Used by
@@ -125,6 +157,7 @@ export class EditorDragSurface implements DragSurface {
     window.addEventListener('blur', this.boundOnBlur);
     hostEl.addEventListener('pointermove', this.boundOnHostMove);
     hostEl.addEventListener('pointerdown', this.boundOnHostDown);
+    this.setupHeadingObservers();
   }
 
   private onGlobalMove(e: MouseEvent): void {
@@ -154,6 +187,7 @@ export class EditorDragSurface implements DragSurface {
     this.detachDragListeners();
     this.removeIndicators();
     this.removeHighlight();
+    this.teardownHeadingObservers();
     this.hovered = null;
     this.pickupModifierHeld = false;
     this.dragOriginatedHere = false;
@@ -256,63 +290,58 @@ export class EditorDragSurface implements DragSurface {
       seen.add(insertPos);
       positions.push({ insertPos, top });
     };
-    for (const entry of collectHeadings(view.state.doc)) {
-      if (entry.level > draggedLevel) continue;
-      const range = computeHeadingRange(view.state.doc, entry);
-      if (!range) continue;
-      const id = entry.id;
-      // The heading's DOM element carries `data-id`; walk the
-      // offsetParent chain from there to host so we get the CSS
-      // top in host's coordinate system regardless of nesting.
-      let topInHost: number | null = null;
-      if (id) {
-        const el = view.dom.querySelector<HTMLElement>(`[data-id="${cssEscape(id)}"]`);
-        if (el) topInHost = offsetTopWithin(el, host);
-      }
-      if (topInHost == null) {
-        // Headings without a stable id (rare) fall back to
-        // coordsAtPos + the viewport→host transform.
-        try {
-          const hostRect = host.getBoundingClientRect();
-          const zoom = this.getEditorZoom();
-          const coords = view.coordsAtPos(range.from);
-          topInHost = (coords.top - hostRect.top) / zoom + host.scrollTop;
-        } catch {
-          continue;
-        }
-      }
-      pushPos(range.from, topInHost);
+    // Build a fast id→element map from the currently-visible heading
+    // set so we can render indicators only for headings the user can
+    // actually see. Headings outside the viewport stay
+    // `content-visibility: auto`-skipped — querying their offsetTop
+    // would force the browser to materialize their ancestor layout,
+    // which is the slow path we're avoiding. The IntersectionObserver
+    // (`headingIO`) keeps `visibleHeadings` current.
+    const visibleIdToEl = new Map<string, HTMLElement>();
+    for (const el of this.visibleHeadings) {
+      const id = el.dataset['id'];
+      if (id) visibleIdToEl.set(id, el);
     }
-    // Doc-end indicator: place it at the bottom edge of the LAST
-    // child of `view.dom` rather than at view.dom's own
-    // offsetBottom. In multi-doc, pane-editor has a definite height
-    // (height: 100% of the pane-body), which makes PM's
-    // `min-height: 100%` resolve to that height — so `pm.offsetHeight`
-    // includes the min-height padding past the last element. The
-    // indicator then lands below an unreachable gap of empty space.
-    // The last-child's offsetBottom is the actual end of the doc's
-    // visible content in either layout.
+    const doc = view.state.doc;
+    // `skipCite: true` — drop-indicator placement doesn't read
+    // `entry.cite`, and the cite walk is the heaviest part of
+    // `collectHeadings` (it descends every card looking for
+    // cite-marked text runs).
+    for (const entry of collectHeadings(doc, { skipCite: true })) {
+      if (entry.level > draggedLevel) continue;
+      const id = entry.id;
+      if (!id) continue;
+      const el = visibleIdToEl.get(id);
+      if (!el) continue;
+      // Visibility gate first — the heading-range computation below
+      // does a forward doc walk for pocket / hat / block (nodesBetween
+      // to find the next equal-or-shallower heading), which is the
+      // expensive bit. Skipping that for off-screen headings keeps
+      // drag pickup snappy on long docs.
+      //
+      // We also DON'T call `computeHeadingRange` here — for
+      // indicator placement we only need the heading's start position,
+      // which is `entry.pos` for pocket / hat / block and the parent
+      // card's position for tag / analytic. `headingInsertPos` below
+      // computes just that, without the forward-walk for the heading's
+      // full range.
+      const insertPos = headingInsertPos(doc, entry);
+      if (insertPos == null) continue;
+      // Heading is in-viewport, so its ancestors are already laid out
+      // and the offsetTop read is cheap.
+      const topInHost = offsetTopWithin(el, host);
+      if (topInHost == null) continue;
+      pushPos(insertPos, topInHost);
+    }
+    // Doc-end indicator: same visibility gate. The last child is
+    // observed separately because it may not carry `data-id`.
     const docEnd = view.state.doc.content.size;
-    if (!seen.has(docEnd)) {
+    if (!seen.has(docEnd) && this.visibleLastChild) {
       const lastChild = view.dom.lastElementChild as HTMLElement | null;
-      let endTop: number | null = null;
       if (lastChild) {
         const topInHost = offsetTopWithin(lastChild, host);
-        if (topInHost != null) endTop = topInHost + lastChild.offsetHeight;
+        if (topInHost != null) pushPos(docEnd, topInHost + lastChild.offsetHeight);
       }
-      if (endTop == null) {
-        // Fallback: viewport-coord transform (same as id-less
-        // heading fallback above).
-        try {
-          const hostRect = host.getBoundingClientRect();
-          const zoom = this.getEditorZoom();
-          const endCoords = view.coordsAtPos(docEnd);
-          endTop = (endCoords.bottom - hostRect.top) / zoom + host.scrollTop;
-        } catch {
-          /* skip */
-        }
-      }
-      if (endTop != null) pushPos(docEnd, endTop);
     }
 
     // Single-DOM append via a fragment — no layout thrash from the
@@ -331,6 +360,127 @@ export class EditorDragSurface implements DragSurface {
   private removeIndicators(): void {
     for (const r of this.indicators) r.el.remove();
     this.indicators = [];
+  }
+
+  // ---- Heading visibility tracking ----
+
+  /** Stand up the IntersectionObserver + MutationObserver that keep
+   *  `visibleHeadings` and `visibleLastChild` current. Called once
+   *  from `attach`. */
+  private setupHeadingObservers(): void {
+    if (!this.view) return;
+    this.headingIO = new IntersectionObserver(
+      (entries) => this.onHeadingsIntersection(entries),
+      // `root: null` = viewport. The doc-end / heading elements live
+      // inside a scroll container that's itself inside the viewport,
+      // so viewport intersection correctly tracks user-visible state
+      // for both single-doc (`#editor` may or may not scroll) and
+      // multi-pane (each pane body scrolls inside its own pane).
+      // 50% rootMargin keeps a viewport-sized buffer of indicators
+      // rendered above and below the visible region so the user
+      // doesn't see them pop in as they scroll during a drag.
+      { root: null, rootMargin: '50%', threshold: 0 },
+    );
+    this.headingMutObserver = new MutationObserver(() => this.scheduleHeadingObsRefresh());
+    this.headingMutObserver.observe(this.view.dom, { childList: true, subtree: true });
+    // Initial population — observe everything currently rendered.
+    this.refreshHeadingObservations();
+  }
+
+  private teardownHeadingObservers(): void {
+    if (this.refreshHeadingObsHandle !== null) {
+      cancelIdle(this.refreshHeadingObsHandle);
+      this.refreshHeadingObsHandle = null;
+    }
+    if (this.headingMutObserver) {
+      this.headingMutObserver.disconnect();
+      this.headingMutObserver = null;
+    }
+    if (this.headingIO) {
+      this.headingIO.disconnect();
+      this.headingIO = null;
+    }
+    this.observedHeadings.clear();
+    this.observedLastChild = null;
+    this.visibleHeadings.clear();
+    this.visibleLastChild = false;
+  }
+
+  /** PM mutations fire as a burst — debounce the re-observe via the
+   *  idle scheduler so we don't pay this cost on every keystroke. */
+  private scheduleHeadingObsRefresh(): void {
+    if (this.refreshHeadingObsHandle !== null) return;
+    this.refreshHeadingObsHandle = scheduleIdle(() => {
+      this.refreshHeadingObsHandle = null;
+      this.refreshHeadingObservations();
+    }, 250);
+  }
+
+  /** Sync IO observations with the current set of `[data-id]`
+   *  elements in `view.dom` plus the doc's last child (for the
+   *  doc-end indicator). Adds new observations, drops stale ones. */
+  private refreshHeadingObservations(): void {
+    if (!this.view || !this.headingIO) return;
+    const heads = this.view.dom.querySelectorAll<HTMLElement>('[data-id]');
+    const next = new Set<HTMLElement>();
+    for (const el of heads) next.add(el);
+    // Unobserve elements no longer present.
+    for (const el of this.observedHeadings) {
+      if (!next.has(el)) {
+        this.headingIO.unobserve(el);
+        this.visibleHeadings.delete(el);
+      }
+    }
+    // Observe elements newly present.
+    for (const el of next) {
+      if (!this.observedHeadings.has(el)) {
+        this.headingIO.observe(el);
+      }
+    }
+    this.observedHeadings = next;
+    // Doc-end last-child tracking. Re-attach when it changes.
+    const lastChild = this.view.dom.lastElementChild as HTMLElement | null;
+    if (lastChild !== this.observedLastChild) {
+      if (this.observedLastChild) {
+        this.headingIO.unobserve(this.observedLastChild);
+        this.visibleLastChild = false;
+      }
+      if (lastChild) this.headingIO.observe(lastChild);
+      this.observedLastChild = lastChild;
+    }
+  }
+
+  private onHeadingsIntersection(entries: IntersectionObserverEntry[]): void {
+    let changed = false;
+    for (const e of entries) {
+      const el = e.target as HTMLElement;
+      if (e.isIntersecting) {
+        if (el === this.observedLastChild && !this.visibleLastChild) {
+          this.visibleLastChild = true;
+          changed = true;
+        }
+        if (el.hasAttribute('data-id') && !this.visibleHeadings.has(el)) {
+          this.visibleHeadings.add(el);
+          changed = true;
+        }
+      } else {
+        if (el === this.observedLastChild && this.visibleLastChild) {
+          this.visibleLastChild = false;
+          changed = true;
+        }
+        if (this.visibleHeadings.has(el)) {
+          this.visibleHeadings.delete(el);
+          changed = true;
+        }
+      }
+    }
+    // If a drag is currently active and the visible set shifted (e.g.
+    // user scrolled the pane), re-render indicators to cover the
+    // newly-visible region.
+    if (changed && dragController.isActive()) {
+      const session = dragController.getSession();
+      if (session) this.renderIndicators(session.items[0]!.level);
+    }
   }
 
   // ---- Modifier-pickup mode ----
@@ -640,10 +790,3 @@ function offsetTopWithin(el: HTMLElement, host: HTMLElement): number | null {
   return null;
 }
 
-/** Minimal CSS.escape polyfill — matches the helper in nav-panel.ts. */
-function cssEscape(s: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(s);
-  }
-  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
-}

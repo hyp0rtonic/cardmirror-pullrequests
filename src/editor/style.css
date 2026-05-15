@@ -878,16 +878,24 @@ code {
      is that it implicitly applies size containment when skipped,
      using `contain-intrinsic-size` as the rendered size for both
      axes — so a fixed-pixel width fallback would clip multi-pane
-     cards in narrow panes. Instead, the WIDTH is driven by a CSS
-     variable `--pmd-card-intrinsic-width` that the editor shell
-     keeps in sync with each editor surface's current clientWidth
-     (via a ResizeObserver in editor/index.ts and Slot in
-     multi-pane-shell.ts). The HEIGHT uses `auto 200px` —
-     auto-remember once the card's been measured, 200px as the
-     initial placeholder. */
+     cards in narrow panes. Both axes use the `auto <length>`
+     form: after a card has been rendered once, the browser
+     remembers its last actual size and reuses that on subsequent
+     skips, so cards stay correctly sized even after a window
+     resize. The <length> is just the fallback for cards that have
+     never been on-screen — the editor publishes its current
+     content-area width as `--pmd-card-intrinsic-width` so that
+     fallback closely matches a card's real rendered width
+     (otherwise off-screen-never-rendered cards in a narrow
+     multi-pane slot would size to the fixed 600px and the
+     scrollbar would overestimate the doc's width). The 32px
+     subtraction accounts for the ProseMirror element's 1rem
+     horizontal padding in multi-pane mode (and is harmless in
+     single-doc where the editor publishes its own width minus
+     any padding directly). */
   contain: layout style;
   content-visibility: auto;
-  contain-intrinsic-width: var(--pmd-card-intrinsic-width, 600px);
+  contain-intrinsic-width: auto var(--pmd-card-intrinsic-width, 600px);
   contain-intrinsic-height: auto 200px;
 }
 
@@ -904,9 +912,10 @@ code {
 .pmd-block {
   contain: layout style;
   content-visibility: auto;
-  contain-intrinsic-width: var(--pmd-card-intrinsic-width, 600px);
+  contain-intrinsic-width: auto var(--pmd-card-intrinsic-width, 600px);
   contain-intrinsic-height: auto 40px;
 }
+
 
 /* Undertag paragraph. Color is settings-driven (--pmd-color-undertag);
    italic / bold are gated on typography-flag classes on #editor. */
@@ -1092,6 +1101,19 @@ code {
 :is(#editor, .pmd-pane-editor) .ProseMirror {
   white-space: pre-wrap;
   tab-size: 4;
+  /* Stop cards' `contain-intrinsic-width` from propagating up the
+   * layout chain. `content-visibility: auto` cards publish an
+   * intrinsic-width so the browser can size their skipped
+   * placeholder boxes; without inline-size containment here, that
+   * intrinsic-width becomes part of the ProseMirror element's
+   * max-content, propagates to `#editor` (or `.pmd-pane-editor`),
+   * and grows the editor whenever the window resizes — never
+   * shrinking back, because skipped cards remember their last
+   * rendered width. Inline-size containment treats the
+   * ProseMirror box as inline-size-independent of its contents,
+   * which is already true in practice (PM is `width: 100%` of its
+   * parent) — it just stops the propagation. */
+  contain: inline-size;
 }
 #editor.pmd-read-mode .ProseMirror {
   white-space: normal;
@@ -1275,15 +1297,25 @@ body.pmd-nav-resize-active {
 
 /* Pickup-mode (Ctrl+Alt+Shift / Cmd+Option+Shift held). Cursor
    becomes grab; once a drag is active the cursor stays grab/grabbing
-   regardless of element. The descendant override is needed to defeat
-   ProseMirror's own contenteditable text cursor. */
-#editor.pmd-editor-pickup-mode,
-#editor.pmd-editor-pickup-mode * {
+   regardless of element. Setting the cursor on `.ProseMirror`
+   inherits to every text descendant (cursor inherits by default in
+   CSS), which defeats contenteditable's built-in text cursor without
+   needing a `* { cursor: ... }` universal-descendant rule —
+   the universal form invalidates the cursor property on every
+   element under the host (tens of thousands on a long doc), which
+   showed up as a noticeable delay when entering pickup mode. The
+   `:is()` selector covers both single-doc (`#editor`) and multi-pane
+   (`.pmd-pane-editor`) hosts. A handful of descendants set their own
+   cursor explicitly (table cells, column-resize handles); they keep
+   it, which is an acceptable minor visual inconsistency during a
+   pickup. */
+:is(#editor, .pmd-pane-editor).pmd-editor-pickup-mode,
+:is(#editor, .pmd-pane-editor).pmd-editor-pickup-mode .ProseMirror {
   cursor: grab !important;
 }
 
-#editor.pmd-editor-dragging-mode,
-#editor.pmd-editor-dragging-mode * {
+:is(#editor, .pmd-pane-editor).pmd-editor-dragging-mode,
+:is(#editor, .pmd-pane-editor).pmd-editor-dragging-mode .ProseMirror {
   cursor: grabbing !important;
 }
 
@@ -3699,12 +3731,24 @@ body.pmd-multi-doc #word-count-display {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Explicit `min-width: 0` is needed so a child with a wide
+   * intrinsic content size (from `content-visibility: auto` cards
+   * publishing `contain-intrinsic-width`) can't blow the shell wider
+   * than its share of `#app`. Without this, the shell's default
+   * `min-width: auto` evaluates to min-content, which propagates up
+   * from skipped cards and grows the shell when the user resizes
+   * the window. */
+  min-width: 0;
 }
 .pmd-multi-row {
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
   overflow: hidden;
+  /* Same reasoning as `.pmd-multi-shell` — defend against
+   * min-content propagation from `content-visibility: auto`
+   * descendants. */
+  min-width: 0;
 }
 
 /* Compact layout — each non-hidden pane gets a share of the row.

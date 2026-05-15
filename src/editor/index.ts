@@ -843,6 +843,11 @@ settings.subscribe((s) => {
   if (view) {
     view.dom.setAttribute('spellcheck', s.editorSpellcheck ? 'true' : 'false');
   }
+  // Nav-rail drag, zoom, display-size changes — anything that can
+  // move the editor's available width — re-sync the card-intrinsic
+  // CSS variable so skipped (content-visibility) cards stay the
+  // right width.
+  notifyEditorLayoutChanged();
 });
 applyReadMode(settings.get('readMode'));
 applyZoom(settings.get('zoomPct'));
@@ -1404,8 +1409,10 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
   // Publish editor width as `--pmd-card-intrinsic-width` so cards
   // and heading containers (which have `content-visibility: auto`)
   // can use it as their intrinsic-width when skipped off-screen.
-  // ResizeObserver catches every resize (window, nav drag, etc.).
-  setupCardIntrinsicWidthObserver();
+  // Window-resize + explicit triggers (nav drag fires through the
+  // settings subscriber). Deliberately NOT a ResizeObserver — see
+  // the doc comment on `syncCardIntrinsicWidth` for why.
+  setupCardIntrinsicWidthSync();
   exportBtn.disabled = false;
   // Initial paint: do the heavy update synchronously so the user sees
   // the right thing immediately on doc load.
@@ -1414,47 +1421,73 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
   refreshFontSizeDisplay();
 }
 
-/** ResizeObserver that keeps `--pmd-card-intrinsic-width` on
- *  `#editor` synced to its current `clientWidth`. Cards and heading
- *  containers (which use `content-visibility: auto`) consume the
- *  variable as their intrinsic-width when skipped, so the placeholder
- *  box matches the editor's actual width rather than a fixed pixel
- *  fallback. Created lazily on the first `mountView`.
+/** Publish `#editor`'s current width as `--pmd-card-intrinsic-width`
+ *  so cards and heading containers (which use
+ *  `content-visibility: auto`) render their skipped-placeholder box
+ *  at the editor's real width rather than a fixed pixel fallback.
  *
- *  Both an rAF batch and a last-value cache are needed to prevent
- *  feedback loops: setting the variable on every observation
- *  triggers re-layout that can toggle scrollbar presence, which
- *  changes clientWidth, which re-fires the observer. */
-let cardIntrinsicWidthObserver: ResizeObserver | null = null;
+ *  Driven by explicit triggers — initial mount, window resize, and
+ *  the settings subscriber (which fires on nav-rail drags via the
+ *  `navWidth` setting). NOT a ResizeObserver: the variable write
+ *  triggers a layout pass on every card, and observer-driven
+ *  updates produced a hard feedback loop where the editor's
+ *  measured width crept up each iteration after the user clicked
+ *  into the editor. Explicit triggers can't re-fire from our own
+ *  mutations. */
 let lastCardIntrinsicWidth = -1;
 let cardIntrinsicWidthRaf: number | null = null;
-function setupCardIntrinsicWidthObserver(): void {
-  if (cardIntrinsicWidthObserver) return;
-  const schedule = (entry?: ResizeObserverEntry): void => {
-    if (cardIntrinsicWidthRaf !== null) return;
-    cardIntrinsicWidthRaf = requestAnimationFrame(() => {
-      cardIntrinsicWidthRaf = null;
-      // Use border-box size (or offsetWidth) rather than clientWidth.
-      // clientWidth shifts when a vertical scrollbar appears /
-      // disappears inside the editor — and the variable-write
-      // triggers exactly that kind of re-layout, which would
-      // feedback-loop the observer without this guard.
-      let width = 0;
-      const box = entry?.borderBoxSize?.[0];
-      if (box) {
-        width = Math.round(box.inlineSize);
-      } else {
-        width = Math.round(editorEl.offsetWidth);
-      }
-      if (width <= 0) return;
-      if (width === lastCardIntrinsicWidth) return;
-      lastCardIntrinsicWidth = width;
-      editorEl.style.setProperty('--pmd-card-intrinsic-width', `${width}px`);
-    });
-  };
-  cardIntrinsicWidthObserver = new ResizeObserver((entries) => schedule(entries[0]));
-  cardIntrinsicWidthObserver.observe(editorEl);
-  schedule();
+let cardIntrinsicWidthInstalled = false;
+
+function syncCardIntrinsicWidth(): void {
+  if (!editorEl || editorEl.hidden) return;
+  // Measure the actual ProseMirror element's content area (clientWidth
+  // minus its computed horizontal padding) when the view is mounted —
+  // that's the box cards lay out into, so it's the right value for the
+  // `contain-intrinsic-width` fallback. `editorEl.offsetWidth` would
+  // include scrollbar gutter and ignore PM's inner padding, which
+  // overshoots a card's actual width.
+  let width = 0;
+  if (view) {
+    const pmEl = view.dom as HTMLElement;
+    const cs = getComputedStyle(pmEl);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    width = Math.round(pmEl.clientWidth - padL - padR);
+  } else {
+    width = Math.round(editorEl.clientWidth);
+  }
+  if (width <= 0) return;
+  if (width === lastCardIntrinsicWidth) return;
+  lastCardIntrinsicWidth = width;
+  editorEl.style.setProperty('--pmd-card-intrinsic-width', `${width}px`);
+}
+
+/** Coalesce sync triggers landing in the same tick into a single
+ *  rAF read, so we measure once after layout settles. */
+function scheduleSyncCardIntrinsicWidth(): void {
+  if (cardIntrinsicWidthRaf !== null) return;
+  cardIntrinsicWidthRaf = requestAnimationFrame(() => {
+    cardIntrinsicWidthRaf = null;
+    syncCardIntrinsicWidth();
+  });
+}
+
+function setupCardIntrinsicWidthSync(): void {
+  if (cardIntrinsicWidthInstalled) {
+    scheduleSyncCardIntrinsicWidth();
+    return;
+  }
+  cardIntrinsicWidthInstalled = true;
+  window.addEventListener('resize', scheduleSyncCardIntrinsicWidth);
+  scheduleSyncCardIntrinsicWidth();
+}
+
+/** Exposed for the global settings subscriber — fires on nav drag
+ *  (navWidth change), zoom change, etc. that move the editor's
+ *  available width without raising a window resize event. */
+export function notifyEditorLayoutChanged(): void {
+  if (!cardIntrinsicWidthInstalled) return;
+  scheduleSyncCardIntrinsicWidth();
 }
 
 let pendingHeavyUpdate: IdleHandle | null = null;

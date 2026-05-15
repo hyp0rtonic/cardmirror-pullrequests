@@ -19,6 +19,7 @@ import { dragController, type DragItem, type DragSurface } from './drag-controll
 import {
   collectHeadings,
   computeHeadingRange,
+  headingInsertPos,
   TYPE_LABEL,
   type HeadingEntry,
 } from './headings.js';
@@ -902,12 +903,18 @@ export class NavigationPanel {
       // of level <= dragged level. Skip deeper entries.
       if (entry.level > draggedLevel) continue;
 
-      const range = this.computeHeadingRange(entry);
-      if (!range) continue;
+      // Drop indicators only need `range.from`. The full
+      // `computeHeadingRange` does an O(doc) forward walk for
+      // pocket / hat / block to find the heading's end; running that
+      // once per entry adds up to several hundred ms on long docs at
+      // drag start. `headingInsertPos` computes just the start
+      // position.
+      const insertPos = headingInsertPos(doc, entry);
+      if (insertPos == null) continue;
 
       const indicator = document.createElement('div');
       indicator.className = 'pmd-nav-drop-indicator';
-      indicator.dataset['insertPos'] = String(range.from);
+      indicator.dataset['insertPos'] = String(insertPos);
       this.listEl.insertBefore(indicator, li);
       this.dropIndicators.push(indicator);
     }
