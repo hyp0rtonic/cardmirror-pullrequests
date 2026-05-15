@@ -1673,6 +1673,19 @@ body.pmd-nav-resize-active {
   background: var(--pmd-c-hover);
 }
 
+/* Disabled menu items — e.g. the AI image actions when AI features
+   are off or no API key is set. Stay visible (so the affordance is
+   discoverable) but render greyed-out and don't react to hover. */
+.pmd-nav-context-item-disabled,
+.pmd-nav-context-item:disabled {
+  color: var(--pmd-c-text-muted);
+  cursor: not-allowed;
+}
+.pmd-nav-context-item-disabled:hover,
+.pmd-nav-context-item:disabled:hover {
+  background: transparent;
+}
+
 .pmd-nav-context-item-checked::before {
   content: '✓';
   position: absolute;
@@ -2188,25 +2201,37 @@ body.pmd-nav-resize-active {
    Same vertical rhythm as the Doc/Card panel; the second row hosts
    a sub-grid of three glyph-sized toggle buttons sized to fit
    side-by-side under the Table button. */
+/* 2-row × 3-column grid where every column is one inline-slot
+   wide (1.45rem) and the gaps match the inline-row's 2px gutters.
+   Total panel width = 3 × 1.45rem + 2 × 2px, exactly matching the
+   3-glyph row below. Row 1: Table dropdown spans cols 1–2, image
+   button sits in col 3. Row 2: the inline-mark sub-grid spans all
+   three columns. */
 .ribbon-format-menu-panel {
   display: grid;
-  grid-template-columns: auto;
+  grid-template-columns: repeat(3, 1.45rem);
   grid-template-rows: 1.45rem 1.45rem;
   align-content: center;
-  gap: 2px 3px;
+  gap: 2px;
   padding-left: 0.5rem;
   margin-left: 0.25rem;
   border-left: 1px solid var(--pmd-c-border-soft);
 }
 
 #ribbon .ribbon-format-table-btn {
-  /* Match width to the inline-row beneath it so the panel feels
-     balanced top-to-bottom. */
+  grid-column: 1 / span 2;
   width: 100%;
   justify-self: stretch;
 }
 
+#ribbon .ribbon-format-image-btn {
+  grid-column: 3;
+}
+
 .ribbon-format-inline-row {
+  /* Span all three top-row columns so the 3 glyphs sit under the
+     Table + image cluster as a unified second row. */
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, 1.45rem);
   gap: 2px;
@@ -3003,19 +3028,37 @@ body.pmd-nav-resize-active {
   overflow: hidden;
   min-height: 1.3em;
   line-height: 1.3em;
-  /* Height is set in JS by a ResizeObserver tracking the rest line.
-     The transition makes growth/shrink between activities of
-     different wrapped-line counts read as a smooth resize rather
-     than a snap. Matches the line slide/fade duration. */
-  transition: height 280ms ease-out;
+  /* Width AND height are set in JS by a ResizeObserver tracking
+     the rest line. Both transition so growth / shrink between
+     activities of different lengths read as a smooth resize
+     rather than a snap. The width transition is what makes the
+     AI tooltip pill grow / shrink to fit each cycled activity
+     line. Stages with `pmd-activity-stage-fixed-width` opt out
+     of width tracking (used by the comments column, where the
+     surrounding column dictates the width). */
+  transition: width 280ms ease-out, height 280ms ease-out;
+}
+.pmd-activity-stage-fixed-width {
+  width: 100%;
 }
 .pmd-activity-line {
   display: block;
   position: absolute;
   left: 0;
-  right: 0;
   top: 0;
+  /* No `right: 0;` so the line's intrinsic width is its content
+     width — the ResizeObserver in `activity-cycler.ts` reads
+     that width and pushes it onto the stage. Stages opting out
+     of width tracking (fixed-width column placeholder) still
+     get a stretchy line below. */
+  max-width: 22rem;
+  white-space: nowrap;
   transition: transform 280ms ease-out, opacity 280ms ease-out;
+}
+.pmd-activity-stage-fixed-width .pmd-activity-line {
+  right: 0;
+  max-width: none;
+  white-space: normal;
 }
 .pmd-activity-line.pmd-activity-rest {
   transform: translateY(0);
@@ -3039,13 +3082,13 @@ body.pmd-nav-resize-active {
 .pmd-ai-cite-tooltip {
   position: absolute;
   z-index: 900;
-  /* `min-width` is what gives the inner activity-stage something
-     to fill. The stage's only children are `position: absolute`, so
-     they don't contribute intrinsic width — without a min-width on
-     this container the tooltip + stage both collapse to zero and
-     the activity text disappears. */
-  min-width: 18rem;
+  /* Width tracks the inner activity-stage, which itself tracks
+     the current rest line's measured width — so the pill is
+     exactly as wide as whichever activity is showing. Hard cap
+     so a long persona activity wraps to a second line instead
+     of stretching off-screen. */
   max-width: 22rem;
+  width: max-content;
   padding: 0.35rem 0.7rem;
   background: rgba(139, 92, 246, 0.95);
   color: #fff;

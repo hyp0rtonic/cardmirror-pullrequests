@@ -1799,6 +1799,15 @@ const BUILTIN_PROTECTED_REGEXES: readonly RegExp[] = [
   /\[.*?FOOTNOTE.*?\]/gi,
   /<.*?FOOTNOTE.*?>/gi,
   /\{.*?FOOTNOTE.*?\}/gi,
+  // Image alt-text fallbacks — anything containing "ALT TEXT" between
+  // any of the six delimiter shapes. Doubles before singles so the
+  // longer match wins when both shapes overlap.
+  /\[\[.*?ALT TEXT.*?\]\]/gi,
+  /<<.*?ALT TEXT.*?>>/gi,
+  /\{\{.*?ALT TEXT.*?\}\}/gi,
+  /\[.*?ALT TEXT.*?\]/gi,
+  /<.*?ALT TEXT.*?>/gi,
+  /\{.*?ALT TEXT.*?\}/gi,
 ];
 
 const REGEX_ESCAPE_RE = /[.*+?^${}()|[\]\\]/g;
@@ -2858,7 +2867,8 @@ export type RibbonCommandId =
   | 'newSpeechDocument'
   | 'markActiveAsSpeech'
   | 'sendToSpeechAtCursor'
-  | 'sendToSpeechAtEnd';
+  | 'sendToSpeechAtEnd'
+  | 'insertImage';
 
 export const STRUCTURAL_RIBBON_COMMAND_IDS: StructuralRibbonCommandId[] = [
   'setPocket',
@@ -2924,6 +2934,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'markActiveAsSpeech',
   'sendToSpeechAtCursor',
   'sendToSpeechAtEnd',
+  'insertImage',
 ];
 
 export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
@@ -2986,6 +2997,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   markActiveAsSpeech: 'Mark / unmark active doc as the speech doc',
   sendToSpeechAtCursor: 'Send to speech (at cursor)',
   sendToSpeechAtEnd: 'Send to speech (at end)',
+  insertImage: 'Insert image at cursor',
 };
 
 /**
@@ -3071,6 +3083,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   sendToSpeechAtEnd: 'Alt-`',
   newSpeechDocument: '',
   markActiveAsSpeech: '',
+  insertImage: '',
 };
 
 /**
@@ -3149,6 +3162,11 @@ export interface RibbonContext {
   markActiveAsSpeech: () => void;
   sendToSpeechAtCursor: () => void;
   sendToSpeechAtEnd: () => void;
+  /** Open the file picker that prompts for an image to insert at
+   *  the editor's current cursor. Pasting an image from the
+   *  clipboard goes through paste-plugin instead — no ctx hook
+   *  needed for that path. */
+  insertImage: () => void;
 }
 
 const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
@@ -3182,6 +3200,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   markActiveAsSpeech: () => {},
   sendToSpeechAtCursor: () => {},
   sendToSpeechAtEnd: () => {},
+  insertImage: () => {},
 };
 
 function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
@@ -3383,6 +3402,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.sendToSpeechAtEnd();
+        return true;
+      };
+    case 'insertImage':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.insertImage();
         return true;
       };
   }

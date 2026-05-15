@@ -47,6 +47,8 @@ import { fontSizeClassPlugin } from './font-size-class-plugin.js';
 import { buildSimilarSelectionPlugin } from './similar-selection-plugin.js';
 import { tableEditing, columnResizing } from 'prosemirror-tables';
 import { buildPastePlugin, togglePlainPaste } from './paste-plugin.js';
+import { buildImageNodeFromBlob, insertImageNode } from './image-insert.js';
+import { imageContextMenuPlugin } from './image-context-menu-plugin.js';
 import { editorDragSurface } from './drag-editor-surface.js';
 import {
   backspaceAtTagStart,
@@ -86,6 +88,7 @@ const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
 const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement;
 const referenceBtn = document.getElementById('reference-btn') as HTMLButtonElement | null;
 const readModeBtn = document.getElementById('read-mode-btn') as HTMLButtonElement;
+const insertImageBtn = document.getElementById('insert-image-btn') as HTMLButtonElement | null;
 // Speech-doc buttons. Only visible in multi-doc mode (CSS-gated on
 // `body.pmd-multi-doc`); the click handlers below route into the
 // shell's ctx implementations, which are no-ops in single-doc.
@@ -364,6 +367,10 @@ const ribbonContext: RibbonContext = {
   sendToSpeechAtEnd: () => {
     multiDocSendToSpeechAtEnd?.();
   },
+  insertImage: () => {
+    if (!view) return;
+    openImagePicker(view);
+  },
 };
 
 openBtn.addEventListener('click', () => dropzone.click());
@@ -471,6 +478,42 @@ function runRibbon(id: RibbonCommandId): void {
   getRibbonCommand(id, ribbonContext)(view.state, view.dispatch.bind(view), view);
 }
 
+/**
+ * Open the OS file picker (single image) and insert the chosen
+ * file at `targetView`'s current cursor. Same code path the paste-
+ * plugin uses for clipboard image paste, just sourced from a
+ * `<input type="file">` instead of `event.clipboardData`. The
+ * input element is detached after use; we don't try to reuse a
+ * static one because that complicates the "pick the same file
+ * twice" case.
+ */
+function openImagePicker(targetView: EditorView): void {
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.accept = 'image/*';
+  picker.style.display = 'none';
+  picker.addEventListener('change', () => {
+    const file = picker.files?.[0];
+    picker.remove();
+    if (!file) return;
+    void (async () => {
+      const node = await buildImageNodeFromBlob(file);
+      if (!node) {
+        window.alert(`Couldn't read "${file.name}" as an image.`);
+        return;
+      }
+      const inserted = insertImageNode(targetView, node);
+      if (!inserted) {
+        window.alert(
+          'The cursor isn\'t in a position that accepts inline content. Click into a card body, paragraph, or heading first.',
+        );
+      }
+    })();
+  });
+  document.body.appendChild(picker);
+  picker.click();
+}
+
 if (referenceBtn) {
   // Call `openReference` directly (like `settingsBtn` → `openSettings`)
   // rather than dispatching through `runRibbon`, which early-bails
@@ -478,6 +521,11 @@ if (referenceBtn) {
   // dependency, so it should still open in multi-doc mode when no
   // pane currently has a doc.
   referenceBtn.addEventListener('click', () => openReference());
+}
+
+if (insertImageBtn) {
+  insertImageBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  insertImageBtn.addEventListener('click', () => runRibbon('insertImage'));
 }
 
 const docMenuBtn = document.getElementById('doc-menu-btn') as HTMLButtonElement | null;
@@ -1543,6 +1591,7 @@ export function buildEditorPlugins(): Plugin[] {
       headingMode: () => settings.get('headingMode'),
       onArmedChange: (armed) => updatePlainPasteIndicator(armed),
     }),
+    imageContextMenuPlugin,
     // When `enableTextDragDrop` is off, swallow the browser's
     // `dragstart` on the editor's contenteditable so the user
     // can't initiate a text-move drag from a selection. Doesn't

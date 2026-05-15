@@ -526,6 +526,11 @@ export class CommentsColumn {
     const line = document.createElement('p');
     line.className = 'pmd-comment-ai-thinking-dots';
     const stage = makeActivityStage(this.inFlightActivityText());
+    // The comments column already constrains the placeholder's
+    // width; opt out of the activity-cycler's auto-width so
+    // long activity strings wrap inside the column instead of
+    // making the stage push past it.
+    stage.classList.add('pmd-activity-stage-fixed-width');
     line.appendChild(stage);
     body.appendChild(line);
     block.appendChild(body);
