@@ -2363,14 +2363,16 @@ body.pmd-nav-resize-active {
 /* Condense-with-warning delimiter picker: radio rows showing a sample
    `<open>PARAGRAPH INTEGRITY PAUSES<close>` line in a monospace font
    so the brackets are visually distinct. */
-.pmd-condense-warning-delimiter-editor {
+.pmd-condense-warning-delimiter-editor,
+.pmd-multi-doc-layout-mode-editor {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   margin-top: 0.4rem;
 }
 
-.pmd-condense-warning-delimiter-row {
+.pmd-condense-warning-delimiter-row,
+.pmd-multi-doc-layout-mode-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -2379,7 +2381,8 @@ body.pmd-nav-resize-active {
   cursor: pointer;
 }
 
-.pmd-condense-warning-delimiter-row input[type="radio"] {
+.pmd-condense-warning-delimiter-row input[type="radio"],
+.pmd-multi-doc-layout-mode-row input[type="radio"] {
   flex: 0 0 auto;
 }
 

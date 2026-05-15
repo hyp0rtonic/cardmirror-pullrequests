@@ -318,6 +318,11 @@ const ribbonContext: RibbonContext = {
     commentsColumn.render();
   },
   addCommentToSelection: () => {
+    // Comments are disabled in multi-doc mode (the column is hidden
+    // and the toggle/add ribbon buttons are removed). The keyboard
+    // shortcut still routes here, so refuse rather than silently
+    // creating a thread the user can't see.
+    if (multiDocActive) return;
     if (!view || !commentsColumn) return;
     const newId = addCommentToSelection(view);
     if (!newId) return;
@@ -329,6 +334,9 @@ const ribbonContext: RibbonContext = {
     commentsColumn.focusReplyForThread(newId);
   },
   aiAskAboutSelection: () => {
+    // Same gating as `addCommentToSelection` — AI-ask materializes
+    // a comment thread, which has nowhere to live in multi-doc mode.
+    if (multiDocActive) return;
     if (!view || !commentsColumn) return;
     const newId = commentsColumn.addAiThreadFromSelection(view);
     if (!newId) return;

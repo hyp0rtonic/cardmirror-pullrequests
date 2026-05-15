@@ -231,7 +231,9 @@ class SettingsModal {
     } else if (meta.kind === 'formattingPanelMode') {
       label.appendChild(buildFormattingPanelModeEditor());
     } else if (meta.kind === 'multiDocLayoutMode') {
-      label.appendChild(buildMultiDocLayoutModeEditor());
+      row.appendChild(text);
+      row.appendChild(buildMultiDocLayoutModeEditor());
+      return row;
     } else if (meta.kind === 'headingMode') {
       row.appendChild(text);
       row.appendChild(buildHeadingModeEditor());
@@ -828,23 +830,32 @@ function buildFormattingPanelModeEditor(): HTMLElement {
 }
 
 function buildMultiDocLayoutModeEditor(): HTMLElement {
-  const select = document.createElement('select');
-  select.className = 'pmd-formatting-panel-mode-select';
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-multi-doc-layout-mode-editor';
   const options: { value: 'compact' | 'wide'; label: string }[] = [
     { value: 'compact', label: 'Compact — all 3 panes side by side' },
     { value: 'wide', label: 'Wide-scroll — 2 full + edge of 3rd (click to snap)' },
   ];
+  const groupName = `pmd-multi-doc-layout-${Math.random().toString(36).slice(2, 8)}`;
   for (const o of options) {
-    const opt = document.createElement('option');
-    opt.value = o.value;
-    opt.textContent = o.label;
-    if (o.value === settings.get('multiDocLayoutMode')) opt.selected = true;
-    select.appendChild(opt);
+    const row = document.createElement('label');
+    row.className = 'pmd-multi-doc-layout-mode-row';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = groupName;
+    input.value = o.value;
+    input.checked = o.value === settings.get('multiDocLayoutMode');
+    input.addEventListener('change', () => {
+      if (input.checked) settings.set('multiDocLayoutMode', o.value);
+    });
+    row.appendChild(input);
+    const labelText = document.createElement('span');
+    labelText.className = 'pmd-multi-doc-layout-mode-row-label';
+    labelText.textContent = o.label;
+    row.appendChild(labelText);
+    wrap.appendChild(row);
   }
-  select.addEventListener('change', () => {
-    settings.set('multiDocLayoutMode', select.value as 'compact' | 'wide');
-  });
-  return select;
+  return wrap;
 }
 
 function buildHeadingModeEditor(): HTMLElement {
