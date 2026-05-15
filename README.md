@@ -4,6 +4,15 @@ A ProseMirror-based editor that interoperates with **Advanced Verbatim**
 (the project owner's fork of [Verbatim](https://github.com/ashtarcommunications/verbatim),
 the de facto Microsoft Word add-in for US policy/LD/PF debate).
 
+> **🚧 Status: alpha preview.** CardMirror is in active development —
+> expect rough edges, missing features, and occasional breakage. The
+> code you're looking at is the **web preview** of an upcoming
+> desktop-first editor suite. Standalone desktop builds (Windows /
+> macOS / Linux) will be the recommended way to use CardMirror for
+> tournament work; this web edition exists today for collaboration,
+> accessibility, and so you can try the editor without installing
+> anything. Not yet recommended for actual round-day use.
+
 ## Where to read
 
 - [`PROJECT.md`](./PROJECT.md) — high-level orientation, headline design decisions.
