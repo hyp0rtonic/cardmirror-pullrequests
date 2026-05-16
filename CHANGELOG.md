@@ -6,7 +6,9 @@ internal refactors live in commit messages, not here.
 
 ## Unreleased
 
-### 0.1.0-alpha.1 — first alpha
+(Nothing yet.)
+
+## 0.1.0-alpha.1 — 2026-05-16
 
 First downloadable preview of CardMirror. **This is an alpha.**
 Expect bugs, missing features, and occasional breakage. Don't use
