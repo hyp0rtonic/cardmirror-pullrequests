@@ -18,6 +18,7 @@ import type {
   OpenedFile,
   SaveAsOptions,
   SaveResult,
+  SpawnWindowPayload,
 } from './types.js';
 
 const DOCX_MIME =
@@ -112,6 +113,7 @@ function browserJournalsSupported(): boolean {
 export class BrowserHost implements Host {
   readonly kind = 'browser' as const;
   readonly journalsSupported = browserJournalsSupported();
+  readonly canSpawnWindow = false;
 
   get supportsInPlaceSave(): boolean {
     // showSaveFilePicker gives us a writable handle that survives
@@ -284,6 +286,20 @@ export class BrowserHost implements Host {
       tx.oncomplete = (): void => resolve();
       tx.onerror = (): void => reject(tx.error ?? new Error('deleteJournal failed.'));
     });
+  }
+
+  async spawnWindow(_payload: SpawnWindowPayload | null): Promise<void> {
+    // Web edition can't meaningfully spawn an editor window from
+    // JS. Callers should gate on `canSpawnWindow` before calling
+    // — we throw to make the misuse loud rather than silently
+    // failing.
+    throw new Error('BrowserHost: spawnWindow is not supported on the web edition.');
+  }
+
+  async getInitialDoc(): Promise<SpawnWindowPayload | null> {
+    // No spawn handshake on the web edition — fresh tabs always
+    // boot blank.
+    return null;
   }
 
   private ensureFileInput(): HTMLInputElement {

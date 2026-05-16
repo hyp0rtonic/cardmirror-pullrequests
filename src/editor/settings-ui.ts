@@ -258,10 +258,11 @@ class SettingsModal {
     head.className = 'pmd-settings-row-title';
     head.textContent = meta.label;
     text.appendChild(head);
-    if (meta.description) {
+    const descText = meta.descriptionFn ? meta.descriptionFn() : meta.description;
+    if (descText) {
       const desc = document.createElement('span');
       desc.className = 'pmd-settings-row-desc';
-      desc.textContent = meta.description;
+      desc.textContent = descText;
       text.appendChild(desc);
     }
     label.appendChild(text);

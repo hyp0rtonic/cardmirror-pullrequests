@@ -35,7 +35,20 @@ interface FileFilter {
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow(): BrowserWindow {
+/** Optional initial-doc payload handed to a freshly-spawned window's
+ *  renderer when it asks `host:get-initial-doc` at boot. Lets the
+ *  spawning renderer pre-load a file into the new window without
+ *  going through the file dialog again. Keyed by `BrowserWindow.id`. */
+interface InitialDocPayload {
+  filename: string;
+  bytes: unknown; // arrives from renderer as Uint8Array / Buffer / ArrayBuffer
+  handle: string | null;
+  format: 'cmir' | 'docx' | null;
+  uid: string | null;
+}
+const pendingInitialDocs = new Map<number, InitialDocPayload>();
+
+function createWindow(initialDoc?: InitialDocPayload): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -50,6 +63,12 @@ function createWindow(): BrowserWindow {
     },
   });
 
+  // Stash the initial doc (if any) BEFORE loading the renderer so
+  // the renderer's `host:get-initial-doc` call at boot finds it.
+  if (initialDoc) {
+    pendingInitialDocs.set(win.id, initialDoc);
+  }
+
   if (!app.isPackaged) {
     void win.loadURL(DEV_SERVER_URL);
     win.webContents.openDevTools({ mode: 'detach' });
@@ -60,13 +79,13 @@ function createWindow(): BrowserWindow {
   }
 
   // Track the focused window so menu commands fire at the right
-  // place when multiple windows exist (a Phase 6+ concern, but
-  // wiring it now costs nothing).
+  // place when multiple windows exist.
   win.on('focus', () => {
     mainWindow = win;
   });
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
+    pendingInitialDocs.delete(win.id);
   });
 
   mainWindow = win;
@@ -240,6 +259,30 @@ ipcMain.handle('host:delete-journal', async (_event, uid: string) => {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw err;
   }
+});
+
+// ─── Multi-window: spawn + initial-doc handshake ──────────────────
+// Renderers in "windows mode" (multiDocWorkspace = false on
+// Electron) call `host:spawn-window` to open a new BrowserWindow,
+// optionally with an initial doc already loaded. The freshly-
+// spawned window's renderer calls `host:get-initial-doc` once at
+// boot to retrieve the payload (or `null` if it was just opened
+// blank). Main owns the pending-map keyed by window id.
+
+ipcMain.handle('host:spawn-window', async (_event, payload: InitialDocPayload | null) => {
+  // Defensive normalization of `payload.bytes` — IPC may have
+  // transferred it as a Buffer / typed array. Store as-is; the
+  // renderer will normalize at read time too.
+  createWindow(payload ?? undefined);
+});
+
+ipcMain.handle('host:get-initial-doc', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return null;
+  const payload = pendingInitialDocs.get(win.id);
+  if (!payload) return null;
+  pendingInitialDocs.delete(win.id);
+  return payload;
 });
 
 // ─── Native menu bar ───────────────────────────────────────────────

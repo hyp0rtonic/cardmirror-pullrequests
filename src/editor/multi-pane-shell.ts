@@ -1013,6 +1013,19 @@ class MultiPaneShell {
     await clearJournalForRecord(rec);
   }
 
+  /** Journal every DocRecord across every slot's stack. Called by
+   *  the mode-switch flow before reloading so the post-reload
+   *  startup-recovery can rebuild the workspace in the new layout. */
+  async journalAll(): Promise<void> {
+    const tasks: Promise<void>[] = [];
+    for (const id of SLOT_IDS) {
+      for (const rec of this.slots[id].stack) {
+        tasks.push(runJournalForRecord(rec));
+      }
+    }
+    await Promise.all(tasks);
+  }
+
   /** Load a recovered doc into the workspace. Picks the first
    *  empty slot; if all three slots have docs already, stacks the
    *  recovered doc into the focused (or first) slot. Reuses the
@@ -1650,5 +1663,6 @@ export function mountMultiPaneShell(): void {
     setFocusedFile: (f) => shell!.setFocusedFile(f),
     clearFocusedJournal: () => shell!.clearFocusedJournal(),
     onRecoveredDoc: (entry) => shell!.onRecoveredDoc(entry),
+    journalAll: () => shell!.journalAll(),
   });
 }

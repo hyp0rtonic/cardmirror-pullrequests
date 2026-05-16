@@ -190,6 +190,10 @@ let multiDocSetFocusedFile:
  *  successful save in multi-doc mode. The shell knows the
  *  DocRecord's uid; the editor only knows it has a focused doc. */
 let multiDocClearFocusedJournal: (() => Promise<void>) | null = null;
+/** Mode-switch hook: journal every open DocRecord across every
+ *  slot's stack so the auto-recover-on-reload flow can rebuild
+ *  the workspace in the new layout. */
+let multiDocJournalAll: (() => Promise<void>) | null = null;
 /** Crash-recovery hook: load a recovered journal entry into the
  *  multi-pane workspace. The shell picks a slot (first empty, or
  *  prompts the user) and pushes a DocRecord built from the
@@ -229,6 +233,7 @@ export function enableMultiDocMode(opts: {
     doc: import('prosemirror-model').Node;
     threads: Thread[];
   }) => Promise<void>;
+  journalAll?: () => Promise<void>;
 }): void {
   multiDocActive = true;
   multiDocOnFileOpen = opts.onFileOpen;
@@ -244,6 +249,7 @@ export function enableMultiDocMode(opts: {
   multiDocSetFocusedFile = opts.setFocusedFile ?? null;
   multiDocClearFocusedJournal = opts.clearFocusedJournal ?? null;
   multiDocOnRecoveredDoc = opts.onRecoveredDoc ?? null;
+  multiDocJournalAll = opts.journalAll ?? null;
   // Hide the single-doc surfaces. The multi-pane shell mounts its
   // own DOM into #app, alongside #editor + #comments-column which
   // we hide here.
@@ -461,6 +467,22 @@ async function onNewDocClicked(): Promise<void> {
     void multiDocOnNewDoc();
     return;
   }
+  // Windows mode (single-doc + Electron + non-pristine current
+  // doc): spawn a new window with a fresh starter doc instead of
+  // replacing what's already loaded. If the current doc is still
+  // the pristine starter, "New" is essentially a no-op (and the
+  // user probably misclicked), so we fall through to today's
+  // replace-with-prompt flow which will just reset the starter.
+  const host = getHost();
+  if (host.canSpawnWindow && !isPristineStarter) {
+    try {
+      await host.spawnWindow(null);
+    } catch (err) {
+      console.error('Spawn window failed:', err);
+      alert(`Failed to open new window: ${err instanceof Error ? err.message : err}`);
+    }
+    return;
+  }
   const choice = await confirmNewDocOverwrite();
   if (choice === 'cancel') return;
   if (choice === 'save') {
@@ -478,6 +500,10 @@ async function onNewDocClicked(): Promise<void> {
   currentDocHandle = null;
   currentDocFormat = null;
   currentDocUid = newSessionDocUid();
+  // The fresh starter is conceptually still pristine, but the
+  // user just demonstrated they're done with whatever was here
+  // before. Treat as non-pristine so subsequent Opens spawn.
+  markNonPristineStarter();
   updateWindowTitle();
 }
 
@@ -1826,6 +1852,7 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
       view.updateState(next);
       if (tx.docChanged) {
         currentDoc = next.doc;
+        markNonPristineStarter();
         // Re-arm the autosave debounce. No-ops when the setting
         // is off, so the call is cheap to fire unconditionally.
         notifyEditForAutosave();
@@ -2017,6 +2044,23 @@ let currentDocFormat: 'cmir' | 'docx' | null = null;
  *  recovery from a different journal). */
 let currentDocUid: string = newSessionDocUid();
 
+/** True while this window is still showing the untouched
+ *  onboarding starter doc. False after any user action that makes
+ *  the doc "real" — edit, Open, New, Save, recovery. In windows
+ *  mode (single-doc + Electron), Open and New replace the doc
+ *  in-place when this is true (so first launch doesn't strand a
+ *  redundant starter window) and spawn fresh windows when this
+ *  is false. Multi-pane mode ignores the flag. */
+let isPristineStarter = true;
+
+/** Mark the current window as having had a substantive user
+ *  action (edit / Open / New / Save / Recover). Once non-pristine,
+ *  subsequent Opens / News spawn new windows on hosts that
+ *  support it. */
+function markNonPristineStarter(): void {
+  isPristineStarter = false;
+}
+
 /** Generate a fresh session-scoped doc UID. Used by the single-doc
  *  edit path; multi-doc DocRecords have their own newDocUid pool.
  *  Keeping the namespaces separate avoids accidental collisions
@@ -2080,6 +2124,25 @@ async function runOpenFlow(): Promise<void> {
     return;
   }
   const format = formatFromFilename(opened.name) ?? 'docx';
+  // Windows mode (single-doc + Electron + we have a non-pristine
+  // doc in the current window): spawn a new window for the
+  // opened file instead of replacing what's here.
+  const host = getHost();
+  if (host.canSpawnWindow && !isPristineStarter) {
+    try {
+      await host.spawnWindow({
+        filename: opened.name,
+        bytes: opened.bytes,
+        handle: typeof opened.handle === 'string' ? opened.handle : null,
+        format,
+        uid: null,
+      });
+    } catch (err) {
+      console.error('Spawn window failed:', err);
+      alert(`Failed to open in new window: ${err instanceof Error ? err.message : err}`);
+    }
+    return;
+  }
   try {
     let docNode: PMNode;
     let docThreads: Thread[] | undefined;
@@ -2100,6 +2163,7 @@ async function runOpenFlow(): Promise<void> {
     currentDocHandle = opened.handle ?? null;
     currentDocFormat = format;
     currentDocUid = newSessionDocUid();
+    markNonPristineStarter();
     updateWindowTitle();
     console.log(`Loaded ${opened.name}: ${countSummary(docNode)}`);
   } catch (err) {
@@ -2205,6 +2269,7 @@ async function runSaveAsFlow(): Promise<boolean> {
     if (!result) return false;
     commitSaveResult(result.name, result.handle ?? null, choice.format);
     flashSaveSuccess();
+    markNonPristineStarter();
     // Successful save — the on-disk file IS the latest version, the
     // journal is redundant. Best-effort delete.
     void clearJournalForActiveDoc();
@@ -2238,6 +2303,7 @@ async function runSaveFlow(): Promise<boolean> {
     });
     await getHost().saveExisting(file.handle, bytes);
     flashSaveSuccess();
+    markNonPristineStarter();
     void clearJournalForActiveDoc();
     return true;
   } catch (err) {
@@ -2493,14 +2559,131 @@ function countSummary(doc: PMNode): string {
 // shell. Otherwise mount the starter doc in the single-doc shell.
 // Crash recovery runs after the editor is up (so the recovery modal
 // has somewhere to mount over).
-if (settings.get('multiDocWorkspace')) {
+const BOOT_MULTI_DOC_WORKSPACE = settings.get('multiDocWorkspace');
+if (BOOT_MULTI_DOC_WORKSPACE) {
   void import('./multi-pane-shell.js').then(async (m) => {
     m.mountMultiPaneShell();
     await runStartupRecovery();
   });
 } else {
+  void initSingleDocBoot();
+}
+
+/** Single-doc boot. On hosts that support window spawning, check
+ *  for a pending initial-doc payload first (this window may have
+ *  been spawned by another window's Open / New click). If yes,
+ *  mount the payload and skip the recovery sidebar (spawned
+ *  windows aren't the right place to surface unrelated journal
+ *  drafts — that belongs to the first window of the session).
+ *  If no payload, mount the starter and run normal recovery. */
+async function initSingleDocBoot(): Promise<void> {
+  const host = getHost();
+  if (host.canSpawnWindow) {
+    let payload: Awaited<ReturnType<typeof host.getInitialDoc>>;
+    try {
+      payload = await host.getInitialDoc();
+    } catch (err) {
+      console.warn('getInitialDoc failed:', err);
+      payload = null;
+    }
+    if (payload) {
+      await mountFromSpawnPayload(payload);
+      return;
+    }
+  }
+  // First window of the session (or web edition): show the
+  // onboarding starter and surface any leftover recovery
+  // journals.
   mountView(currentDoc);
-  void runStartupRecovery();
+  await runStartupRecovery();
+}
+
+/** Mount a SpawnWindowPayload into this freshly-spawned window.
+ *  Parses the bytes (cmir → parseNative, docx → fromDocxFull),
+ *  mounts the result, and sets the doc-state module vars. */
+async function mountFromSpawnPayload(
+  payload: Awaited<ReturnType<ReturnType<typeof getHost>['getInitialDoc']>>,
+): Promise<void> {
+  if (!payload) return;
+  try {
+    let docNode: PMNode;
+    let docThreads: Thread[] | undefined;
+    const format = payload.format ?? formatFromFilename(payload.filename) ?? 'docx';
+    if (format === 'cmir') {
+      const parsed = parseNative(payload.bytes);
+      docNode = parsed.doc;
+      docThreads = parsed.threads.length > 0 ? parsed.threads : undefined;
+    } else {
+      const result = await fromDocxFull(payload.bytes);
+      docNode = result.doc;
+      docThreads = result.threads;
+    }
+    mountView(docNode, docThreads);
+    currentDocFilename = payload.filename;
+    currentDocHandle = payload.handle;
+    currentDocFormat = format;
+    currentDocUid = payload.uid ?? newSessionDocUid();
+    markNonPristineStarter();
+    updateWindowTitle();
+    console.log(`Spawned with ${payload.filename}: ${countSummary(docNode)}`);
+  } catch (err) {
+    console.error('Failed to mount spawned doc:', err);
+    alert(`Failed to load: ${err instanceof Error ? err.message : err}`);
+    // Fall back to the starter so the window isn't broken.
+    mountView(currentDoc);
+  }
+}
+
+// ─── Mode-switch handler ──────────────────────────────────────────
+// When the user toggles `multiDocWorkspace`, prompt to reload. On
+// confirm: journal every open doc with a "mode-switch" marker,
+// reload the page, and let the startup-recovery flow silently
+// reopen them in the new layout. On cancel: revert the setting.
+let modeSwitchInFlight = false;
+settings.subscribe((s) => {
+  if (modeSwitchInFlight) return;
+  if (s.multiDocWorkspace === BOOT_MULTI_DOC_WORKSPACE) return;
+  void handleModeSwitch(s.multiDocWorkspace);
+});
+
+const MODE_SWITCH_MARKER_KEY = 'cardmirror:mode-switch-recovery';
+
+async function handleModeSwitch(newValue: boolean): Promise<void> {
+  modeSwitchInFlight = true;
+  const message = newValue
+    ? 'Switch to three-pane workspace?\n\nThe editor will reload and your open documents will reopen in the new layout.'
+    : 'Switch to one-document-per-window mode?\n\nThe editor will reload and your open documents will reopen in the new layout.';
+  if (!window.confirm(message)) {
+    // Revert. The `modeSwitchInFlight` guard prevents the
+    // subscriber from re-running and looping.
+    settings.set('multiDocWorkspace', BOOT_MULTI_DOC_WORKSPACE);
+    modeSwitchInFlight = false;
+    return;
+  }
+  try {
+    await journalAllForModeSwitch();
+    sessionStorage.setItem(MODE_SWITCH_MARKER_KEY, '1');
+  } catch (err) {
+    console.error('Mode-switch journaling failed:', err);
+    alert(
+      `Couldn't save open documents before switching modes: ${err instanceof Error ? err.message : err}\n\nReverting.`,
+    );
+    settings.set('multiDocWorkspace', BOOT_MULTI_DOC_WORKSPACE);
+    modeSwitchInFlight = false;
+    return;
+  }
+  window.location.reload();
+}
+
+/** Journal every currently-open doc so the post-reload recovery
+ *  flow can restore them in the new layout. */
+async function journalAllForModeSwitch(): Promise<void> {
+  if (multiDocActive && multiDocJournalAll) {
+    await multiDocJournalAll();
+    return;
+  }
+  // Single-doc: write one journal for the current view.
+  await runJournalWrite();
 }
 
 /** Startup recovery — read any unsaved journals from the previous
@@ -2520,6 +2703,14 @@ async function runStartupRecovery(): Promise<void> {
     return;
   }
   if (entries.length === 0) return;
+  // Mode-switch reload: the user toggled `multiDocWorkspace` and we
+  // journaled everything before reloading. Now auto-open all
+  // entries silently in the new layout — no recovery sidebar.
+  if (sessionStorage.getItem(MODE_SWITCH_MARKER_KEY) === '1') {
+    sessionStorage.removeItem(MODE_SWITCH_MARKER_KEY);
+    await autoRecoverAll(entries);
+    return;
+  }
   const { openRecoverySidebar } = await import('./recovery-ui.js');
   await openRecoverySidebar(entries, {
     onOpen: async (entry) => {
@@ -2553,6 +2744,62 @@ async function runStartupRecovery(): Promise<void> {
   });
 }
 
+/** Silently open every journal entry as part of a mode-switch
+ *  reload — the user already confirmed; no sidebar, no per-entry
+ *  decisions. Multi-doc routes each through the shell's slot
+ *  router; single-doc on Electron mounts the most-recently-saved
+ *  entry here and spawns a new window for each remaining entry
+ *  (so a mode switch from panes → windows actually distributes
+ *  the open docs across windows). Single-doc on the web edition
+ *  mounts the most recent and leaves the rest as journals (they'll
+ *  show up in the recovery sidebar on the next non-mode-switch
+ *  launch). */
+async function autoRecoverAll(entries: JournalEntry[]): Promise<void> {
+  if (multiDocActive && multiDocOnRecoveredDoc) {
+    for (const entry of entries) {
+      try {
+        const parsed = parseNative(entry.bytes);
+        await multiDocOnRecoveredDoc({
+          uid: entry.uid,
+          filename: entry.filename,
+          handle: entry.handle,
+          format: entry.format,
+          doc: parsed.doc,
+          threads: parsed.threads,
+        });
+      } catch (err) {
+        console.warn(`Failed to auto-recover ${entry.uid}:`, err);
+      }
+    }
+    return;
+  }
+  // Single-doc: most-recent goes into THIS window; rest spawn new
+  // windows on hosts that support it, else linger as journals.
+  const sorted = [...entries].sort((a, b) =>
+    (b.savedAt ?? '').localeCompare(a.savedAt ?? ''),
+  );
+  const winner = sorted[0];
+  if (!winner) return;
+  await applyRecovery(winner);
+  const host = getHost();
+  if (!host.canSpawnWindow) return;
+  for (const entry of sorted.slice(1)) {
+    try {
+      await host.spawnWindow({
+        filename: entry.filename,
+        bytes: entry.bytes,
+        handle: entry.handle,
+        format: entry.format,
+        // Reuse the original uid so the spawned window's
+        // journal continues to track the same logical doc.
+        uid: entry.uid,
+      });
+    } catch (err) {
+      console.warn(`Failed to spawn window for recovered ${entry.uid}:`, err);
+    }
+  }
+}
+
 /** Load a recovered journal entry into the single-doc editor (the
  *  recovered doc replaces the current one). Multi-doc routing
  *  happens inline in `runStartupRecovery` via the shell hook. */
@@ -2571,5 +2818,6 @@ async function applyRecovery(entry: JournalEntry): Promise<void> {
   // Reuse the original uid so a re-crash overwrites the same
   // journal slot (rather than accumulating new ones).
   currentDocUid = entry.uid;
+  markNonPristineStarter();
   updateWindowTitle();
 }

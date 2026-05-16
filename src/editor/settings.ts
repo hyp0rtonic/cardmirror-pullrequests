@@ -10,6 +10,22 @@
 
 import { isWordHighlightName, isHex6 } from './color-palette.js';
 import type { RibbonCommandId } from './ribbon-commands.js';
+import { getHost } from './host/index.js';
+
+/** Dynamic description for the `multiDocWorkspace` (three-pane
+ *  workspace) toggle. The OFF state behaves differently on Electron
+ *  vs the web edition, so we surface that difference at the point
+ *  the user reads the setting. */
+function workspaceLayoutDescription(): string {
+  const kind = getHost().kind;
+  const offBehavior =
+    kind === 'electron'
+      ? 'each open document gets its own native window. Opening a new file (or making a new document) spawns a new window — recommended when you have screen space and a good window manager.'
+      : 'one document at a time in this browser tab. The web edition can\'t spawn its own windows, so to work with multiple documents in this mode, open additional browser tabs and load a doc in each — or turn this setting ON to use three panes inside this tab.';
+  return (
+    `OFF (default): ${offBehavior} ON: a single window with three side-by-side panes inside it, for working multi-doc with limited screen real estate. Comments are unavailable while ON. Toggling reloads the editor; open documents are restored in the new layout.`
+  );
+}
 
 const STORAGE_KEY = 'pmd-settings';
 
@@ -562,6 +578,12 @@ export interface SettingMeta {
   key: keyof Settings;
   label: string;
   description?: string;
+  /** Optional dynamic description that takes precedence over
+   *  `description` at render time. Used by entries whose copy needs
+   *  to vary by host capability (e.g. the workspace-layout entry,
+   *  which describes window-spawning differently on Electron vs
+   *  web). */
+  descriptionFn?: () => string;
   /** Settings UI hint: how should this be rendered? */
   kind:
     | 'toggle'
@@ -604,9 +626,8 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
   {
     key: 'multiDocWorkspace',
-    label: 'Multi-doc workspace',
-    description:
-      'Enable a three-slot side-by-side workspace for working with up to three documents at once. Comments are unavailable while this is on. Reload the page after toggling for the change to take effect.',
+    label: 'Three-pane workspace',
+    descriptionFn: workspaceLayoutDescription,
     kind: 'toggle',
     category: 'general',
   },

@@ -49,6 +49,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteJournal: (uid: string) =>
     ipcRenderer.invoke('host:delete-journal', uid),
 
+  /** Spawn a new BrowserWindow, optionally pre-loaded with a doc. */
+  spawnWindow: (payload: {
+    filename: string;
+    bytes: Uint8Array;
+    handle: string | null;
+    format: 'cmir' | 'docx' | null;
+    uid: string | null;
+  } | null) => ipcRenderer.invoke('host:spawn-window', payload),
+
+  /** Called once at renderer boot to retrieve any initial-doc
+   *  payload the spawning window stashed for us. Null when the
+   *  window was opened blank. */
+  getInitialDoc: () => ipcRenderer.invoke('host:get-initial-doc'),
+
   /** Subscribe to native-menu commands. Main process broadcasts
    *  `'menu-command'` events to the focused window's webContents
    *  whenever the user picks File → Open / Save / etc. The

@@ -172,4 +172,34 @@ export interface Host {
    *  journals when this is false; the recovery modal still works
    *  on hosts where it's true. */
   readonly journalsSupported: boolean;
+
+  /** Whether this host can spawn additional editor windows. True
+   *  on Electron; false on the web edition. The "windows" workspace
+   *  mode falls back to single-doc-replace UX when this is false. */
+  readonly canSpawnWindow: boolean;
+
+  /** Spawn a new editor window, optionally pre-loaded with a doc.
+   *  Callers should gate on `canSpawnWindow`; on hosts that can't
+   *  spawn, this rejects. */
+  spawnWindow(payload: SpawnWindowPayload | null): Promise<void>;
+
+  /** Called once at renderer boot to retrieve the initial doc the
+   *  spawning window stashed for us. Returns `null` when this is
+   *  the first window of a session (or the host doesn't support
+   *  the spawn handshake). */
+  getInitialDoc(): Promise<SpawnWindowPayload | null>;
+}
+
+/** Payload exchanged between a spawning window and the freshly-
+ *  spawned one. Carries enough provenance for the new window's
+ *  renderer to mount the doc without re-prompting via the file
+ *  picker. */
+export interface SpawnWindowPayload {
+  filename: string;
+  bytes: Uint8Array;
+  handle: string | null;
+  format: 'cmir' | 'docx' | null;
+  /** Pre-existing doc uid (when the doc is being moved between
+   *  windows or recovered from a journal). Null for fresh docs. */
+  uid: string | null;
 }

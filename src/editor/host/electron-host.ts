@@ -16,6 +16,7 @@ import type {
   OpenedFile,
   SaveAsOptions,
   SaveResult,
+  SpawnWindowPayload,
 } from './types.js';
 
 /** The shape we expect the preload script to expose. Defined here
@@ -36,6 +37,8 @@ interface ElectronAPI {
   writeJournal(entry: JournalEntry): Promise<void>;
   readJournals(): Promise<JournalEntry[]>;
   deleteJournal(uid: string): Promise<void>;
+  spawnWindow(payload: SpawnWindowPayload | null): Promise<void>;
+  getInitialDoc(): Promise<SpawnWindowPayload | null>;
   /** Subscribe to menu-driven commands from the native menu bar.
    *  Returns an unsubscribe handle. */
   onMenuCommand(handler: (command: string) => void): () => void;
@@ -51,6 +54,7 @@ export class ElectronHost implements Host {
   readonly kind = 'electron' as const;
   readonly supportsInPlaceSave = true;
   readonly journalsSupported = true;
+  readonly canSpawnWindow = true;
 
   async openFile(opts: OpenFileOptions = {}): Promise<OpenedFile | null> {
     const result = await api().openFile({ filters: opts.filters ?? [] });
@@ -103,6 +107,21 @@ export class ElectronHost implements Host {
 
   async deleteJournal(uid: string): Promise<void> {
     await api().deleteJournal(uid);
+  }
+
+  async spawnWindow(payload: SpawnWindowPayload | null): Promise<void> {
+    await api().spawnWindow(payload);
+  }
+
+  async getInitialDoc(): Promise<SpawnWindowPayload | null> {
+    const result = await api().getInitialDoc();
+    if (!result) return null;
+    return {
+      ...result,
+      bytes: result.bytes instanceof Uint8Array
+        ? result.bytes
+        : new Uint8Array(result.bytes as ArrayBufferLike),
+    };
   }
 
   /** Subscribe to menu-driven commands from the native menu bar.

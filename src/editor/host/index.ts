@@ -21,6 +21,7 @@ export type {
   OpenFileOptions,
   SaveAsOptions,
   JournalEntry,
+  SpawnWindowPayload,
 } from './types.js';
 
 declare global {
