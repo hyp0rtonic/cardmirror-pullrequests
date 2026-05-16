@@ -44,6 +44,21 @@ function applyNavWidthCss(px: number): void {
   document.documentElement.style.setProperty('--nav-width', `${clamped}px`);
 }
 
+/** Find the nearest scrolling ancestor of `el`, falling back to
+ *  the document scrolling element. Used by the nav-pane jumpTo
+ *  refine loop so each correction targets the right scroll
+ *  container — `documentElement` for single-doc, the multi-pane
+ *  shell's `.pmd-multi-section` for per-pane editors. */
+function findScrollContainer(el: HTMLElement): HTMLElement {
+  let cur: HTMLElement | null = el.parentElement;
+  while (cur && cur !== document.body) {
+    const overflow = getComputedStyle(cur).overflowY;
+    if (overflow === 'auto' || overflow === 'scroll') return cur;
+    cur = cur.parentElement;
+  }
+  return document.documentElement;
+}
+
 export class NavigationPanel {
   private root: HTMLElement;
   private view: EditorView | null = null;
@@ -1365,45 +1380,68 @@ export class NavigationPanel {
     }
   }
 
-  /** Scroll `target` into view with accurate cumulative offsets,
-   *  pre-materializing every `content-visibility: auto` card and
-   *  heading container in the editor BEFORE the scroll happens.
+  /** Scroll `target` into view, then refine the scroll position
+   *  by reading the target's actual `getBoundingClientRect` and
+   *  scrolling by the delta. Repeated for a few animation frames.
    *
-   *  The bug we're working around: cards have
-   *  `contain-intrinsic-height: auto 200px`, headings `auto 40px`.
-   *  Cumulative scroll-position calculations between the current
-   *  viewport and a far-away target use those placeholders for
-   *  every skipped subtree — each off by tens of pixels — so a
-   *  single `scrollIntoView` on a large doc lands near but not
-   *  on the target. Subsequent scrolls also can't fix it from
-   *  inside a JS handler because layout for those subtrees only
-   *  flushes once they intersect the viewport, after the scroll
-   *  animation, too late.
+   *  Rationale: cards / heading containers have
+   *  `content-visibility: auto` with `contain-intrinsic-height`
+   *  placeholders (200px / 40px). On a big doc, the browser's
+   *  initial `scrollIntoView` computes its scroll target using
+   *  cumulative placeholder heights — off by tens of pixels per
+   *  skipped subtree — and lands near but not on the heading.
+   *  Forcing materialization up-front via CSS override is slow
+   *  and doesn't reliably flush content-visibility state inside
+   *  a JS handler.
    *
-   *  The .pmd-force-materialize CSS rule (in style.css) flips
-   *  every cv:auto card / heading to cv:visible. Reading
-   *  `offsetHeight` on the editor's contenteditable forces a
-   *  synchronous layout pass for the WHOLE subtree, so the
-   *  browser now knows every block's actual height. `scrollIntoView`
-   *  uses those for accurate scroll-position math and lands on
-   *  the target on the first try.
-   *
-   *  We revert the class on the next animation frame. Per the
-   *  spec, content-visibility: auto's intrinsic size is the
-   *  last-rendered size of the element — so the heights stay
-   *  cached and the scroll position remains correct as the user
-   *  pans around afterwards. */
+   *  Instead, we accept that the first scroll is approximate.
+   *  The target IS now visible (cv:auto materializes on
+   *  intersection); on the next frame, its
+   *  `getBoundingClientRect().top` is a real number. We compute
+   *  how far off we are from the desired Y and scroll by that
+   *  delta. Each iteration uses freshly-measured layout, so the
+   *  scrollbar converges in 1–3 frames. The user perceives a
+   *  quick settle rather than the original "land in the wrong
+   *  place and stay there." */
   private scrollTargetIntoView(target: HTMLElement): void {
-    if (!this.view) return;
-    const editor = this.view.dom;
-    editor.classList.add('pmd-force-materialize');
-    // Force synchronous layout flush so the override takes effect
-    // for the upcoming scroll math.
-    void editor.offsetHeight;
+    // Coarse scroll first — gets us approximately at the target.
+    // The browser's math is wrong (placeholder heights), but it's
+    // good enough to put the target's neighborhood on-screen,
+    // which is what we need for accurate measurement to start.
     target.scrollIntoView({ behavior: 'auto', block: 'start' });
-    requestAnimationFrame(() => {
-      editor.classList.remove('pmd-force-materialize');
-    });
+
+    const scroller = findScrollContainer(target);
+    const isWindowScroll = scroller === document.documentElement;
+    // Desired viewport Y for the target's top edge. Ribbon is
+    // position:fixed, so the document scroll's "top" is 0 in
+    // viewport coords; the editor's content begins below the
+    // ribbon via #app's margin-top, and `scrollIntoView({block:
+    // 'start'})` aligns target.top to scroller.top.
+    let desiredY: number;
+    if (isWindowScroll) {
+      desiredY = 0;
+    } else {
+      desiredY = scroller.getBoundingClientRect().top;
+    }
+
+    let iterations = 0;
+    const refine = (): void => {
+      if (!target.isConnected) return;
+      if (iterations >= 6) return;
+      const rect = target.getBoundingClientRect();
+      const delta = rect.top - desiredY;
+      // Sub-pixel deltas: we're done. Anything > 1px gets one
+      // more correction.
+      if (Math.abs(delta) < 1) return;
+      if (isWindowScroll) {
+        window.scrollBy(0, delta);
+      } else {
+        scroller.scrollTop += delta;
+      }
+      iterations++;
+      requestAnimationFrame(refine);
+    };
+    requestAnimationFrame(refine);
   }
 }
 
