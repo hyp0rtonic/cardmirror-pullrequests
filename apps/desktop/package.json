@@ -48,7 +48,8 @@
     "linux": {
       "category": "Office",
       "target": [
-        { "target": "AppImage", "arch": ["x64"] }
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "pacman", "arch": ["x64"] }
       ]
     },
     "publish": {

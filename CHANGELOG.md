@@ -52,6 +52,14 @@ Operational:
   on next quit. *Help → Check for Updates…* triggers the same
   check on demand.
 
+Platforms:
+
+- **macOS** — `.dmg` for Intel (x64) and Apple Silicon (arm64).
+- **Windows** — NSIS installer (`.exe`) for x64.
+- **Linux** — `.AppImage` (distribution-agnostic) and `.pacman`
+  (Arch-native; install with `sudo pacman -U file.pacman`) for
+  x64.
+
 Known gaps:
 
 - Desktop builds are unsigned. First-launch warnings on
