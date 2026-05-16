@@ -10,14 +10,17 @@ chords (F4 / F5 / F6 / F7 / F8 / F9 / F10 / F11), same
 send-to-speech workflow, same Word-compatible `.docx` round-trip —
 without needing Word installed at all.
 
-It's built for tournament reliability. Crash-recovery is on by
-default; autosave is opt-in per doc; the multi-doc workspace runs
-either as a three-pane single window (for laptops with limited
-screen space) or as one window per doc (for setups with more
-screen real estate or proper window management). Read mode is
-ironclad against accidental input — set it on the speech doc
-before you stand up and the editor refuses to type stray
-characters into your evidence.
+CardMirror is a native editor — no Word, no macros, no add-in
+surface. That keeps it fast on the multi-megabyte evidence files
+Verbatim users live in, and it makes the same editor first-class
+on Windows, macOS, and Linux (Verbatim's macOS support is
+limited; there's no official Linux option). The deeper
+architectural payoff is search: because every doc is a structured
+tree of cards, cites, and headings rather than a flat stream of
+styled paragraphs, a future release will let you search your
+entire evidence library by author, tag, or structural position
+across every open doc — folded into the editor instead of run
+through a separate Block Search tool.
 
 You can run CardMirror as a **desktop app** on Windows, macOS, or
 Linux — the recommended path for tournament-day work — or as a
