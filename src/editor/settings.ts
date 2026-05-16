@@ -873,6 +873,23 @@ export class SettingsStore {
 
   constructor() {
     this.values = this.load();
+    // Cross-window propagation. The browser `storage` event fires on
+    // every window that shares the origin EXCEPT the one that wrote
+    // the change — so this won't infinite-loop. Electron's
+    // BrowserWindows follow the same Web standard, which means
+    // settings changes in any window flow to all other live windows
+    // without explicit IPC. We reload the full snapshot rather than
+    // patching by key: localStorage holds the whole settings object
+    // under one key, so the simplest correct behavior is "reapply
+    // what's now on disk."
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (event) => {
+        if (event.storageArea !== localStorage) return;
+        if (event.key !== STORAGE_KEY && event.key !== null) return;
+        this.values = this.load();
+        this.notify();
+      });
+    }
   }
 
   get<K extends keyof Settings>(key: K): Settings[K] {
