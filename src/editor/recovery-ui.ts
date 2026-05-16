@@ -89,10 +89,20 @@ class RecoveryModal {
     header.appendChild(closeBtn);
     this.dialog.appendChild(header);
 
-    const intro = document.createElement('p');
+    const intro = document.createElement('div');
     intro.className = 'pmd-recovery-intro';
-    intro.textContent =
-      'CardMirror exited before these docs were saved. Choose which ones to bring back.';
+    const lead = document.createElement('p');
+    lead.textContent = `CardMirror exited before ${
+      this.entries.length === 1 ? 'this draft was' : 'these drafts were'
+    } saved. For each one:`;
+    intro.appendChild(lead);
+    const legend = document.createElement('ul');
+    legend.className = 'pmd-recovery-legend';
+    legend.innerHTML =
+      '<li><strong>Recover</strong> opens the draft in the editor.</li>' +
+      '<li><strong>Discard</strong> deletes the draft. (You can\'t undo this.)</li>' +
+      '<li>Leave both unselected to keep it for next launch.</li>';
+    intro.appendChild(legend);
     this.dialog.appendChild(intro);
 
     const list = document.createElement('div');
@@ -140,20 +150,40 @@ class RecoveryModal {
 
     const actions = document.createElement('div');
     actions.className = 'pmd-recovery-row-actions';
-    const recoverBtn = makeChoiceBtn('Recover', 'recover');
-    const discardBtn = makeChoiceBtn('Discard', 'discard');
+    const recoverBtn = makeChoiceBtn(
+      'Recover',
+      'recover',
+      'Reopen this draft in the editor when you click Apply choices.',
+    );
+    const discardBtn = makeChoiceBtn(
+      'Discard',
+      'discard',
+      'Delete this draft when you click Apply choices.',
+    );
     actions.appendChild(recoverBtn);
     actions.appendChild(discardBtn);
     row.appendChild(actions);
 
     const self = this;
-    function makeChoiceBtn(label: string, decision: RecoveryDecision): HTMLButtonElement {
+    function makeChoiceBtn(
+      label: string,
+      decision: RecoveryDecision,
+      tooltip: string,
+    ): HTMLButtonElement {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'pmd-recovery-row-btn';
       b.textContent = label;
+      b.title = tooltip;
       b.addEventListener('click', () => {
-        self.decisions.set(entry.uid, decision);
+        // Toggle: clicking the already-selected choice clears it
+        // back to "keep for later" so the user can undo a misclick
+        // without having to click the other option.
+        if (self.decisions.get(entry.uid) === decision) {
+          self.decisions.set(entry.uid, 'keep');
+        } else {
+          self.decisions.set(entry.uid, decision);
+        }
         self.refreshRowChoiceState(entry.uid);
       });
       return b;

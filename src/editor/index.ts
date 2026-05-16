@@ -78,7 +78,7 @@ import {
 import { openWordCount } from './word-count-ui.js';
 import { wireColorPanel } from './color-panel.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
-import { getHost, getElectronHost, type OpenedFile } from './host/index.js';
+import { getHost, getElectronHost, type OpenedFile, type JournalEntry } from './host/index.js';
 
 const editorEl = document.getElementById('editor')!;
 const navEl = document.getElementById('nav-panel')!;
@@ -2506,7 +2506,13 @@ if (settings.get('multiDocWorkspace')) {
 /** Startup recovery — read any unsaved journals from the previous
  *  session and surface the recovery modal if there are any. The
  *  user's per-entry decisions drive what gets loaded back / dropped
- *  / kept for next launch. */
+ *  / kept for next launch.
+ *
+ *  Multi-doc mode can recover several at once (one per slot, then
+ *  stacked into the focused slot). Single-doc mode can only display
+ *  one document at a time, so multiple Recover picks resolve to
+ *  "recover the most recent, keep the rest for next launch" — and
+ *  the user sees a toast about it. */
 async function runStartupRecovery(): Promise<void> {
   const host = getHost();
   if (!host.journalsSupported) return;
@@ -2522,22 +2528,70 @@ async function runStartupRecovery(): Promise<void> {
   // common (no-recovery) case.
   const { openRecoveryModal } = await import('./recovery-ui.js');
   const result = await openRecoveryModal(entries);
+
+  // Process discards first (cheap, no UI side-effects). Then handle
+  // recoveries based on mode.
   for (const entry of entries) {
-    const decision = result.decisions.get(entry.uid) ?? 'keep';
-    if (decision === 'discard') {
+    if (result.decisions.get(entry.uid) === 'discard') {
       void host.deleteJournal(entry.uid).catch((err) =>
         console.warn('Failed to discard journal:', err),
       );
-    } else if (decision === 'recover') {
-      await applyRecovery(entry);
     }
-    // 'keep' = leave the journal in place for next launch.
+  }
+  const toRecover = entries.filter((e) => result.decisions.get(e.uid) === 'recover');
+  if (toRecover.length === 0) return;
+
+  if (multiDocActive && multiDocOnRecoveredDoc) {
+    // Multi-doc: load every selected draft. The shell distributes
+    // into empty slots first, then stacks extras onto the focused
+    // slot's record stack.
+    for (const entry of toRecover) {
+      try {
+        const parsed = parseNative(entry.bytes);
+        await multiDocOnRecoveredDoc({
+          uid: entry.uid,
+          filename: entry.filename,
+          handle: entry.handle,
+          format: entry.format,
+          doc: parsed.doc,
+          threads: parsed.threads,
+        });
+      } catch (err) {
+        console.warn(`Failed to parse recovery journal for ${entry.uid}:`, err);
+      }
+    }
+    showToast(
+      toRecover.length === 1
+        ? `Recovered ${toRecover[0]!.filename}`
+        : `Recovered ${toRecover.length} drafts into the workspace`,
+      { durationMs: 2200 },
+    );
+    return;
+  }
+
+  // Single-doc: only one doc can live in the editor at a time. Pick
+  // the most recently saved draft and recover it; leave the rest as
+  // journals so the next launch will offer them again.
+  const sorted = [...toRecover].sort((a, b) =>
+    (b.savedAt ?? '').localeCompare(a.savedAt ?? ''),
+  );
+  const winner = sorted[0]!;
+  await applyRecovery(winner);
+  const deferred = sorted.length - 1;
+  if (deferred > 0) {
+    showToast(
+      `Recovered ${winner.filename}. ${deferred} other draft${deferred === 1 ? '' : 's'} kept for next launch — single-doc mode opens one at a time.`,
+      { durationMs: 4000 },
+    );
+  } else {
+    showToast(`Recovered ${winner.filename}`, { durationMs: 2200 });
   }
 }
 
-/** Load a recovered doc into the editor. Routes through multi-doc
- *  or single-doc paths depending on the current shell. */
-async function applyRecovery(entry: Awaited<ReturnType<typeof getHost>>['readJournals'] extends () => Promise<infer A> ? (A extends readonly (infer E)[] ? E : never) : never): Promise<void> {
+/** Load a recovered journal entry into the single-doc editor (the
+ *  recovered doc replaces the current one). Multi-doc routing
+ *  happens inline in `runStartupRecovery` via the shell hook. */
+async function applyRecovery(entry: JournalEntry): Promise<void> {
   let parsed: ReturnType<typeof parseNative>;
   try {
     parsed = parseNative(entry.bytes);
@@ -2545,18 +2599,6 @@ async function applyRecovery(entry: Awaited<ReturnType<typeof getHost>>['readJou
     console.warn(`Failed to parse recovery journal for ${entry.uid}:`, err);
     return;
   }
-  if (multiDocActive && multiDocOnRecoveredDoc) {
-    await multiDocOnRecoveredDoc({
-      uid: entry.uid,
-      filename: entry.filename,
-      handle: entry.handle,
-      format: entry.format,
-      doc: parsed.doc,
-      threads: parsed.threads,
-    });
-    return;
-  }
-  // Single-doc: the recovered doc replaces the starter doc.
   mountView(parsed.doc, parsed.threads.length > 0 ? parsed.threads : undefined);
   currentDocFilename = entry.filename;
   currentDocHandle = entry.handle;

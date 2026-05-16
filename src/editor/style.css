@@ -3462,10 +3462,29 @@ body.pmd-nav-resize-active {
 
 .pmd-recovery-intro {
   margin: 0;
-  padding: 0.6rem 1.25rem 0.2rem;
+  padding: 0.6rem 1.25rem 0.4rem;
   font-size: 0.85rem;
   color: var(--pmd-c-text-muted);
   line-height: 1.4;
+}
+
+.pmd-recovery-intro p {
+  margin: 0 0 0.35rem;
+}
+
+.pmd-recovery-legend {
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+.pmd-recovery-legend li {
+  margin: 0.1rem 0;
+}
+
+.pmd-recovery-legend strong {
+  color: var(--pmd-c-text);
+  font-weight: 600;
 }
 
 .pmd-recovery-list {
