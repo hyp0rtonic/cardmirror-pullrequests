@@ -57,6 +57,13 @@ internal refactors live in commit messages, not here.
   running no longer offers to "recover" the docs you have open
   in other windows. Only the first window of an app session
   surfaces the startup-recovery sidebar.
+- Legacy Verbatim character-style ids are now recognized on import
+  — pre-modern distributions used `StyleBoldUnderline` for the
+  underline mark and `StyleStyleBold12pt` for the cite mark. Files
+  from those distributions (e.g. 2013-14 era debate evidence) now
+  import with their underlining and cites intact instead of
+  silently losing them. Export still normalizes to the current
+  styleIds, so re-saving an old file cleans up the rStyle output.
 - The AI alt-text generator now ships surrounding context with the
   image — the enclosing card's tag and cite, plus the paragraphs
   immediately before and after the image — so descriptions reflect

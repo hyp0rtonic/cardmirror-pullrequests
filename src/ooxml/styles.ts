@@ -335,16 +335,33 @@ export const PSTYLE_TO_NODE: Record<string, string> = {
 
 /** Reverse: docx rStyle styleId → schema mark name.
  *
- *  `StyleUnderline` is the canonical Verbatim styleId for the named
- *  Underline character style. `Underline` is the legacy/alias styleId
- *  some non-Verbatim tools emit (and stylepox-cross-contaminated docs
- *  pick up); same semantic, just a different identifier. Treat both
- *  as underline_mark on import — the exporter normalizes back to
- *  `StyleUnderline`. */
+ *  Modern Verbatim styleIds (`StyleUnderline`, `Style13ptBold`,
+ *  etc.) live alongside legacy styleIds shipped by earlier
+ *  Verbatim distributions. The legacy names are widespread in
+ *  older debate files — a tester's 2013-14 1AC contained 1,760
+ *  underlined runs marked with the legacy `StyleBoldUnderline`
+ *  styleId that would otherwise be silently dropped on import.
+ *
+ *  The export side always normalizes back to the modern styleId,
+ *  so round-tripping an old file through CardMirror produces a
+ *  doc with current rStyle ids — no need to track which dialect
+ *  the file came from. */
 export const RSTYLE_TO_MARK: Record<string, string> = {
-  Style13ptBold: 'cite_mark',
+  // ─── Underline named-style ──────────────────────────────────
   StyleUnderline: 'underline_mark',
+  // Aliases / legacy:
   Underline: 'underline_mark',
+  // Pre-modern Verbatim shipped "Style Bold Underline" (styleId
+  // `StyleBoldUnderline`) as the underline character style.
+  StyleBoldUnderline: 'underline_mark',
+
+  // ─── Cite named-style ───────────────────────────────────────
+  Style13ptBold: 'cite_mark',
+  // Pre-modern Verbatim shipped "Style Style Bold + 12 pt"
+  // (styleId `StyleStyleBold12pt`) as the cite character style.
+  StyleStyleBold12pt: 'cite_mark',
+
+  // ─── Emphasis / structural marks ────────────────────────────
   Emphasis: 'emphasis_mark',
   UndertagChar: 'undertag_mark',
   AnalyticChar: 'analytic_mark',

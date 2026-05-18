@@ -288,6 +288,20 @@ describe('importer — marks from rPr', () => {
     expect(marks.some((m) => m.type.name === 'underline_mark')).toBe(true);
   });
 
+  it('extracts underline_mark from legacy rStyle="StyleBoldUnderline"', () => {
+    // Pre-modern Verbatim distributions shipped "Style Bold
+    // Underline" (styleId `StyleBoldUnderline`) as the underline
+    // character style. 13-14 era debate files have it on
+    // thousands of runs.
+    const marks = importInline('<w:rStyle w:val="StyleBoldUnderline"/>');
+    expect(marks.some((m) => m.type.name === 'underline_mark')).toBe(true);
+  });
+
+  it('extracts cite_mark from legacy rStyle="StyleStyleBold12pt"', () => {
+    const marks = importInline('<w:rStyle w:val="StyleStyleBold12pt"/>');
+    expect(marks.some((m) => m.type.name === 'cite_mark')).toBe(true);
+  });
+
   it('extracts emphasis_mark from rStyle="Emphasis"', () => {
     const marks = importInline('<w:rStyle w:val="Emphasis"/>');
     expect(marks.some((m) => m.type.name === 'emphasis_mark')).toBe(true);
