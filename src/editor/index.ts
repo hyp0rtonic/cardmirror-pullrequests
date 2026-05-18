@@ -1929,7 +1929,7 @@ function makeStarterDoc(): PMNode {
   return n['doc']!.createChecked(null, [
     n['pocket']!.create({ id: newHeadingId() }, schema.text('Welcome to CardMirror')),
     paraText(
-      'This is the live web preview of CardMirror — a ProseMirror-based editor that round-trips Microsoft Word .docx files against Verbatim and Advanced Verbatim. The boxed heading above is a Pocket: Verbatim\'s name for a top-level argument section. The structures below are interactive — type, edit, and try the keyboard shortcuts as you read.',
+      'This is an early alpha preview of CardMirror — a ProseMirror-based editor that round-trips Microsoft Word .docx files against Verbatim and Advanced Verbatim. The boxed heading above is a Pocket: Verbatim\'s name for a top-level argument section. The structures below are interactive — type, edit, and try the keyboard shortcuts as you read.',
     ),
     blank(),
     paraText(
@@ -1944,7 +1944,7 @@ function makeStarterDoc(): PMNode {
     ),
     blank(),
     paraText(
-      'Heads up: this is the alpha web preview. Edits live only in this tab — there\'s no autosave yet, so use Save As before you close the page if you want to keep what you\'ve done. Don\'t use this for important work.',
+      'Heads up: CardMirror is in early alpha. Expect rough edges, missing features, and the occasional bug. Save your work often and keep a Verbatim copy of anything important until CardMirror has more real-world miles on it.',
     ),
     blank(),
 

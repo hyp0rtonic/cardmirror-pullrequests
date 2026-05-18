@@ -57,6 +57,12 @@ internal refactors live in commit messages, not here.
   running no longer offers to "recover" the docs you have open
   in other windows. Only the first window of an app session
   surfaces the startup-recovery sidebar.
+- Text selection inside the editor is now translucent (~30%
+  alpha) instead of fully opaque, so the underlying highlight,
+  shading, and other colors show through. Side effect: you can
+  now tell at a glance whether selected text is currently
+  highlighted (F11) — the highlight color shows through the
+  selection overlay instead of being hidden by it.
 - Clicking an image now shows a visible selected state — a 2px
   accent outline so it's obvious the click registered before
   pressing Delete / Copy. Unsupported-format placeholder spans

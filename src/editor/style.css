@@ -1186,6 +1186,23 @@ code {
      Word's character-border rendering. */
 }
 
+/* Translucent text-selection overlay. The browser's default
+   selection background is fully opaque and obliterates whatever
+   color sits underneath — most visibly the yellow / green / etc.
+   highlight runs, which makes it impossible to tell whether
+   selected text is highlighted or not until you click away. A
+   ~30%-alpha accent color reads as "selected" without hiding the
+   underlying highlight, shading, font color, or read-mode
+   decoration. Applies only inside the editor surface so the
+   find-bar input and other chrome inputs keep the OS-default
+   selection styling. */
+:is(#editor, .pmd-pane-editor) ::selection {
+  background: color-mix(in srgb, var(--pmd-c-accent) 30%, transparent);
+}
+:is(#editor, .pmd-pane-editor) ::-moz-selection {
+  background: color-mix(in srgb, var(--pmd-c-accent) 30%, transparent);
+}
+
 /* Image-selected state. PM marks the clicked image node with
    `ProseMirror-selectednode`; without an explicit rule the default
    outline is easy to miss (especially on dark images), so users
