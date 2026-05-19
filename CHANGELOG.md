@@ -31,6 +31,11 @@ internal refactors live in commit messages, not here.
   when installed; remaining groups are "Microsoft Office
   defaults", "Apple defaults", "Open-source / cross-platform",
   and "Generic". Groups whose fonts aren't available are hidden.
+- **F8 / Apply Cite Style now expands to the word at the cursor**
+  when there's no selection — matching the behavior F10 / Apply
+  Emphasis Style already had. Previously pressing F8 with the
+  cursor in a word silently did nothing; users had to double-click
+  to select the word first.
 - **Fixed: Nav-pane / find-bar jumps land precisely on big docs.**
   Cards use `content-visibility: auto` with a 200 px placeholder
   height, so `scrollIntoView` to a heading far down a long doc

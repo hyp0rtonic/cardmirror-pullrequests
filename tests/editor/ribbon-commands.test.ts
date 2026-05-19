@@ -1299,9 +1299,63 @@ function citeMarkIdsForText(doc: import('prosemirror-model').Node, search: strin
 }
 
 describe('applyCite (F8)', () => {
-  it('no-op when the selection is collapsed', () => {
-    const doc = makeDoc([paragraph('hello world')]);
-    const state = setCursorIn(doc, (n) => n.type.name === 'paragraph');
+  it('empty selection inside a word in body: applies cite_mark to that word', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('hello world')),
+    ]);
+    // Cursor in the middle of "hello".
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hello world') pos = p + 2;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    const next = apply(state, applyCite());
+    expect(next).not.toBeNull();
+    // "hello" cited; " world" not.
+    let helloMarked = false;
+    let worldMarked = false;
+    next!.doc.descendants((n) => {
+      if (!n.isText) return;
+      const c = n.marks.some((m) => m.type.name === 'cite_mark');
+      if (n.text === 'hello') helloMarked = c;
+      if ((n.text ?? '').includes('world')) worldMarked = c || worldMarked;
+    });
+    expect(helloMarked).toBe(true);
+    expect(worldMarked).toBe(false);
+  });
+
+  it('empty selection in whitespace: no-op', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('a  b')),
+    ]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'a  b') pos = p + 2; // between the two spaces
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(apply(state, applyCite())).toBeNull();
+  });
+
+  it('empty selection in a tag (skip block): no-op', () => {
+    const doc = makeDoc([cardWithChildren(tag('TheTag'))]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'TheTag') pos = p + 2;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(apply(state, applyCite())).toBeNull();
+  });
+
+  it('empty selection in an empty paragraph: no-op', () => {
+    const doc = makeDoc([paragraph('')]);
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, 1)));
     expect(apply(state, applyCite())).toBeNull();
   });
 

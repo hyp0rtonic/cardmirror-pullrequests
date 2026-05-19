@@ -820,7 +820,7 @@ function applyBodyMark(
 }
 
 export function applyCite(): Command {
-  return applyBodyMark('cite_mark');
+  return applyBodyMark('cite_mark', { expandToWordWhenEmpty: true });
 }
 
 export function applyEmphasis(): Command {
