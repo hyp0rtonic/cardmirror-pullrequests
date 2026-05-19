@@ -27,6 +27,7 @@ import {
   type CondenseWarningDelimiter,
 } from '../settings.js';
 import { showToast } from '../toast.js';
+import { promptForChoice } from '../text-prompt.js';
 import { AnthropicError, callAnthropic, type AnthropicContentBlock } from './anthropic.js';
 import { ThinkingTooltip } from './thinking-tooltip.js';
 
@@ -186,16 +187,103 @@ function formatImageContextForPrompt(ctx: ImageContext): string {
   return `Context from the surrounding document:\n${lines.join('\n')}`;
 }
 
+/** Apply the alt-text result to the doc: write `altText` to the
+ *  image node's `alt` attribute AND insert a sibling textblock
+ *  containing the `[ALT TEXT: …]` bracket below the image's
+ *  containing textblock. Both writes happen in a single transaction
+ *  so undo lands the doc back where it started.
+ *
+ *  Returns true on success, false if the insertion point couldn't be
+ *  resolved (in which case a toast has already been shown). */
+function applyAltTextResult(
+  view: EditorView,
+  imagePos: number,
+  altText: string,
+  options: { writeAttribute: boolean },
+): boolean {
+  const { open, close } = currentOmissionBrackets();
+  const labelText = `${open}ALT TEXT: ${altText}${close}`;
+  const target = findImageContainerInsertion(view, imagePos);
+  if (!target) {
+    showToast('Could not locate insertion point.');
+    return false;
+  }
+  // Confirm the image is still where we expect — the user could have
+  // typed during the API roundtrip and shifted positions. If it moved
+  // or vanished, drop the result instead of mutating the wrong node.
+  const live = view.state.doc.nodeAt(imagePos);
+  if (!live || live.type.name !== 'image') {
+    showToast('Image moved while generating — alt text not applied.');
+    return false;
+  }
+  const sibling = target.sameTypeBlock.type.create(null, schema.text(labelText));
+  let tr = view.state.tr;
+  if (options.writeAttribute) {
+    // setNodeMarkup on the atomic image keeps the doc size unchanged,
+    // so the insertPos resolved above remains valid afterwards.
+    tr = tr.setNodeMarkup(imagePos, undefined, { ...live.attrs, alt: altText });
+  }
+  tr = tr.insert(target.insertPos, sibling);
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 export function runGenerateAltText(
   view: EditorView,
   imagePos: number,
   imageNode: PMNode,
 ): void {
+  const contentType = String(imageNode.attrs['contentType'] ?? '');
+  const data = String(imageNode.attrs['data'] ?? '');
+  const existingAlt = String(imageNode.attrs['alt'] ?? '').trim();
+
+  // If the image already has alt text on its attribute, give the user
+  // a chance to keep it (free, no API call) before spending tokens. If
+  // they choose to regenerate, we fall through to the AI path below.
+  // If they cancel, we leave the doc untouched.
+  if (existingAlt) {
+    void (async () => {
+      const choice = await promptForChoice<'keep' | 'regenerate'>({
+        message: 'This image already has alt text.',
+        detail: existingAlt,
+        choices: [
+          { value: 'keep', label: 'Keep current', primary: true },
+          { value: 'regenerate', label: 'Regenerate with AI' },
+        ],
+      });
+      if (choice === null) return;
+      if (choice === 'keep') {
+        // Copy the existing alt text into a visible bracket below the
+        // image. The attribute is already correct — no need to write it.
+        applyAltTextResult(view, imagePos, existingAlt, { writeAttribute: false });
+        return;
+      }
+      // 'regenerate' — fall through to the AI path. Re-validate the
+      // preconditions (key, supported format) at this point since the
+      // user has just committed to a network call.
+      runAiAltTextRequest(view, imagePos, contentType, data);
+    })();
+    return;
+  }
+
+  // No existing alt text — go straight to AI.
+  runAiAltTextRequest(view, imagePos, contentType, data);
+}
+
+/** Internal worker: actually hit the Anthropic API to describe the
+ *  image, then apply the result to BOTH the attribute and the bracket
+ *  below the image. Split out from `runGenerateAltText` so the
+ *  "regenerate" branch of the existing-alt-text dialog can call it
+ *  without re-running the upfront checks. */
+function runAiAltTextRequest(
+  view: EditorView,
+  imagePos: number,
+  contentType: string,
+  data: string,
+): void {
   const apiKey = preflight();
   if (!apiKey) return;
 
-  const contentType = String(imageNode.attrs['contentType'] ?? '');
-  const data = String(imageNode.attrs['data'] ?? '');
   if (!VISION_SUPPORTED.has(contentType) || !data) {
     unsupportedToast(contentType || 'unknown');
     return;
@@ -225,20 +313,12 @@ export function runGenerateAltText(
         showToast('AI returned an empty response.');
         return;
       }
-      const { open, close } = currentOmissionBrackets();
-      const labelText = `${open}ALT TEXT: ${altText}${close}`;
-      const target = findImageContainerInsertion(view, imagePos);
-      if (!target) {
-        showToast('Could not locate insertion point.');
-        return;
-      }
       // Insert as a SIBLING textblock of the same type as the one
       // containing the image (paragraph, card_body, etc.) so PM's
       // structural fitting doesn't bounce the new node out of the
-      // surrounding container.
-      const sibling = target.sameTypeBlock.type.create(null, schema.text(labelText));
-      const tr = view.state.tr.insert(target.insertPos, sibling);
-      view.dispatch(tr.scrollIntoView());
+      // surrounding container. Also writes the result back to
+      // `image.attrs.alt` so OOXML export preserves it.
+      applyAltTextResult(view, imagePos, altText, { writeAttribute: true });
     } catch (err) {
       if (err instanceof AnthropicError) {
         showToast(`Alt text: ${err.message}`);

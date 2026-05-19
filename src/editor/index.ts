@@ -1562,6 +1562,69 @@ settings.subscribe((s) => {
   // right width.
   notifyEditorLayoutChanged();
 });
+
+/** ResizeObserver-driven progressive ribbon hiding. Watches the
+ *  ribbon's intrinsic content width (`scrollWidth`) against its
+ *  available width (`clientWidth`); when content overflows, hides
+ *  the next panel in the priority list (least-essential first).
+ *  When the ribbon grows, optimistically un-hides one panel and
+ *  checks for overflow; if it fits, leaves it visible; otherwise
+ *  hides it again. Converges in O(panel count) iterations.
+ *
+ *  This replaces the brittle media-query approach — we hide
+ *  panels only when they LITERALLY don't fit, at any chrome
+ *  scale / OS font size / visible-panel-mix combination. */
+function initRibbonResizer(): void {
+  const ribbon = document.getElementById('ribbon');
+  if (!ribbon) return;
+  // Hide order from "least essential" to "most essential".
+  // Each entry is the set of element IDs to hide/show together.
+  // Adding a new group? Just append to this list.
+  const panelIds: string[][] = [
+    ['cite-panel'],              // (a) Character styles
+    ['formatting-panel'],        // (b) Structural styles
+    ['format-menu-panel'],       // (c) Table / image / sub / sup / strike
+    ['doc-ops-panel'],           // (d) Paragraph integrity
+    ['font-size-up-btn',         // (e) Font-size step buttons
+     'font-size-down-btn'],
+  ];
+  let hideCount = 0;
+  function setVisible(idx: number, visible: boolean): void {
+    for (const id of panelIds[idx]!) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = visible ? '' : 'none';
+    }
+  }
+  const isOverflowing = (): boolean =>
+    ribbon.scrollWidth > ribbon.clientWidth + 1;
+  let reflowing = false;
+  function reflow(): void {
+    if (reflowing) return;
+    reflowing = true;
+    try {
+      // Hide more panels until the ribbon fits.
+      while (hideCount < panelIds.length && isOverflowing()) {
+        setVisible(hideCount, false);
+        hideCount++;
+      }
+      // Try to bring panels back when there's room.
+      while (hideCount > 0) {
+        setVisible(hideCount - 1, true);
+        if (isOverflowing()) {
+          setVisible(hideCount - 1, false);
+          break;
+        }
+        hideCount--;
+      }
+    } finally {
+      reflowing = false;
+    }
+  }
+  new ResizeObserver(reflow).observe(ribbon);
+  reflow();
+}
+initRibbonResizer();
+
 applyTheme(settings.get('theme'), settings.get('themeAppliesToDocument'));
 applyReadMode(settings.get('readMode'));
 applyZoom(settings.get('zoomPct'));

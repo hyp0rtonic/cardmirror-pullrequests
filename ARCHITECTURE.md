@@ -1353,8 +1353,15 @@ specific things need to be true from the ground up:
   the decoration. Adding a new flag is one line in DisplayTypography +
   one CSS rule.
 - **Image alt attribute** is in the schema (`image.attrs.alt`) and
-  preserved on round-trip; OOXML import reads `<wp:docPr descr>`,
-  export writes it.
+  preserved on round-trip; OOXML import reads `<wp:docPr descr>`
+  (with `<pic:cNvPr descr>` as a fallback for older producers), and
+  export writes both. Manual edit lands via the image right-click
+  menu's **Edit alt text…** item — a multi-line dialog whose `Save`
+  button writes to `image.attrs.alt` directly. The AI alt-text
+  generator updates the same attribute when it runs, and short-
+  circuits with a Keep / Regenerate dialog when an image already
+  has alt text so users don't burn tokens re-describing images
+  someone has already annotated.
 
 ### What's deferred (but the wiring should anticipate)
 
@@ -1367,10 +1374,10 @@ specific things need to be true from the ground up:
   family; a preset library (OpenDyslexic, Lexie Readable, etc.) plugs
   into the existing setting. Fonts will need to be bundled (offline
   desktop) or loaded from a CDN (web).
-- **Manual image alt-text editing UI.** A small dialog accessed from
-  a selected `image` node; sets `image.attrs.alt` directly. The
-  AI-generated alt text path (§15) is shipped; a manual edit dialog
-  is the deferred companion for users without AI features enabled.
+- **Document accessibility checker.** A panel that flags images
+  with empty `alt`, low-contrast highlight/shading slots, color-only
+  ins/del markup once track-changes ships, and headings out of order.
+  Hooks all exist in the schema today; this is a UI-only addition.
 - **Reduced-motion respect.** Drag pickup animation (vacuum) and any
   other transitions should be gated on
   `@media (prefers-reduced-motion: reduce)` once we ship more motion.

@@ -6,6 +6,42 @@ internal refactors live in commit messages, not here.
 
 ## Unreleased
 
+- **Fixed: Nav-pane / find-bar jumps land precisely on big docs.**
+  Cards use `content-visibility: auto` with a 200 px placeholder
+  height, so `scrollIntoView` to a heading far down a long doc
+  used to compute the target's position from placeholder heights
+  and land tens of pixels off. The jump path now flips every
+  cv:auto card and heading to `content-visibility: visible` via
+  an editor-level class, forces a synchronous layout pass so the
+  browser commits real heights, scrolls, and iterates a small
+  refinement loop until the target's screen position stops moving.
+  The class is removed at the end of the loop so cv:auto resumes
+  skipping off-screen content for the editing hot path. Trade-off:
+  every click pays a brief pause (full-doc layout, 200–500 ms on
+  a 2000-card doc) for first-try precision. Applies to both
+  nav-pane clicks and find-bar next-match navigation.
+- **Fixed: Underline / Emphasis font-size settings were dead.**
+  Settings → Styles → font size for the Underline and Emphasis
+  styles did write a CSS variable, but no CSS rule consumed it, so
+  the change was silently dropped. The marks now pick up
+  `--pmd-size-underline` / `--pmd-size-emphasis` and behave like the
+  other per-style size knobs.
+- **Image alt text is now editable and round-trips through Word.**
+  Three changes that ship together:
+  - Right-clicking an image shows a new **Edit alt text…** menu item
+    (above the AI options, always enabled). Opens a multi-line dialog
+    pre-filled with the current alt text; saving writes the new value
+    back to the image node and survives docx export.
+  - The OOXML importer now reads `wp:docPr@descr` (with `pic:cNvPr@descr`
+    as a fallback for older producers) into `image.attrs.alt`. Previously
+    the importer dropped alt text on the floor; exporting was the only
+    half of the round-trip that worked.
+  - The AI alt-text generator now updates `image.attrs.alt` as well as
+    inserting the visible `[ALT TEXT: …]` bracket. If the image already
+    has alt text on its attribute, the AI command pops a dialog
+    showing the existing alt text and offers **Keep current** (copy it
+    to a bracket below the image, no API call) or **Regenerate with
+    AI** (overwrite both the attribute and the bracket).
 - **Dark mode.** Settings → Appearance → Theme: Light / Dark /
   System (default). System mode tracks the OS-level
   `prefers-color-scheme` and switches live when the user changes
@@ -147,6 +183,17 @@ internal refactors live in commit messages, not here.
   single-window multi-pane mode (the per-pane chip), so the "this
   is the speech doc" affordance reads the same regardless of window
   topology.
+- The window can now shrink to any size — the previous 800×600
+  Electron floor is gone, so the status bar (zoom strip) stays
+  on-screen on small / tiled / split-screen layouts. Ribbon panels
+  hide progressively when there's literally no room left,
+  least-essential first: character styles → structural styles →
+  table / image / sub / sup / strike cluster → paragraph integrity
+  toggle → font-size step buttons. Settings and keyboard-shortcut
+  buttons stay visible as long as possible. The hide/show is
+  measurement-driven (not media-query breakpoints), so it adapts
+  to chrome scale, OS font size, and which panels are even
+  visible to begin with.
 - Ribbon cleanup: the plain-paste toggle (`T`) is hidden on desktop
   (F2 reads the clipboard directly there — no armed state to show),
   and the autosave toggle (⏱) is hidden on the web edition

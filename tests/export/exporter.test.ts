@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { schema, newHeadingId } from '../../src/schema/index.js';
 import { exportDoc } from '../../src/export/index.js';
 import { toDocx } from '../../src/export/index.js';
+import { fromDocx } from '../../src/import/index.js';
 import { Docx } from '../../src/ooxml/docx.js';
 
 describe('exporter — basic structure', () => {
@@ -322,5 +323,58 @@ describe('exporter — full docx', () => {
     const docContent = await reloaded.readText('word/document.xml');
     expect(docContent).toContain('Tag');
     expect(docContent).toContain('underlined');
+  });
+});
+
+describe('image alt text round-trip', () => {
+  // A 1x1 transparent PNG, base64-encoded — small enough that the
+  // test stays fast but real bytes so the exporter's media-part
+  // pipeline runs end-to-end.
+  const ONE_BY_ONE_PNG_B64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+  it('preserves image.attrs.alt through export → re-import', async () => {
+    const alt = 'A chart showing exports rising 12% year over year.';
+    const doc = schema.nodes['doc']!.createChecked(null, [
+      schema.nodes['paragraph']!.create(null, [
+        schema.nodes['image']!.create({
+          data: ONE_BY_ONE_PNG_B64,
+          contentType: 'image/png',
+          widthEmu: 914400,
+          heightEmu: 914400,
+          alt,
+        }),
+      ]),
+    ]);
+    const bytes = await toDocx(doc);
+    const reimported = await fromDocx(bytes);
+
+    let foundAlt: string | null = null;
+    reimported.descendants((node) => {
+      if (node.type.name === 'image') {
+        foundAlt = String(node.attrs['alt'] ?? '');
+        return false;
+      }
+      return true;
+    });
+    expect(foundAlt).toBe(alt);
+  });
+
+  it('emits wp:docPr@descr and pic:cNvPr@descr for the image alt', async () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [
+      schema.nodes['paragraph']!.create(null, [
+        schema.nodes['image']!.create({
+          data: ONE_BY_ONE_PNG_B64,
+          contentType: 'image/png',
+          widthEmu: 914400,
+          heightEmu: 914400,
+          alt: 'Test alt',
+        }),
+      ]),
+    ]);
+    const bytes = await toDocx(doc);
+    const reloaded = await Docx.load(bytes);
+    const docXml = await reloaded.readText('word/document.xml');
+    expect(docXml).toContain('descr="Test alt"');
   });
 });

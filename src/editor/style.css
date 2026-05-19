@@ -1275,7 +1275,12 @@ code {
 
   background: var(--pmd-c-bg);
   flex: 1 1 auto;
-  min-height: 400px;
+  /* No `min-height` — narrow / tiled / split-screen layouts get an
+     editor area that shrinks down to whatever space is left between
+     the ribbon and the status bar. The status bar is
+     `position: fixed; bottom: 0`, so it stays pinned as the window
+     shortens; without a min-height here, the doc just gets less
+     visible space (and scrolls), which is what we want. */
   padding: 0.75rem 1.25rem;
   font-family: var(--pmd-body-font), 'Times New Roman', Times, serif;
   font-size: var(--pmd-size-normal);
@@ -1421,6 +1426,28 @@ code {
   contain-intrinsic-height: auto 40px;
 }
 
+/* Force-materialize escape hatch. Applied transiently to the
+   editor's contenteditable surface during a precise scroll
+   (nav-pane jumpTo, find-bar next-match) so every cv:auto card /
+   heading flips to cv:visible and the browser MUST lay out real
+   content. Without this, `scrollIntoView` math uses
+   `contain-intrinsic-size` placeholders for skipped subtrees and
+   the scroll lands tens of pixels off per never-rendered card
+   above the target. Driven from `precise-scroll.ts`; the class
+   is removed once the iterative refine loop converges, so cv:auto
+   resumes skipping off-screen content for the editing hot path.
+   `!important` is needed because the inline-style cv:auto on the
+   `.pmd-card` rule has identical specificity to this descendant
+   rule, and the cascade would otherwise pick whichever came later
+   in source order. */
+.pmd-force-materialize .pmd-card,
+.pmd-force-materialize .pmd-analytic-unit,
+.pmd-force-materialize .pmd-pocket,
+.pmd-force-materialize .pmd-hat,
+.pmd-force-materialize .pmd-block {
+  content-visibility: visible !important;
+}
+
 
 /* Undertag paragraph. Color is settings-driven (--pmd-color-undertag);
    italic / bold are gated on typography-flag classes on #editor. */
@@ -1468,15 +1495,20 @@ code {
   font-size: var(--pmd-size-cite);
 }
 
-/* StyleUnderline: just an underline. */
+/* StyleUnderline: just an underline. Per-style font size is driven
+   by `--pmd-size-underline` (settings.displaySizes.underline), set
+   on documentElement by `applyDisplaySizes` in index.ts. */
 .pmd-underline {
   text-decoration: underline;
+  font-size: var(--pmd-size-underline);
 }
 
 /* Emphasis: underline by default; bold/italic/box decorations are
-   gated by typography-flag classes on #editor (see below). */
+   gated by typography-flag classes on #editor (see below). Per-style
+   font size via `--pmd-size-emphasis` — parallel to underline. */
 .pmd-emphasis {
   text-decoration: underline;
+  font-size: var(--pmd-size-emphasis);
 }
 
 /* UndertagChar (inline form): same color/decoration rules as the
@@ -5636,6 +5668,27 @@ body.pmd-multi-doc #word-count-display {
   outline: 2px solid var(--pmd-c-accent);
   outline-offset: -1px;
 }
+/* Multiline (`<textarea>`) variant — fixed minimum height so the user
+   sees a few lines of context for alt-text-style use cases. */
+textarea.pmd-text-prompt-input {
+  min-height: 4.5rem;
+  resize: vertical;
+  line-height: 1.4;
+}
+/* Read-only detail strip used by promptForChoice (shows e.g. the
+   existing alt text the user is deciding whether to keep). */
+.pmd-choice-prompt-detail {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 4px;
+  background: var(--pmd-c-surface);
+  color: var(--pmd-c-text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  max-height: 8rem;
+  overflow-y: auto;
+}
 .pmd-text-prompt-buttons {
   display: flex;
   justify-content: flex-end;
@@ -5706,3 +5759,10 @@ html.pmd-emphasis-box .pmd-pane-editor .pmd-emphasis {
   border: none;
   padding: 0;
 }
+
+/* Responsive ribbon hiding lives in index.ts (`initRibbonResizer`)
+   as a ResizeObserver-driven measurement of actual overflow.
+   Hiding panels via inline `display: none` avoids the calibration
+   problem of CSS breakpoints — at any chrome scale / OS font /
+   visible-panel mix, we only hide a panel once content literally
+   doesn't fit, and re-show as soon as it does. */

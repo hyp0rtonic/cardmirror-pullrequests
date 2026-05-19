@@ -41,6 +41,7 @@ import {
 } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
+import { preciseScrollIntoView } from './precise-scroll.js';
 
 /** Match category, derived from the containing textblock's node type
  *  at scan time. Used by the `categorized` sort mode to bubble
@@ -551,8 +552,12 @@ export function scrollToCurrentMatch(view: import('prosemirror-view').EditorView
     if (target && target.nodeType === Node.TEXT_NODE) {
       target = (target as unknown as Text).parentElement;
     }
-    if (target && typeof target.scrollIntoView === 'function') {
-      target.scrollIntoView({ block: 'center', behavior: 'auto' });
+    if (target instanceof HTMLElement) {
+      // cv:auto-aware scroll: force-materialize all cards / headings
+      // so the alignment math is computed against real heights, then
+      // let cv:auto resume once the scroll has stabilized. See
+      // `precise-scroll.ts` for the rationale.
+      preciseScrollIntoView(view, target, 'center');
     }
   } catch {
     // domAtPos can throw if the position isn't materialized yet

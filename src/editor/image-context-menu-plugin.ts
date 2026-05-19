@@ -20,6 +20,7 @@ import type { EditorView } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import { settings } from './settings.js';
 import { runGenerateAltText, runGenerateTable } from './ai/image-ai.js';
+import { promptForText } from './text-prompt.js';
 
 /** PM plugin. Installed via `buildEditorPlugins` so every editor
  *  view (single-doc + each multi-pane slot) picks it up. */
@@ -90,6 +91,10 @@ function showImageContextMenu(
 
   const items: MenuItem[] = [
     {
+      label: 'Edit alt text…',
+      action: () => void editAltText(view, imagePos, imageNode),
+    },
+    {
       label: 'Generate alt text from image (AI)',
       disabled: aiBlockedReason !== null,
       title: aiBlockedReason ?? undefined,
@@ -149,6 +154,39 @@ function closeImageContextMenu(): void {
   openMenuEl = null;
   window.removeEventListener('mousedown', maybeCloseImageContextMenu, { capture: true });
   window.removeEventListener('keydown', maybeCloseImageContextMenu, { capture: true });
+}
+
+/** Manual alt-text edit, accessed from the image's right-click menu.
+ *  Opens a multi-line prompt pre-filled with the current alt text;
+ *  on submit, writes the new value back to `image.attrs.alt`. The AI
+ *  alt-text path is a separate menu item — this one is the simple,
+ *  no-network "type or paste a description" affordance and is the
+ *  reason editing alt text doesn't require an Anthropic key. */
+async function editAltText(
+  view: EditorView,
+  imagePos: number,
+  imageNode: PMNode,
+): Promise<void> {
+  const currentAlt = String(imageNode.attrs['alt'] ?? '');
+  const next = await promptForText({
+    message: 'Image alt text',
+    initial: currentAlt,
+    placeholder: 'Describe the image for screen readers and accessibility tools.',
+    multiline: true,
+    okLabel: 'Save',
+  });
+  if (next === null) return;
+  // Verify the image is still at this position before mutating — the
+  // user could have edited the doc while the modal was open (e.g.,
+  // via a keybinding). If the node moved, abort silently rather than
+  // mutating the wrong node.
+  const live = view.state.doc.nodeAt(imagePos);
+  if (!live || live.type.name !== 'image') return;
+  const tr = view.state.tr.setNodeMarkup(imagePos, undefined, {
+    ...live.attrs,
+    alt: next,
+  });
+  view.dispatch(tr);
 }
 
 function maybeCloseImageContextMenu(e: MouseEvent | KeyboardEvent): void {

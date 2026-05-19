@@ -640,6 +640,14 @@ function parseDrawing(drawingNode: XmlNode, ctx: ImportContext): PMNode | null {
   const cx = parseInt(findFirstAttr(drawingNode, 'wp:extent', 'cx') ?? '0', 10);
   const cy = parseInt(findFirstAttr(drawingNode, 'wp:extent', 'cy') ?? '0', 10);
 
+  // Alt text lives on <wp:docPr descr="..."/> at the drawing level;
+  // for backwards compatibility with older OOXML producers that wrote
+  // descr only on the nested <pic:cNvPr/>, fall back to that. Either
+  // path matches what our exporter emits (both copies, mirrored).
+  const altRaw = findFirstAttr(drawingNode, 'wp:docPr', 'descr')
+    ?? findFirstAttr(drawingNode, 'pic:cNvPr', 'descr')
+    ?? '';
+
   const data = bytesToBase64(part.bytes);
 
   try {
@@ -648,7 +656,7 @@ function parseDrawing(drawingNode: XmlNode, ctx: ImportContext): PMNode | null {
       contentType: part.contentType,
       widthEmu: Number.isFinite(cx) && cx > 0 ? cx : 0,
       heightEmu: Number.isFinite(cy) && cy > 0 ? cy : 0,
-      alt: '',
+      alt: altRaw,
     });
   } catch {
     return null;

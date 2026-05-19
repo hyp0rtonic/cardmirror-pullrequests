@@ -91,9 +91,16 @@ function createWindow(initialDoc?: InitialDocPayload): BrowserWindow {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
+    // Explicit 0×0 minimum: Electron + Chromium will otherwise
+    // advertise its own default minimum to the WM (which, on some
+    // Linux compositors, sits at ~800×600 — exactly the old value
+    // we used to set here). Pinning both to 0 advertises "no
+    // minimum" so tiling WMs and split-screen layouts can shrink
+    // the window arbitrarily; the renderer's CSS / JS handles
+    // narrow-viewport degradation from there.
+    minWidth: 0,
+    minHeight: 0,
     title: 'CardMirror',
-    minWidth: 800,
-    minHeight: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

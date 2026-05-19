@@ -23,6 +23,9 @@ export interface TextPromptOptions {
   okLabel?: string;
   /** Label on the cancel button. Defaults to 'Cancel'. */
   cancelLabel?: string;
+  /** Render a `<textarea>` (multi-line) instead of `<input type=text>`.
+   *  In multiline mode, Enter inserts a newline; Ctrl/Cmd+Enter submits. */
+  multiline?: boolean;
 }
 
 export function promptForText(opts: TextPromptOptions): Promise<string | null> {
@@ -37,8 +40,10 @@ export function promptForText(opts: TextPromptOptions): Promise<string | null> {
     header.textContent = opts.message;
     dialog.appendChild(header);
 
-    const input = document.createElement('input');
-    input.type = 'text';
+    const input: HTMLInputElement | HTMLTextAreaElement = opts.multiline
+      ? document.createElement('textarea')
+      : document.createElement('input');
+    if (input instanceof HTMLInputElement) input.type = 'text';
     input.className = 'pmd-text-prompt-input';
     input.value = opts.initial ?? '';
     if (opts.placeholder) input.placeholder = opts.placeholder;
@@ -90,6 +95,9 @@ export function promptForText(opts: TextPromptOptions): Promise<string | null> {
         cleanup();
         resolve(null);
       } else if (e.key === 'Enter') {
+        // Multiline: Enter inserts a newline; Ctrl/Cmd+Enter submits.
+        // Single-line: Enter submits.
+        if (opts.multiline && !(e.ctrlKey || e.metaKey)) return;
         e.preventDefault();
         cleanup();
         resolve(input.value.trim());
@@ -104,5 +112,105 @@ export function promptForText(opts: TextPromptOptions): Promise<string | null> {
       input.focus();
       input.select();
     }, 0);
+  });
+}
+
+export interface ChoicePromptOptions<T extends string> {
+  /** Title / question shown above the choice buttons. */
+  message: string;
+  /** Optional second-line body — used to show details the choice is
+   *  about (e.g., the existing alt text the user is deciding to keep
+   *  or replace). Rendered read-only beneath the message. */
+  detail?: string;
+  /** Buttons in left-to-right display order. Each button's `value` is
+   *  what the returned promise resolves to. The button marked
+   *  `primary: true` (or the first one if none is) is activated by
+   *  Enter; Esc / overlay-click always resolves to null. */
+  choices: { value: T; label: string; primary?: boolean }[];
+  /** Label on the trailing cancel button. Defaults to 'Cancel'. */
+  cancelLabel?: string;
+}
+
+/** Modal that asks the user to pick one of N options. Returns the
+ *  chosen `value`, or `null` if the user cancels.
+ *
+ *  Visual shape mirrors `promptForText` so it reads as part of the
+ *  same dialog vocabulary. */
+export function promptForChoice<T extends string>(
+  opts: ChoicePromptOptions<T>,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'pmd-route-overlay';
+    const dialog = document.createElement('div');
+    dialog.className = 'pmd-route-dialog pmd-text-prompt-dialog';
+
+    const header = document.createElement('div');
+    header.className = 'pmd-route-header';
+    header.textContent = opts.message;
+    dialog.appendChild(header);
+
+    if (opts.detail) {
+      const detail = document.createElement('div');
+      detail.className = 'pmd-choice-prompt-detail';
+      detail.textContent = opts.detail;
+      dialog.appendChild(detail);
+    }
+
+    const buttons = document.createElement('div');
+    buttons.className = 'pmd-text-prompt-buttons';
+
+    const cleanup = (): void => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'pmd-route-cancel';
+    cancelBtn.textContent = opts.cancelLabel ?? 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      cleanup();
+      resolve(null);
+    });
+    buttons.appendChild(cancelBtn);
+
+    const primary = opts.choices.find((c) => c.primary) ?? opts.choices[0]!;
+    for (const choice of opts.choices) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pmd-text-prompt-ok';
+      btn.textContent = choice.label;
+      btn.addEventListener('click', () => {
+        cleanup();
+        resolve(choice.value);
+      });
+      buttons.appendChild(btn);
+    }
+
+    dialog.appendChild(buttons);
+
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        cleanup();
+        resolve(null);
+      }
+    });
+
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cleanup();
+        resolve(null);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        cleanup();
+        resolve(primary.value);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+
+    document.body.appendChild(overlay);
   });
 }

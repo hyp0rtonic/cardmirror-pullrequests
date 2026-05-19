@@ -16,6 +16,7 @@ import { type Node as PMNode, DOMSerializer } from 'prosemirror-model';
 import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { settings } from './settings.js';
 import { dragController, type DragItem, type DragSurface } from './drag-controller.js';
+import { preciseScrollIntoView } from './precise-scroll.js';
 import {
   collectHeadings,
   computeHeadingRange,
@@ -24,7 +25,10 @@ import {
   type HeadingEntry,
 } from './headings.js';
 
-const NAV_WIDTH_MIN = 150;
+/** Minimum nav-pane width. Has to fit the 4 level-buttons + the
+ *  close (×) button + the row padding. With the previous 150px
+ *  bound the × could be clipped at the smallest sizes. */
+const NAV_WIDTH_MIN = 180;
 const NAV_WIDTH_MAX = 800;
 
 /**
@@ -1468,7 +1472,7 @@ export class NavigationPanel {
     if (entry.id) {
       const target = this.view.dom.querySelector<HTMLElement>(`[data-id="${cssEscape(entry.id)}"]`);
       if (target) {
-        target.scrollIntoView({ behavior: 'auto', block: 'start' });
+        preciseScrollIntoView(this.view, target);
         return;
       }
     }
@@ -1478,8 +1482,8 @@ export class NavigationPanel {
     const domAtPos = this.view.domAtPos(entry.pos);
     let el: Node | null = domAtPos.node;
     while (el && el.nodeType !== Node.ELEMENT_NODE) el = el.parentNode;
-    if (el && (el as Element).scrollIntoView) {
-      (el as Element).scrollIntoView({ behavior: 'auto', block: 'start' });
+    if (el && el instanceof HTMLElement) {
+      preciseScrollIntoView(this.view, el);
     }
   }
 }
