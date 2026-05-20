@@ -20,6 +20,19 @@ internal refactors live in commit messages, not here.
   rebound). The editor's existing `Mod--` / `Mod-=` zoom stays
   separate, so you can dial doc content size up or down on top
   of the page-zoom factor.
+- **Bug fix — Nav-pane drag drop-back precision.** When you grab
+  a heading in the nav pane, the pane inserts thin drop-indicator
+  bars between every entry to show valid drop slots. The cursor
+  still followed the pickup pill, but the pile-of-indicators
+  above the source heading pushed the source's slot down out from
+  under the cursor — so releasing without moving (a "drop it back
+  where it came from" gesture) landed the heading in a sibling
+  slot instead. The source `<li>` now anchors at its original
+  screen-Y for the duration of the drag, so a no-move release
+  reliably drops back into the original slot. Other entries
+  still shift down by the full indicator stack, so the nav pane
+  still visibly expands at drag-start (the affordance you'd
+  expect).
 - **Bug fix — Multi-pane → single-window switch was losing open
   docs.** Toggling from the three-pane workspace back to one-doc-
   per-window only restored the active pane; the others were
@@ -76,13 +89,23 @@ internal refactors live in commit messages, not here.
   that side's prep clock the active countdown. Type into the big
   display while paused to set a custom duration. Prep balances
   persist across closes; speech timer doesn't. Cross-window
-  sync via BroadcastChannel — open the timer in two windows and
-  they stay in lockstep. New Settings → Appearance entries:
+  sync via BroadcastChannel — open the timer in two windows
+  AND the visibility toggle in lockstep too: arming the panel
+  in one window opens it in every CardMirror window. New
+  Settings → Appearance entries:
   **Timer profile** (High school 3/5/8 + 8 min prep, College
-  3/6/9 + 10 min prep, Pomodoro 25/15/5, Custom), **Compact
-  timer layout** (drops the preset buttons, tucks Reset under
-  Start), and **Flash timer when countdown is low** (flashes the
-  display red as remaining drops below 5 / 3 / 1 seconds).
+  3/6/9 + 10 min prep, Pomodoro 25/15/5). Each profile's
+  three preset durations and prep length are independently
+  editable in Settings — pick a profile, then dial the four
+  numbers to whatever your league actually uses. Switching
+  profiles refills the prep clocks to that profile's total.
+  **Compact timer layout** (drops the preset buttons, tucks
+  Reset under Start). **Flash timer when countdown is low**
+  (flashes the display red as remaining drops below 5 / 3 / 1
+  seconds; the flash thresholds are editable too). **Prep
+  side label** (Both / Text / Color) — controls how the Aff /
+  Neg sides are labeled, with a color-only mode for a quieter
+  panel.
 - **"About this install" block at the bottom of Settings →
   General.** A read-only diagnostic section below a divider
   showing app version, host (Desktop / Web), operating system,
