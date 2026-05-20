@@ -967,10 +967,17 @@ export class NavigationPanel {
     // reacting to the 'end' event; we just clean up our pickup pill.
     this.removePickupPill();
     // Clear dragging class from every <li> that had it (multi-drag
-    // can mark several at once).
+    // can mark several at once). Also clear the inline `transform`
+    // we set in `renderDropIndicators` to anchor the source <li>
+    // at its original visual position — once the drag is done the
+    // li returns to its normal place in flow and the transform
+    // would otherwise leave it visually offset.
     this.listEl
-      .querySelectorAll('.pmd-nav-item-dragging')
-      .forEach((el) => el.classList.remove('pmd-nav-item-dragging'));
+      .querySelectorAll<HTMLElement>('.pmd-nav-item-dragging')
+      .forEach((el) => {
+        el.classList.remove('pmd-nav-item-dragging');
+        el.style.transform = '';
+      });
     this.cancelAutoExpand();
 
     if (this.dragHandlersAttached) {
@@ -1018,6 +1025,21 @@ export class NavigationPanel {
       (el): el is HTMLLIElement => el instanceof HTMLLIElement,
     );
 
+    // The drag's source entry — the one the user grabbed. We want
+    // this <li> to stay UNDER the cursor while indicators get
+    // inserted everywhere else. Tracked here so the loop below
+    // can count how many indicators end up above it and we can
+    // compensate via a `transform: translateY(-N*4px)` at the end.
+    const draggingLi = this.listEl.querySelector<HTMLLIElement>(
+      '.pmd-nav-item-dragging',
+    );
+    // Clear any stale transform from a previous render of this
+    // drag's indicators (happens on every auto-expand / move
+    // step). Will be re-applied below once the new count is known.
+    if (draggingLi) draggingLi.style.transform = '';
+    let indicatorsAboveDraggedCount = 0;
+    let pastDragged = false;
+
     for (const li of items) {
       const entry = this.liEntries.get(li);
       if (!entry) continue;
@@ -1039,14 +1061,37 @@ export class NavigationPanel {
       indicator.dataset['insertPos'] = String(insertPos);
       this.listEl.insertBefore(indicator, li);
       this.dropIndicators.push(indicator);
+
+      // Count this indicator as "above the dragged item" if we
+      // haven't passed the dragged li yet. The indicator that
+      // gets inserted immediately BEFORE the dragged li counts
+      // too — it shifts the dragged li down by its own height.
+      if (!pastDragged) indicatorsAboveDraggedCount++;
+      if (li === draggingLi) pastDragged = true;
     }
 
-    // End-of-doc slot: always valid.
+    // End-of-doc slot: always valid. Always BELOW the dragged
+    // item (which lives somewhere in the items array), so it
+    // doesn't contribute to the above-dragged count.
     const endIndicator = document.createElement('div');
     endIndicator.className = 'pmd-nav-drop-indicator';
     endIndicator.dataset['insertPos'] = String(doc.content.size);
     this.listEl.appendChild(endIndicator);
     this.dropIndicators.push(endIndicator);
+
+    // Anchor the dragged li at its original visual position by
+    // counteracting the cumulative shift from indicators above
+    // it. Keeps the source slot under the cursor, so releasing
+    // the drag with no mouse movement drops the heading back
+    // where it came from. Items below the dragged li still get
+    // pushed down by every indicator, which is what makes the
+    // nav pane visibly grow at drag start — preserved on
+    // purpose; the user likes that affordance.
+    if (draggingLi && indicatorsAboveDraggedCount > 0) {
+      // Indicator height = 4px (see .pmd-nav-drop-indicator).
+      const INDICATOR_HEIGHT_PX = 4;
+      draggingLi.style.transform = `translateY(${-indicatorsAboveDraggedCount * INDICATOR_HEIGHT_PX}px)`;
+    }
   }
 
   private removeDropIndicators(): void {
