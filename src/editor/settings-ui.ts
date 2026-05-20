@@ -760,9 +760,17 @@ function buildInstallInfoSection(): HTMLElement {
     updatesBtn.addEventListener('click', () => {
       updatesBtn.disabled = true;
       updatesBtn.textContent = 'Checking…';
-      void electronHost.checkForUpdates().then((result) => {
+      const restore = (): void => {
         updatesBtn.disabled = false;
         updatesBtn.textContent = 'Check for updates';
+      };
+      // .catch handles the case where the main process is older
+      // than the renderer (dev hot-reload of the renderer without
+      // restarting Electron leaves no IPC handler registered, so
+      // `invoke` rejects). Without it the button would stay in
+      // the disabled "Checking…" state forever.
+      electronHost.checkForUpdates().then((result) => {
+        restore();
         if (result.status === 'latest') {
           showToast("You're on the latest version.");
         } else if (result.status === 'updating') {
@@ -772,6 +780,9 @@ function buildInstallInfoSection(): HTMLElement {
         } else {
           showToast(`Update check failed: ${result.message ?? 'unknown error'}`);
         }
+      }).catch((err: unknown) => {
+        restore();
+        showToast(`Update check failed: ${err instanceof Error ? err.message : String(err)}`);
       });
     });
     actions.appendChild(updatesBtn);
@@ -781,7 +792,11 @@ function buildInstallInfoSection(): HTMLElement {
     crashBtn.className = 'pmd-install-info-btn';
     crashBtn.textContent = 'Open crash dumps folder';
     crashBtn.addEventListener('click', () => {
-      void electronHost.openCrashDumpsFolder();
+      electronHost.openCrashDumpsFolder().catch((err: unknown) => {
+        showToast(
+          `Open crash dumps folder failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     });
     actions.appendChild(crashBtn);
 
