@@ -31,6 +31,15 @@ internal refactors live in commit messages, not here.
   when installed; remaining groups are "Microsoft Office
   defaults", "Apple defaults", "Open-source / cross-platform",
   and "Generic". Groups whose fonts aren't available are hidden.
+- **"About this install" block at the bottom of Settings →
+  General.** A read-only diagnostic section below a divider
+  showing app version, host (Desktop / Web), operating system,
+  and the full user-agent string — easy to copy-paste into a bug
+  report. On desktop, two action buttons live underneath:
+  **Check for updates** (mirrors Help → Check for Updates…,
+  toast surfaces the result) and **Open crash dumps folder**
+  (mirrors the Help-menu item) so both actions are now reachable
+  from Settings.
 - **Every ribbon action is now bindable.** Twelve previously
   click-only ribbon actions are now registered commands in the
   keybinding registry, available in Settings → Keybindings. None

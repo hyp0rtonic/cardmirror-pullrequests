@@ -204,6 +204,42 @@ function bytesToBuffer(bytes: unknown): Buffer {
  *  needs a per-press permission grant under Chromium's web policy. */
 ipcMain.handle('host:clipboard-read-text', () => clipboard.readText());
 
+/** Trigger an electron-updater check from the renderer. Mirrors
+ *  the Help → Check for Updates… menu item so the same flow can
+ *  be reached from Settings → General → "About this install".
+ *  In dev (non-packaged) the menu shows a friendly note instead
+ *  of running; the renderer path returns `'dev'` so the UI can
+ *  do the same. */
+ipcMain.handle('host:check-for-updates', async () => {
+  if (!app.isPackaged) return { status: 'dev' };
+  return new Promise<{ status: 'latest' | 'updating' | 'error'; message?: string }>((resolve) => {
+    const offNotAvailable = (): void => {
+      autoUpdater.removeListener('update-not-available', notAvailable);
+      autoUpdater.removeListener('update-available', available);
+      autoUpdater.removeListener('error', errored);
+    };
+    const notAvailable = (): void => { offNotAvailable(); resolve({ status: 'latest' }); };
+    const available = (): void => { offNotAvailable(); resolve({ status: 'updating' }); };
+    const errored = (err: Error): void => {
+      offNotAvailable();
+      resolve({ status: 'error', message: err.message });
+    };
+    autoUpdater.once('update-not-available', notAvailable);
+    autoUpdater.once('update-available', available);
+    autoUpdater.once('error', errored);
+    autoUpdater.checkForUpdates().catch((err: unknown) => {
+      offNotAvailable();
+      resolve({ status: 'error', message: err instanceof Error ? err.message : String(err) });
+    });
+  });
+});
+
+/** Open the OS file manager at the crash-dumps folder. Mirrors
+ *  the Help → Open Crash Dumps Folder menu item. */
+ipcMain.handle('host:open-crash-dumps', async () => {
+  await shell.openPath(app.getPath('crashDumps'));
+});
+
 /** Open a URL in the user's default OS browser. Used by the
  *  hyperlink context menu's "Open Link" action — we route through
  *  the shell instead of `window.open` so the link lands in the

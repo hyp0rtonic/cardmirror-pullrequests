@@ -65,6 +65,15 @@ interface ElectronAPI {
   /** Subscribe to menu-driven commands from the native menu bar.
    *  Returns an unsubscribe handle. */
   onMenuCommand(handler: (command: string) => void): () => void;
+  /** Run a manual auto-update check (mirrors Help → Check for
+   *  Updates…). Resolves with a status the UI can render. */
+  checkForUpdates(): Promise<{
+    status: 'latest' | 'updating' | 'error' | 'dev';
+    message?: string;
+  }>;
+  /** Open the OS file manager at the crash-dumps folder (mirrors
+   *  Help → Open Crash Dumps Folder). */
+  openCrashDumpsFolder(): Promise<void>;
 }
 
 function api(): ElectronAPI {
@@ -241,5 +250,16 @@ export class ElectronHost implements Host {
    *  the desktop shell exposes a menu, so this is ElectronHost-only. */
   onMenuCommand(handler: (command: string) => void): () => void {
     return api().onMenuCommand(handler);
+  }
+
+  async checkForUpdates(): Promise<{
+    status: 'latest' | 'updating' | 'error' | 'dev';
+    message?: string;
+  }> {
+    return api().checkForUpdates();
+  }
+
+  async openCrashDumpsFolder(): Promise<void> {
+    await api().openCrashDumpsFolder();
   }
 }

@@ -31,6 +31,8 @@ import { isFontAvailable } from './font-detect.js';
 import { WORD_HIGHLIGHT_COLORS } from './color-palette.js';
 import { buildKeybindingsEditor } from './keybindings-editor.js';
 import { getHost, getElectronHost } from './host/index.js';
+import { getInstallInfo } from './install-info.js';
+import { showToast } from './toast.js';
 
 /**
  * Available body fonts, organized into labeled groups. The dropdown
@@ -260,6 +262,13 @@ class SettingsModal {
         empty.className = 'pmd-settings-empty';
         empty.textContent = 'No settings in this section yet.';
         panel.appendChild(empty);
+      }
+      // "About this install" diagnostic block at the bottom of
+      // General — read-only labels users can copy-paste into bug
+      // reports. Lives here rather than in SETTING_METADATA
+      // because it isn't a user-editable setting.
+      if (id === 'general') {
+        panel.appendChild(buildInstallInfoSection());
       }
       this.dialog.appendChild(panel);
       panels[id] = panel;
@@ -701,6 +710,83 @@ function buildColorsEditor(): HTMLElement {
     }
   });
   onDetached(wrap, () => unsubscribe());
+
+  return wrap;
+}
+
+/** Read-only "About this install" diagnostic block. Lives at the
+ *  bottom of Settings → General so a user filing a bug report can
+ *  grab their version + platform + UA in one place. The actions
+ *  (Check for Updates, Open Crash Dumps Folder) are Electron-only;
+ *  they're omitted on the web edition. */
+function buildInstallInfoSection(): HTMLElement {
+  const wrap = document.createElement('section');
+  wrap.className = 'pmd-install-info-section';
+
+  const hr = document.createElement('hr');
+  hr.className = 'pmd-install-info-divider';
+  wrap.appendChild(hr);
+
+  const heading = document.createElement('div');
+  heading.className = 'pmd-install-info-heading';
+  heading.textContent = 'About this install';
+  wrap.appendChild(heading);
+
+  const list = document.createElement('dl');
+  list.className = 'pmd-install-info-list';
+  for (const entry of getInstallInfo()) {
+    const dt = document.createElement('dt');
+    dt.textContent = entry.label;
+    list.appendChild(dt);
+    const dd = document.createElement('dd');
+    dd.textContent = entry.value;
+    if (entry.mono) dd.classList.add('pmd-install-info-mono');
+    list.appendChild(dd);
+  }
+  wrap.appendChild(list);
+
+  // Action buttons — Electron-only because they shell out to the
+  // OS (update check via electron-updater, crash-dumps folder via
+  // shell.openPath). The web edition has neither capability.
+  const electronHost = getElectronHost();
+  if (electronHost) {
+    const actions = document.createElement('div');
+    actions.className = 'pmd-install-info-actions';
+
+    const updatesBtn = document.createElement('button');
+    updatesBtn.type = 'button';
+    updatesBtn.className = 'pmd-install-info-btn';
+    updatesBtn.textContent = 'Check for updates';
+    updatesBtn.addEventListener('click', () => {
+      updatesBtn.disabled = true;
+      updatesBtn.textContent = 'Checking…';
+      void electronHost.checkForUpdates().then((result) => {
+        updatesBtn.disabled = false;
+        updatesBtn.textContent = 'Check for updates';
+        if (result.status === 'latest') {
+          showToast("You're on the latest version.");
+        } else if (result.status === 'updating') {
+          showToast('Update available — downloading in the background.');
+        } else if (result.status === 'dev') {
+          showToast('Update checks are only active in packaged builds.');
+        } else {
+          showToast(`Update check failed: ${result.message ?? 'unknown error'}`);
+        }
+      });
+    });
+    actions.appendChild(updatesBtn);
+
+    const crashBtn = document.createElement('button');
+    crashBtn.type = 'button';
+    crashBtn.className = 'pmd-install-info-btn';
+    crashBtn.textContent = 'Open crash dumps folder';
+    crashBtn.addEventListener('click', () => {
+      void electronHost.openCrashDumpsFolder();
+    });
+    actions.appendChild(crashBtn);
+
+    wrap.appendChild(actions);
+  }
 
   return wrap;
 }

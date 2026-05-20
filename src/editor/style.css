@@ -2831,6 +2831,70 @@ body.pmd-nav-resize-active {
   margin: 2rem 0;
 }
 
+/* "About this install" block — read-only diagnostic info at the
+   bottom of Settings → General. The leading <hr> separates the
+   block from the user-editable settings above; the <dl> renders
+   as a two-column "Label … Value" grid. Action buttons sit
+   beneath the list and are only present on Electron. */
+.pmd-install-info-section {
+  margin-top: 1.5rem;
+}
+.pmd-install-info-divider {
+  border: none;
+  border-top: 1px solid var(--pmd-c-border-soft);
+  margin: 0 0 1rem 0;
+}
+.pmd-install-info-heading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--pmd-c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.pmd-install-info-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1rem;
+  row-gap: 0.35rem;
+  margin: 0 0 1rem 0;
+  font-size: 0.85rem;
+}
+.pmd-install-info-list dt {
+  color: var(--pmd-c-text-muted);
+  font-weight: 500;
+}
+.pmd-install-info-list dd {
+  margin: 0;
+  color: var(--pmd-c-text);
+  word-break: break-word;
+}
+.pmd-install-info-mono {
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 0.75rem;
+  color: var(--pmd-c-text-secondary);
+}
+.pmd-install-info-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.pmd-install-info-btn {
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--pmd-c-text);
+  font-family: inherit;
+  cursor: pointer;
+}
+.pmd-install-info-btn:hover { background: var(--pmd-c-surface); }
+.pmd-install-info-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .pmd-settings-row {
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--pmd-c-divider-faint);

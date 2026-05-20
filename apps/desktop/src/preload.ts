@@ -35,6 +35,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *  a sticky-toggle workaround. */
   clipboardReadText: () => ipcRenderer.invoke('host:clipboard-read-text'),
 
+  /** Trigger a manual auto-update check. Resolves with a status
+   *  string the UI can use to show a friendly result message
+   *  without needing to listen on its own autoUpdater channel. */
+  checkForUpdates: () => ipcRenderer.invoke('host:check-for-updates') as Promise<{
+    status: 'latest' | 'updating' | 'error' | 'dev';
+    message?: string;
+  }>,
+
+  /** Open the OS file manager at the crash-dumps folder. */
+  openCrashDumpsFolder: () => ipcRenderer.invoke('host:open-crash-dumps'),
+
   /** Open a URL in the user's default OS browser (via shell.openExternal).
    *  Main filters to http(s) + mailto so file:// URLs can't escape. */
   openExternal: (url: string) => ipcRenderer.invoke('host:open-external', url),
