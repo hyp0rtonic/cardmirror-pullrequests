@@ -423,6 +423,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildTimerProfileEditor());
       return row;
+    } else if (meta.kind === 'timerPrepLabel') {
+      row.appendChild(text);
+      row.appendChild(buildTimerPrepLabelEditor());
+      return row;
     } else if (meta.kind === 'colorOverrides') {
       row.appendChild(text);
       row.appendChild(buildColorOverridesEditor());
@@ -1334,6 +1338,37 @@ function buildTimerProfileEditor(): HTMLElement {
   }
   function refresh(): void {
     const cur = settings.get('timerProfile');
+    for (const btn of wrap.querySelectorAll<HTMLButtonElement>('.pmd-theme-editor-btn')) {
+      btn.setAttribute('aria-pressed', btn.dataset['value'] === cur ? 'true' : 'false');
+    }
+  }
+  refresh();
+  const unsub = settings.subscribe(refresh);
+  onDetached(wrap, () => unsub());
+  return wrap;
+}
+
+/** Three-button segmented control for the Aff / Neg prep-button
+ *  label style: text-only, color-only, or both. */
+function buildTimerPrepLabelEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-theme-editor';
+  const options: { value: Settings['timerPrepLabel']; label: string }[] = [
+    { value: 'both', label: 'Both' },
+    { value: 'text', label: 'Text only' },
+    { value: 'color', label: 'Color only' },
+  ];
+  for (const o of options) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pmd-theme-editor-btn';
+    btn.textContent = o.label;
+    btn.dataset['value'] = o.value;
+    btn.addEventListener('click', () => settings.set('timerPrepLabel', o.value));
+    wrap.appendChild(btn);
+  }
+  function refresh(): void {
+    const cur = settings.get('timerPrepLabel');
     for (const btn of wrap.querySelectorAll<HTMLButtonElement>('.pmd-theme-editor-btn')) {
       btn.setAttribute('aria-pressed', btn.dataset['value'] === cur ? 'true' : 'false');
     }

@@ -271,6 +271,13 @@ export interface Settings {
   /** Compact layout: drops the 9/6/3 preset column and stacks
    *  Reset under Start/Pause. */
   timerCompact: boolean;
+  /** How to label the Aff / Neg prep buttons:
+   *    'text'  → "A: 10:00" / "N: 10:00", no special color
+   *    'color' → "10:00" / "10:00", blue + red border
+   *    'both'  → "A: 10:00" / "N: 10:00", blue + red (default)
+   *  Color-blind users can pick 'text'; minimalist users can pick
+   *  'color' to drop the redundant A:/N: prefix. */
+  timerPrepLabel: 'text' | 'color' | 'both';
   /** When read mode is toggled (either direction), scroll the
    *  editor to the very top of the doc and place the cursor at
    *  the start. Default off — toggling read mode keeps the
@@ -674,6 +681,7 @@ const DEFAULTS: Settings = {
   timerFlashEnabled: true,
   timerFlashSeconds: [5, 3, 1],
   timerCompact: false,
+  timerPrepLabel: 'both',
   jumpToDocTopOnReadModeToggle: false,
   findResultsExpanded: false,
   findRememberLastQuery: false,
@@ -812,6 +820,7 @@ export interface SettingMeta {
     | 'theme'
     | 'reduceMotion'
     | 'timerProfile'
+    | 'timerPrepLabel'
     | 'password'
     | 'clod'
     | 'aiCitePrompt'
@@ -998,6 +1007,14 @@ export const SETTING_METADATA: SettingMeta[] = [
     description:
       "Preset durations for the built-in timer. High school = 3/5/8 speech presets + 8 min prep. College = 3/6/9 + 10 min prep. Pomodoro = 25/15/5 (work / long break / short break). 'Custom' = use the individual fields below (not yet exposed in this UI; toggle profile to apply a preset).",
     kind: 'timerProfile',
+    category: 'appearance',
+  },
+  {
+    key: 'timerPrepLabel',
+    label: 'Prep button label style',
+    description:
+      "How the Aff / Neg prep buttons identify which side they belong to. 'Text' uses A: / N: prefixes with no special color. 'Color' uses blue / red without the prefix. 'Both' (default) uses prefix and color together.",
+    kind: 'timerPrepLabel',
     category: 'appearance',
   },
   {
@@ -1409,6 +1426,10 @@ function sanitize(s: Settings): Settings {
     timerFlashEnabled: s.timerFlashEnabled === false ? false : true,
     timerFlashSeconds: sanitizeFlashSeconds(s.timerFlashSeconds),
     timerCompact: !!s.timerCompact,
+    timerPrepLabel:
+      s.timerPrepLabel === 'text' || s.timerPrepLabel === 'color'
+        ? s.timerPrepLabel
+        : 'both',
     jumpToDocTopOnReadModeToggle: !!s.jumpToDocTopOnReadModeToggle,
     findResultsExpanded: !!s.findResultsExpanded,
     findRememberLastQuery:

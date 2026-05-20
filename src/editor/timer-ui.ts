@@ -93,9 +93,9 @@ export function mountTimerUI(): void {
     <button id="timer-preset-3-btn" class="pmd-timer-preset" type="button"
             data-preset-index="2"></button>
     <button id="timer-aff-btn" class="pmd-timer-prep pmd-timer-aff" type="button"
-            aria-label="Affirmative prep">A: <span class="pmd-timer-prep-time" id="timer-aff-time">10:00</span></button>
+            aria-label="Affirmative prep"><span class="pmd-timer-prep-prefix">A:</span><span class="pmd-timer-prep-time" id="timer-aff-time">10:00</span></button>
     <button id="timer-neg-btn" class="pmd-timer-prep pmd-timer-neg" type="button"
-            aria-label="Negative prep">N: <span class="pmd-timer-prep-time" id="timer-neg-time">10:00</span></button>
+            aria-label="Negative prep"><span class="pmd-timer-prep-prefix">N:</span><span class="pmd-timer-prep-time" id="timer-neg-time">10:00</span></button>
   `;
 
   const display = document.getElementById('timer-display') as HTMLDivElement;
@@ -227,6 +227,9 @@ export function mountTimerUI(): void {
   // and resync on every settings change.
   function applyChrome(): void {
     panel.classList.toggle('pmd-timer-compact', settings.get('timerCompact'));
+    // CSS rules key on `data-prep-label` to show / hide the
+    // A: / N: prefix and the blue / red color treatment.
+    panel.setAttribute('data-prep-label', settings.get('timerPrepLabel'));
     panel.hidden = !settings.get('timerVisible');
     // If the user just hid the timer, pause any running clock.
     if (!settings.get('timerVisible') && getTimerState().running) {
