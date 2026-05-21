@@ -50,9 +50,24 @@ const DEV_SERVER_URL = 'http://localhost:5173';
 // MUST run before `app.whenReady()` (and ideally before any
 // `BrowserWindow` is created) — Chromium reads the switches at
 // gpu-process startup.
+//
+// `enable-skia-graphite` opts into Chromium's newer Skia GPU
+// backend (Dawn → Metal on macOS), which is the named delta
+// between Electron 33's Chromium 130 (`skia_graphite: disabled_off`
+// per `Help → Copy GPU Info`) and Chrome 148 on the same Mac
+// (`Skia Graphite: Enabled` per `chrome://gpu`). Profile traces
+// showed identical per-event compositor work volume between the
+// two engines but Chrome producing visible frames ~6x more
+// smoothly — consistent with Graphite's better main-thread /
+// compositor decoupling. Caveat: M130's Graphite is two
+// pre-Apple-default-on cycles older than M148's, so we may see
+// partial-but-not-full improvement. Graceful fallback to Ganesh
+// if device support gates fail; no expected stability risk on
+// M-series + ANGLE Metal.
 if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('enable-zero-copy');
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-skia-graphite');
 }
 
 // Start collecting crash minidumps as early as possible. We do
