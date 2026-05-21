@@ -838,6 +838,49 @@ function buildMenu(): Menu {
             void shell.openPath(app.getPath('crashDumps'));
           },
         },
+        {
+          // Temporary diagnostic for the macOS scroll-perf
+          // investigation. `chrome://gpu` is blocked in Electron
+          // renderers, so we expose the underlying APIs the page
+          // would render from. The clipboard payload is the same
+          // shape as Chrome's `chrome://gpu` "Graphics Feature
+          // Status" block + the raw GPU info — enough to diff
+          // against an installed Chrome's output and find any
+          // feature that's accelerated there but disabled / falling
+          // back here. Remove this menu item once the
+          // investigation lands.
+          label: 'Copy GPU Info (debug)',
+          click: () => {
+            void (async () => {
+              const feature = app.getGPUFeatureStatus();
+              let info: unknown = null;
+              try {
+                info = await app.getGPUInfo('complete');
+              } catch (err) {
+                info = { error: String(err) };
+              }
+              const payload = JSON.stringify(
+                {
+                  versions: process.versions,
+                  commandLineSwitches: process.argv.slice(1),
+                  gpuFeatureStatus: feature,
+                  gpuInfo: info,
+                },
+                null,
+                2,
+              );
+              clipboard.writeText(payload);
+              const win = BrowserWindow.getFocusedWindow();
+              if (win) {
+                void dialog.showMessageBox(win, {
+                  type: 'info',
+                  message: 'GPU info copied to clipboard.',
+                  detail: 'Paste it into the conversation.',
+                });
+              }
+            })();
+          },
+        },
       ],
     },
   ];
