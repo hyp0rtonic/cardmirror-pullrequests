@@ -35,20 +35,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract release notes from CHANGELOG.md
+        # `awk` pulls the section between the matching version
+        # header and the next `## ` header. Falls back to an empty
+        # file if no matching section is found, in which case the
+        # next step creates the draft with a placeholder body and
+        # the maintainer fills it in manually. Strip a leading
+        # `v` from the tag because CHANGELOG uses bare versions
+        # (`## 0.1.0-alpha.3 — DATE`) while tags carry the `v`
+        # prefix (`v0.1.0-alpha.3`).
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## " ver { flag=1; next }
+              /^## / && flag { flag=0 }
+              flag { print }
+            ' CHANGELOG.md > release-notes.md
+          else
+            : > release-notes.md
+          fi
+          if [ ! -s release-notes.md ]; then
+            echo "Release notes not found in CHANGELOG for $VERSION — using fallback body." >&2
+            echo "_(Release notes not yet pasted from CHANGELOG.md — maintainer should edit.)_" > release-notes.md
+          fi
+          echo "Wrote $(wc -l < release-notes.md) lines of notes."
+
       - name: Ensure draft release exists
         # `gh release view` exits non-zero if no release exists for
-        # the tag, so the `||` falls through to creating one. If the
-        # release already exists (e.g., a re-run of the workflow),
-        # we leave it as-is — assets uploaded by subsequent steps
-        # are added to whatever's there.
+        # the tag, so the `||` falls through to creating one. If
+        # the release already exists (e.g., a re-run of the
+        # workflow), update its notes in place from CHANGELOG so a
+        # re-trigger after a CHANGELOG fix actually refreshes the
+        # draft.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release for $TAG already exists; leaving it in place."
+            gh release edit "$TAG" --notes-file release-notes.md
+            echo "Updated existing release $TAG with refreshed notes."
           else
-            gh release create "$TAG" --draft --title "$TAG" --generate-notes
+            gh release create "$TAG" --draft --title "$TAG" --notes-file release-notes.md
             echo "Created draft release $TAG."
           fi
 
