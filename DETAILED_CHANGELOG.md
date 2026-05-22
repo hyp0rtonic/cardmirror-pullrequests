@@ -7,6 +7,59 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Multi-pane workspace shortcuts moved into the ribbon
+  registry; all rebindable via Settings → Keybindings.** Eight
+  new `RibbonCommandId`s with defaults matching what shipped
+  earlier in this Unreleased cycle:
+
+  - `focusSlot1` / `focusSlot2` / `focusSlot3` → `Mod-1/2/3`
+  - `sendDocToSlot1` / `sendDocToSlot2` / `sendDocToSlot3` →
+    `Mod-Shift-1/2/3`
+  - `toggleSlotExpand` → `Mod-Shift-f`
+  - `closeDocOrWindow` → `Mod-w`
+
+  Each gets a label, default-key entry, group placement (new
+  "Multi-pane workspace" section in `ribbon-groups.ts`), a
+  no-op `Command` case in `commandFor` (the keymap matcher
+  doesn't need to do anything — these are view-less actions),
+  and an entry in `VIEWLESS_RIBBON_COMMANDS`. The global
+  window keydown handler in `editor/index.ts` dispatches them
+  via `runViewlessRibbon`, which now calls into a small new
+  `runMultiPane` helper that dynamic-imports the shell module
+  and invokes one of three new exports:
+
+  - `focusSlotByIndex(idx)`
+  - `sendVisibleToSlotByIndex(idx)`
+  - `toggleFocusedSlotExpand()`
+
+  These are thin wrappers around new `MultiPaneShell` methods
+  (`focusSlotByIndex`, `sendVisibleToSlotByIndex`,
+  `toggleFocusedSlotExpand`). `closeDocOrWindow` uses the
+  existing `tryCloseVisibleInFocusedSlot` + fallback to
+  `handleUserCloseRequest`.
+
+  Two standalone `window` keydown listeners removed
+  (`onSlotShortcutKey` and `onExpandToggleKey`) — the work
+  flows through the global ribbon-keymap path now. The
+  Electron menu's `CmdOrCtrl+W` accelerator stays hardcoded
+  as a discoverability cue; if the user rebinds
+  `closeDocOrWindow`, both paths fire the same action.
+
+  Ribbon keymap matcher (`ribbonKeyStringFor`) now normalizes
+  digit keys via `e.code` (e.g., `Digit1` → `1`) so
+  `Mod-Shift-1` matches even though Shift+1 produces
+  `e.key === '!'` on US keyboards (and layout-specific shifted
+  digits elsewhere). Without the fix, the new `sendDocToSlotN`
+  bindings wouldn't fire from the global handler. Letters and
+  symbol keys still use `e.key`.
+
+  The Ctrl+Tab doc-cycling overlay is the lone exception —
+  its hold-and-press semantics (modifier held, Tab pressed
+  repeatedly, modifier released to commit) don't fit the
+  discrete-press ribbon-command model. The
+  `onDocCycleKey` / `onDocCycleKeyUp` listeners stay on
+  `window` with hardcoded `Tab` matching.
+
 - **Multi-pane: Ctrl+Tab / Ctrl+Shift+Tab cycle docs within the
   focused slot.** New `Slot.cycleVisible(delta)` advances the
   visible doc index in a slot's stack with wrap-around. Wired

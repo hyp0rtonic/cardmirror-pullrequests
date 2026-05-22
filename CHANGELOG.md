@@ -9,6 +9,34 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Multi-pane workspace shortcuts are now user-rebindable** via
+  Settings → Keybindings. Eight new entries in the keybindings
+  editor (in their own "Multi-pane workspace" group): Focus
+  Slot 1/2/3 (`Ctrl+1/2/3`), Send Doc to Slot 1/2/3
+  (`Ctrl+Shift+1/2/3`), Toggle Slot Expand / Restore
+  (`Ctrl+Shift+F`), Close Doc or Window (`Ctrl+W`). Customize
+  any of them like any other ribbon command. Same chord
+  conflict-resolution as the rest of the registry: binding a
+  key to one of these auto-strips it from whatever else was
+  using it. (Ctrl+Tab doc cycling is the lone exception — its
+  hold-and-press semantics don't fit the discrete-press
+  ribbon-command model, so it stays on a fixed binding.)
+- **Doc-switcher overlay (Alt+Tab-style) for Ctrl+Tab cycling.**
+  Holding Ctrl after pressing Ctrl+Tab in the focused multi-
+  pane slot shows a list of docs in the stack; each Tab while
+  Ctrl is held advances the highlight; releasing Ctrl commits
+  the highlighted doc as visible. Escape cancels. Centers
+  over the focused slot's pane (not the viewport) so users
+  can tell which slot is being cycled. List items show the
+  filename plus a small blue dot when the doc has unsaved
+  changes.
+- **Slot number badge on each multi-pane chip** — a small `1` /
+  `2` / `3` glyph immediately left of the expand button.
+  Disambiguates which slot a chip belongs to when only some
+  slots are occupied.
+- **Ctrl+Shift+F toggle expand-mode** on the focused multi-pane
+  slot (same behavior as clicking the chip's ⛶ expand button).
+  Rebindable via Settings → Keybindings.
 - **Ctrl+Tab / Ctrl+Shift+Tab — cycle docs within the focused
   multi-pane slot** (when the slot holds 2+ docs). Wraps around
   at both ends. Web users without the chord (browsers reserve
