@@ -28,7 +28,11 @@ import {
   RIBBON_COMMAND_IDS,
   getRibbonCommand,
 } from '../../src/editor/ribbon-commands.js';
-import { buildPlainTextSlice, tryPasteSplitContainer } from '../../src/editor/paste-plugin.js';
+import {
+  buildPlainTextSlice,
+  normalizeClipboardTextForPaste,
+  tryPasteSplitContainer,
+} from '../../src/editor/paste-plugin.js';
 
 // ---- Doc builders ----
 
@@ -2358,6 +2362,49 @@ describe('buildPlainTextSlice (F2 Paste Text)', () => {
     expect(slice.content.childCount).toBe(3);
     expect(slice.content.child(1).textContent).toBe('');
     expect(slice.content.child(1).type.name).toBe('paragraph');
+  });
+
+  describe('normalizeClipboardTextForPaste', () => {
+    it('collapses whitespace in single-line parents (tag)', () => {
+      expect(normalizeClipboardTextForPaste('Article Title\n', 'tag'))
+        .toBe('Article Title');
+      expect(normalizeClipboardTextForPaste('  Article Title  ', 'tag'))
+        .toBe('Article Title');
+      expect(normalizeClipboardTextForPaste('a\nb\nc', 'tag'))
+        .toBe('a b c');
+      expect(normalizeClipboardTextForPaste('a\r\nb\rc', 'tag'))
+        .toBe('a b c');
+      expect(normalizeClipboardTextForPaste('a\tb', 'tag'))
+        .toBe('a b');
+    });
+
+    it('applies same flatten in cite_paragraph / undertag / analytic', () => {
+      expect(normalizeClipboardTextForPaste('x\ny', 'cite_paragraph')).toBe('x y');
+      expect(normalizeClipboardTextForPaste('x\ny', 'undertag')).toBe('x y');
+      expect(normalizeClipboardTextForPaste('x\ny', 'analytic')).toBe('x y');
+    });
+
+    it('passes through multi-line parents unchanged (card_body, paragraph)', () => {
+      // Multi-paragraph contexts: intentional paragraph splits in
+      // the clipboard should survive.
+      expect(normalizeClipboardTextForPaste('a\nb', 'card_body')).toBe('a\nb');
+      expect(normalizeClipboardTextForPaste('a\nb', 'paragraph')).toBe('a\nb');
+      expect(normalizeClipboardTextForPaste('  a  ', 'card_body')).toBe('  a  ');
+    });
+
+    it('plain-paste into a tag with trailing newline no longer creates a multi-paragraph slice (regression test for the "skipping around on paste" / scroll-to-bottom bug)', () => {
+      // Triple-click in a browser commonly yields "Article Title\n".
+      // Before the fix: buildPlainTextSlice("Article Title\n") returned
+      // a 2-paragraph slice, which when replaceSelection'd into a tag
+      // split the surrounding card at the newline boundary and the
+      // viewport jumped to the doc-end.
+      const normalized = normalizeClipboardTextForPaste('Article Title\n', 'tag');
+      const slice = buildPlainTextSlice(normalized);
+      expect(slice.content.childCount).toBe(1);
+      expect(slice.content.firstChild!.type.name).toBe('text');
+      expect(slice.openStart).toBe(0);
+      expect(slice.openEnd).toBe(0);
+    });
   });
 
   it('inserts into a paragraph cleanly via replaceSelection (cursor in mid-text)', () => {

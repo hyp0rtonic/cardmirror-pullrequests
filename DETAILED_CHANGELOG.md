@@ -7,6 +7,49 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Plain-paste no longer splits cards on a trailing newline.**
+  Long-standing user-reported bug ("skipping around on paste"
+  / "viewport shoots to the bottom") had a narrow trigger:
+  copy-and-plain-paste of text containing a line break into a
+  tag (or other single-line block). A common real-world
+  occurrence is triple-clicking an article title in the
+  browser; most browsers grab a trailing `\n` alongside the
+  visible text.
+
+  `buildPlainTextSlice("Article Title\n")` produced a
+  two-paragraph slice (`Slice([paragraph("Article Title"),
+  paragraph("")], 1, 1)`). When `replaceSelection`'d into a
+  `tag` (which our schema constrains to a single textblock
+  inside a `card`), PM split the surrounding card at the
+  paragraph boundary to accommodate the multi-paragraph
+  slice — the existing tag/cite ended up separated with a
+  floating card-boundary separator at the newline position,
+  and the post-paste `scrollIntoView()` landed at the new
+  doc-end (since the structural mutation moved the cursor
+  to the synthesized split point's end-of-doc cascade).
+
+  Fix: new `normalizeClipboardTextForPaste(text, parentTypeName)`
+  helper in `paste-plugin.ts`. In single-line contexts
+  (`tag`, `cite_paragraph`, `undertag`, `analytic`) it
+  collapses whitespace runs (`\s+`) to single spaces and
+  trims edges before the text reaches `buildPlainTextSlice`.
+  In multi-paragraph contexts (`card_body`, `paragraph`, etc.)
+  it returns the text unchanged so intentional paragraph
+  splits in the clipboard still produce multi-paragraph
+  slices.
+
+  Wired into both plain-paste entry points: the browser
+  `handlePaste` handler (when `plainPasteArmed` is set, e.g.
+  F2 in the web edition) and the Electron-host
+  `applyPlainPasteFromText` function (called from the
+  desktop menu's "Paste as plain text" / native F2 mapping).
+
+  Regression test in `tests/editor/ribbon-commands.test.ts`
+  covers the trailing-newline case, the internal-newline
+  case, CRLF / CR / tab handling, the four single-line
+  parent types, and the multi-paragraph passthrough
+  contract.
+
 - **Nav pane: highlight follows the editor caret.** Previously
   the `.pmd-nav-item-selected` blue highlight was driven purely
   by click events on the nav-pane (`selectSingle` / shift-click

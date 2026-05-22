@@ -68,6 +68,36 @@ export function buildPlainTextSlice(text: string): Slice {
   return new Slice(Fragment.fromArray(paragraphs), 1, 1);
 }
 
+/** Block types that hold single-line / single-paragraph content
+ *  in our schema. Plain-paste into these MUST flatten any
+ *  internal newlines to spaces — pasting "Article Title\n" (a
+ *  triple-click selection in the browser often carries that
+ *  trailing newline) used to split the surrounding card at the
+ *  newline boundary because the resulting multi-paragraph slice
+ *  forced PM to break out of the single-line parent. */
+const SINGLE_LINE_PASTE_PARENTS = new Set<string>([
+  'tag',
+  'cite_paragraph',
+  'undertag',
+  'analytic',
+]);
+
+/** Normalize clipboard text for paste into the given parent block.
+ *  In single-line contexts (`SINGLE_LINE_PASTE_PARENTS`), collapse
+ *  any whitespace run (newlines, tabs, repeated spaces) to a single
+ *  space and trim the edges. In multi-paragraph contexts
+ *  (`card_body`, `paragraph`, etc.) leave the text alone so
+ *  intentional paragraph splits in the clipboard survive. */
+export function normalizeClipboardTextForPaste(
+  text: string,
+  parentTypeName: string,
+): string {
+  if (SINGLE_LINE_PASTE_PARENTS.has(parentTypeName)) {
+    return text.replace(/\s+/g, ' ').trim();
+  }
+  return text;
+}
+
 const SPLITTABLE_BODY_SLOTS = new Set<string>([
   'card_body',
   'cite_paragraph',
@@ -124,7 +154,16 @@ export function applyPlainPasteFromText(
   },
 ): void {
   if (!text) return;
-  const slice = buildPlainTextSlice(text);
+  // Mirror the in-handler normalization for the Electron F2 / menu
+  // path. Single-line target parents (tag / cite_paragraph /
+  // undertag / analytic) collapse internal whitespace; multi-line
+  // parents pass through unchanged.
+  const normalized = normalizeClipboardTextForPaste(
+    text,
+    view.state.selection.$from.parent.type.name,
+  );
+  if (!normalized) return;
+  const slice = buildPlainTextSlice(normalized);
   let tr = view.state.tr.replaceSelection(slice);
   tr.setStoredMarks([]);
   view.dispatch(tr.scrollIntoView());
@@ -179,7 +218,11 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
           // explicitly turns it off (F2 again or the ribbon button).
           // Every Ctrl/Cmd+V while armed pastes plain.
           event.preventDefault();
-          const text = event.clipboardData?.getData('text/plain') ?? '';
+          const raw = event.clipboardData?.getData('text/plain') ?? '';
+          const text = normalizeClipboardTextForPaste(
+            raw,
+            view.state.selection.$from.parent.type.name,
+          );
           if (!text) return true;
           const plainSlice = buildPlainTextSlice(text);
           let tr = view.state.tr.replaceSelection(plainSlice);

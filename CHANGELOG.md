@@ -24,6 +24,16 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Plain-paste no longer jumps the viewport to the doc end.**
+  Pasting text that contained a line break (the common case:
+  triple-clicking an article title in the browser, which grabs
+  a trailing newline) into a tag / cite / undertag / analytic
+  used to split the surrounding card at the newline boundary
+  and scroll-to-bottom. Plain-paste now flattens internal
+  whitespace to single spaces (and trims edges) when the target
+  is a single-line block; multi-paragraph blocks like card_body
+  still preserve intentional paragraph splits from the
+  clipboard.
 - **Comments column now extends through the full scroll
   height.** Was rendering only at the top of the document and
   cutting off below. Same family of post-path-A regression as
