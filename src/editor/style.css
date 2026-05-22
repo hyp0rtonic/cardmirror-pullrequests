@@ -4300,25 +4300,34 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
 
 /* ---------------------------------------------- Comments column */
 
-/* `.pmd-editor-row` is the editor's main flex container — an inner
-   wrapper inside `#app` that holds `#editor` + `#comments-column`
-   side-by-side. The editor takes the remaining space; the comments
-   column docks to the right when visible and collapses out of
-   layout when `hidden`. Lives INSIDE `#app` rather than `#app`
-   owning the flex because single-doc's `#app` is `position: fixed`
-   + `overflow-y: auto` (a bounded scroller), so making `#app`
-   itself the flex container would size the cross-axis to the
-   bounded viewport — and the comments column's background would
-   only render at the top viewport instead of covering the full
-   scroll extent. The wrapper sizes to content via `min-height:
-   100%`: at least one viewport (so short docs still fill the
-   visible area) and grows with the editor's content height so
-   the column stretches to match. */
+/* `.pmd-editor-row` lays out `#editor` + `#comments-column`
+   side-by-side. Single-doc's `#app` is `position: fixed` +
+   `overflow-y: auto` (a bounded scroller), so we can't put the
+   flex/grid on `#app` itself — its bounded cross-axis would clip
+   the column's background to the viewport instead of letting it
+   cover the full scroll extent. Inner wrapper sizes to MAX of
+   items' content heights via grid; the column stretches to that
+   so its background fills the full scroll strip.
+
+   Tried CSS flex first: flex's cross-size determination floors
+   at `min-height` and doesn't grow with overflowing items, so
+   the column came out viewport-tall even with `min-height: 100%`
+   + content overflowing past viewport (measured via DOM probe:
+   wrapper height 807px while #editor.scrollHeight was 5971px).
+   Grid's track sizing is content-based and doesn't have that
+   pathology. `min-height: 100%` keeps a one-viewport floor so
+   short docs still fill the visible area. */
 .pmd-editor-row {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-auto-rows: max-content;
   min-height: 100%;
 }
+/* Pin the children to the row track explicitly so the
+   `grid-template-columns: 1fr auto` slot allocation is
+   unambiguous. */
+.pmd-editor-row > #editor { grid-row: 1; grid-column: 1; }
+.pmd-editor-row > #comments-column { grid-row: 1; grid-column: 2; }
 
 /* Multi-doc replaces single-doc's editor + comments-column with
    its own per-pane shell, and hides the originals. The wrapper
@@ -4330,12 +4339,20 @@ body.pmd-multi-doc .pmd-editor-row {
   display: none;
 }
 #editor {
-  flex: 1 1 auto;
+  /* `min-width: 0` was needed in the prior flex layout to let
+     #editor shrink below its content's intrinsic width when the
+     comments column claimed 320px. Grid handles this via
+     `1fr` track sizing, but keeping `min-width: 0` is harmless
+     and defends against any grandchild that asserts a wide
+     intrinsic size (e.g., a long unbroken URL). */
   min-width: 0;
 }
 .pmd-comments-column {
-  flex: 0 0 320px;
-  max-width: 320px;
+  /* `.pmd-editor-row` is grid-based (`grid-template-columns: 1fr
+     auto`), so the column needs an explicit width to define the
+     `auto` track. Previous version used `flex: 0 0 320px` which
+     is irrelevant outside a flex container. */
+  width: 320px;
   background: var(--pmd-c-bg-soft);
   border-left: 1px solid var(--pmd-c-border-soft);
   /* `position: relative` is the anchor for absolutely-positioned
