@@ -828,6 +828,137 @@ export function applyEmphasis(): Command {
 }
 
 /**
+ * Ctrl-F10 — apply `emphasis_mark` to the FIRST character of each
+ * word inside the selection, expanding the selection to whole-word
+ * boundaries first. Useful for marking the source letters of an
+ * acronym: select "United States Capitol Police", run this, and
+ * "U", "S", "C", "P" get emphasized.
+ *
+ * No-op on empty selection (the user explicitly asked for
+ * selection-only behavior — no "emphasize the word at the cursor"
+ * fallback like `applyEmphasis` has).
+ *
+ * Word definition matches `wordRangeAtCursor`: a maximal run of
+ * non-whitespace characters within a single textblock. Inline
+ * leaves (images, etc.) and structural-block boundaries break
+ * words. Mark boundaries do NOT break a word.
+ *
+ * Structural blocks (tag / undertag / pocket / hat / block /
+ * analytic) are skipped — `emphasis_mark` is a body-text mark
+ * (same skip rule as `applyEmphasis`).
+ *
+ * Applied per word: the first character of the word (a single
+ * code-unit slot — surrogate-pair edge case isn't relevant for
+ * real-world acronyms) gets `emphasis_mark`, plus the same
+ * direct-formatting stripping `applyEmphasis` does.
+ */
+export function emphasizeAcronym(): Command {
+  return (state, dispatch) => {
+    const markType = schema.marks['emphasis_mark'];
+    if (!markType) return false;
+    const sel = state.selection;
+    if (sel.empty) return false;
+
+    const firstLetterRanges: { from: number; to: number }[] = [];
+    state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+      if (!node.isTextblock) return true;
+      if (NAMED_STYLE_SKIP_BLOCKS.has(node.type.name)) return false;
+
+      const tbStart = pos + 1;
+      const tbEnd = pos + node.nodeSize - 1;
+      const size = node.content.size;
+      if (size === 0) return false;
+
+      // Per-position whitespace map for THIS textblock (same shape
+      // as `wordRangeAtCursor`). Index space is 0..size-1, one slot
+      // per text-node char or inline-leaf position.
+      const isWS = new Array<boolean>(size);
+      let p = 0;
+      node.forEach((child) => {
+        if (child.isText) {
+          const t = child.text ?? '';
+          for (let i = 0; i < t.length; i++) {
+            isWS[p + i] = /\s/.test(t[i] ?? '');
+          }
+          p += t.length;
+        } else {
+          // Inline leaf — treat as a word boundary on both sides.
+          for (let i = 0; i < child.nodeSize; i++) isWS[p + i] = true;
+          p += child.nodeSize;
+        }
+      });
+
+      // Selection-clip range in textblock-local coords.
+      const localFrom = Math.max(0, sel.from - tbStart);
+      const localTo = Math.min(size, sel.to - tbStart);
+      if (localFrom >= localTo) return false;
+
+      // A word is "partially selected" iff at least one of its
+      // non-whitespace characters falls inside the selection.
+      // Find the leftmost and rightmost non-WS positions within
+      // [localFrom, localTo). If none exist (selection is entirely
+      // whitespace and doesn't touch any word), skip this block —
+      // matches the user-spec phrasing "encompass completely any
+      // word that is partially selected" rather than "expand
+      // outward through whitespace to find the next word."
+      let leftNonWS = -1;
+      let rightNonWS = -1;
+      for (let i = localFrom; i < localTo; i++) {
+        if (!isWS[i]) {
+          if (leftNonWS < 0) leftNonWS = i;
+          rightNonWS = i;
+        }
+      }
+      if (leftNonWS < 0) return false;
+
+      // Expand to whole-word boundaries: extend left through
+      // non-WS preceding `leftNonWS`, and right through non-WS
+      // following `rightNonWS`. The result is the smallest
+      // contiguous range that fully covers every partially-
+      // selected word.
+      let expFrom = leftNonWS;
+      let expTo = rightNonWS + 1;
+      while (expFrom > 0 && !isWS[expFrom - 1]) expFrom--;
+      while (expTo < size && !isWS[expTo]) expTo++;
+
+      // Walk the expanded range, finding each word's first
+      // character (transition from WS to non-WS, or the very first
+      // non-WS position if the range starts on non-WS).
+      let inWord = false;
+      for (let i = expFrom; i < expTo; i++) {
+        const ws = isWS[i] === true;
+        if (!ws && !inWord) {
+          firstLetterRanges.push({ from: tbStart + i, to: tbStart + i + 1 });
+          inWord = true;
+        } else if (ws) {
+          inWord = false;
+        }
+      }
+      // Stop descent into this textblock's children; we've already
+      // processed the whole content.
+      return false;
+    });
+
+    if (firstLetterRanges.length === 0) return false;
+    if (!dispatch) return true;
+
+    const tr = state.tr;
+    const mark = markType.create();
+    for (const r of firstLetterRanges) {
+      tr.addMark(r.from, r.to, mark);
+      // Same one-directional-apply semantics as F10 Emphasis:
+      // direct overrides (font_size, bold, etc.) on the marked
+      // character clear so the emphasis run renders as the named
+      // style's typography. Highlight + shading follow the same
+      // rules as `applyBodyMark`.
+      stripDirectFormattingOnApply(tr, r.from, r.to);
+    }
+    dispatch(tr);
+    return true;
+  };
+}
+
+/**
  * F9 / Mod-U — toggle Verbatim's "Underline" style on the selection.
  *
  * Two marks back this: `underline_mark` (named-style, used in body
@@ -2884,6 +3015,7 @@ export type RibbonCommandId =
   | 'applyCite'
   | 'applyUnderline'
   | 'applyEmphasis'
+  | 'emphasizeAcronym'
   | 'applyHighlight'
   | 'applyShading'
   | 'condenseDefault'
@@ -2979,6 +3111,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'applyCite',
   'applyUnderline',
   'applyEmphasis',
+  'emphasizeAcronym',
   'applyHighlight',
   'applyShading',
   'condenseDefault',
@@ -3069,6 +3202,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   applyCite: 'Apply Cite Style',
   applyUnderline: 'Toggle Underline',
   applyEmphasis: 'Apply Emphasis Style',
+  emphasizeAcronym: 'Emphasize Acronym',
   applyHighlight: 'Toggle Highlight',
   applyShading: 'Toggle Background Color',
   condenseDefault: 'Condense',
@@ -3166,6 +3300,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   applyCite: 'F8',
   applyUnderline: ['F9', 'Mod-u'],
   applyEmphasis: 'F10',
+  emphasizeAcronym: 'Mod-F10',
   applyHighlight: 'F11',
   applyShading: 'Mod-F11',
   condenseDefault: 'F3',
@@ -3490,6 +3625,7 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'applyCite': return applyCite();
     case 'applyUnderline': return applyUnderline(ctx.clearFormattingOnNamedStyleToggleOff);
     case 'applyEmphasis': return applyEmphasis();
+    case 'emphasizeAcronym': return emphasizeAcronym();
     case 'applyHighlight': return applyHighlight(ctx.highlightColor);
     case 'applyShading': return applyShading(ctx.shadingColor);
     case 'condenseDefault':

@@ -14,6 +14,7 @@ import {
   setUndertag,
   applyCite,
   applyEmphasis,
+  emphasizeAcronym,
   applyHighlight,
   applyShading,
   setHighlightColor,
@@ -2010,6 +2011,177 @@ describe('applyEmphasis (F10)', () => {
 
   it('default key binding: F10 → applyEmphasis', () => {
     expect(DEFAULT_RIBBON_KEYS['applyEmphasis']).toBe('F10');
+  });
+});
+
+// ---- emphasizeAcronym (Mod-F10) ----
+
+describe('emphasizeAcronym (Mod-F10)', () => {
+  // Returns the set of character indices WITHIN A TARGET BLOCK's
+  // textblock content that carry emphasis_mark. Walks just the
+  // children of the textblock whose textContent matches `target`,
+  // so the result is local-to-block offsets — independent of
+  // surrounding doc structure.
+  function emphPositionsInBlock(
+    doc: import('prosemirror-model').Node,
+    target: string,
+  ): Set<number> {
+    const out = new Set<number>();
+    let foundBlock: import('prosemirror-model').Node | null = null;
+    doc.descendants((n) => {
+      if (n.isTextblock && n.textContent === target) {
+        foundBlock = n;
+        return false;
+      }
+      return true;
+    });
+    if (!foundBlock) return out;
+    let offset = 0;
+    (foundBlock as import('prosemirror-model').Node).forEach((child) => {
+      if (child.isText) {
+        const t = child.text ?? '';
+        const isEmph = child.marks.some((m) => m.type.name === 'emphasis_mark');
+        for (let i = 0; i < t.length; i++) {
+          if (isEmph) out.add(offset + i);
+        }
+        offset += t.length;
+      } else {
+        offset += child.nodeSize;
+      }
+    });
+    return out;
+  }
+
+  it('empty selection: no-op', () => {
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('hello world'))]);
+    let pos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hello world') pos = p + 2;
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, pos)));
+    expect(apply(state, emphasizeAcronym())).toBeNull();
+  });
+
+  it('selection spans two whole words: emphasizes "h" + "w"', () => {
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('hello world'))]);
+    let from = -1;
+    let to = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'hello world') {
+        from = p;
+        to = p + n.nodeSize;
+      }
+      return true;
+    });
+    const base = EditorState.create({ doc });
+    const state = base.apply(
+      base.tr.setSelection(TextSelection.create(base.doc, from, to)),
+    );
+    const next = apply(state, emphasizeAcronym());
+    expect(next).not.toBeNull();
+    const marked = emphPositionsInBlock(next!.doc, 'hello world');
+    // Offsets in the body text "hello world": 0 (h), 6 (w).
+    expect(marked).toEqual(new Set([0, 6]));
+  });
+
+  it('partial-word selection: expands to full words then emphasizes first letters', () => {
+    // Pick a selection that starts inside "United" and ends inside
+    // "Capitol". Should expand to cover "United States Capitol" and
+    // emphasize "U", "S", "C".
+    const doc = makeDoc([
+      cardWithChildren(tag('T'), cardBody('United States Capitol Police')),
+    ]);
+    let textPos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && (n.text ?? '').startsWith('United')) textPos = p;
+      return true;
+    });
+    // "United States Capitol Police"
+    //  0123456789012345678901234567
+    //        ^ from inside "United" (offset 3)
+    //                          ^ to inside "Capitol" (offset 17)
+    const from = textPos + 3;
+    const to = textPos + 17;
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, from, to)));
+    const next = apply(state, emphasizeAcronym());
+    expect(next).not.toBeNull();
+    const marked = emphPositionsInBlock(next!.doc, 'United States Capitol Police');
+    // Word starts at offsets 0 (U), 7 (S), 14 (C), 22 (P).
+    // Selection expanded covered U-S-C (3 words). Police (offset 22)
+    // is OUTSIDE the expanded range (selection ended at offset 17
+    // which expanded to 21 = end of "Capitol", short of "Police"
+    // which starts at 22).
+    expect(marked).toEqual(new Set([0, 7, 14]));
+  });
+
+  it('selection touching the start of a word: includes that word', () => {
+    // Selection [0, 3) — starts at "U" (the word start itself) and
+    // ends mid-United. Should expand to whole "United" and
+    // emphasize the U.
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('United States'))]);
+    let textPos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && (n.text ?? '').startsWith('United')) textPos = p;
+      return true;
+    });
+    const from = textPos;
+    const to = textPos + 3;
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, from, to)));
+    const next = apply(state, emphasizeAcronym());
+    expect(next).not.toBeNull();
+    const marked = emphPositionsInBlock(next!.doc, 'United States');
+    // Only "U" — selection didn't reach "States".
+    expect(marked).toEqual(new Set([0]));
+  });
+
+  it('selection entirely in whitespace: no-op', () => {
+    const doc = makeDoc([cardWithChildren(tag('T'), cardBody('hello   world'))]);
+    let textPos = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && (n.text ?? '').includes('hello')) textPos = p;
+      return true;
+    });
+    // Selection covers the three spaces only.
+    const from = textPos + 5;
+    const to = textPos + 8;
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, from, to)));
+    expect(apply(state, emphasizeAcronym())).toBeNull();
+  });
+
+  it('selection spans a structural block: skips the structural block, processes body', () => {
+    const doc = makeDoc([
+      cardWithChildren(tag('Tag Text'), cardBody('body text here')),
+    ]);
+    // Select from inside the tag through the card body.
+    let tagPos = -1;
+    let bodyEnd = -1;
+    doc.descendants((n, p) => {
+      if (n.isText && n.text === 'Tag Text') tagPos = p;
+      if (n.isText && n.text === 'body text here') bodyEnd = p + n.nodeSize;
+      return true;
+    });
+    const from = tagPos + 2;
+    const to = bodyEnd;
+    const base = EditorState.create({ doc });
+    const state = base.apply(base.tr.setSelection(TextSelection.create(base.doc, from, to)));
+    const next = apply(state, emphasizeAcronym());
+    expect(next).not.toBeNull();
+    // Tag content unchanged — emphasis_mark must NOT have been
+    // applied inside the structural block.
+    expect(emphPositionsInBlock(next!.doc, 'Tag Text')).toEqual(new Set());
+    // Body had its word-start letters emphasized: "body text here"
+    //                                              0    5    10
+    expect(emphPositionsInBlock(next!.doc, 'body text here'))
+      .toEqual(new Set([0, 5, 10]));
+  });
+
+  it('default key binding: Mod-F10 → emphasizeAcronym', () => {
+    expect(DEFAULT_RIBBON_KEYS['emphasizeAcronym']).toBe('Mod-F10');
   });
 });
 
