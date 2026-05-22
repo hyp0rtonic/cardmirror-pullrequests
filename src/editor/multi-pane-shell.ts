@@ -235,6 +235,119 @@ interface DocRecord {
   dirty: boolean;
 }
 
+/**
+ * Doc-switcher overlay — the Alt+Tab-style list that appears while
+ * the user holds Ctrl+Tab in multi-pane mode. Lists every doc in
+ * the focused slot's stack top-to-bottom (no thumbnails, just
+ * filenames). Each Tab press while the overlay is open advances
+ * the highlighted candidate; Ctrl release commits the highlight as
+ * the slot's visible doc; Escape cancels without committing.
+ *
+ * Snapshots the slot's stack at `open` time so the candidate index
+ * doesn't get scrambled if the slot's stack mutates during the
+ * cycle (rare but defensive — autosave / async file ops can land
+ * in the middle of a Ctrl-hold).
+ */
+class DocSwitcherOverlay {
+  private overlayEl: HTMLElement;
+  private listEl: HTMLElement;
+  /** Active slot at open() time. Stays bound for the cycle. */
+  private slot: Slot | null = null;
+  /** Snapshot of the slot's stack at open time, in display order. */
+  private candidates: DocRecord[] = [];
+  /** Index into `candidates` that's currently highlighted. */
+  private index = 0;
+
+  constructor() {
+    this.overlayEl = document.createElement('div');
+    this.overlayEl.className = 'pmd-doc-switcher';
+    this.overlayEl.hidden = true;
+    this.listEl = document.createElement('ol');
+    this.listEl.className = 'pmd-doc-switcher-list';
+    this.overlayEl.appendChild(this.listEl);
+    document.body.appendChild(this.overlayEl);
+  }
+
+  isOpen(): boolean {
+    return !this.overlayEl.hidden;
+  }
+
+  /** Open the overlay for the given slot, advancing the highlight
+   *  by `direction` from the slot's current visible doc. Mirrors
+   *  the OS Alt+Tab pattern where the first chord press already
+   *  shows a candidate (typically the next doc, not the current
+   *  one). */
+  open(slot: Slot, direction: 1 | -1): void {
+    this.slot = slot;
+    this.candidates = [...slot.stack];
+    const start = slot.visibleIndex < 0 ? 0 : slot.visibleIndex;
+    const len = this.candidates.length;
+    this.index = (start + direction + len) % len;
+    this.render();
+    this.overlayEl.hidden = false;
+  }
+
+  /** Step the highlight by `delta` (+1 or -1) with wrap-around. */
+  advance(delta: 1 | -1): void {
+    if (!this.isOpen()) return;
+    const len = this.candidates.length;
+    if (len < 2) return;
+    this.index = (this.index + delta + len) % len;
+    this.render();
+  }
+
+  /** Make the highlighted candidate the slot's visible doc, then
+   *  close the overlay. Re-focuses the slot's view so typing
+   *  resumes in the doc. */
+  commit(): void {
+    if (!this.isOpen() || !this.slot) {
+      this.reset();
+      return;
+    }
+    const target = this.candidates[this.index];
+    if (target) {
+      this.slot.showRecord(target);
+      this.slot.visible?.view.focus();
+    }
+    this.reset();
+  }
+
+  /** Close the overlay without committing. */
+  cancel(): void {
+    if (!this.isOpen()) return;
+    this.reset();
+  }
+
+  private reset(): void {
+    this.overlayEl.hidden = true;
+    this.slot = null;
+    this.candidates = [];
+    this.index = 0;
+  }
+
+  private render(): void {
+    this.listEl.innerHTML = '';
+    for (let i = 0; i < this.candidates.length; i++) {
+      const rec = this.candidates[i]!;
+      const item = document.createElement('li');
+      item.className = 'pmd-doc-switcher-item';
+      if (i === this.index) item.classList.add('pmd-doc-switcher-item-active');
+      const name = document.createElement('span');
+      name.className = 'pmd-doc-switcher-item-name';
+      name.textContent = rec.filename || '(untitled)';
+      item.appendChild(name);
+      if (rec.dirty) {
+        const mark = document.createElement('span');
+        mark.className = 'pmd-doc-switcher-item-dirty';
+        mark.textContent = '●';
+        mark.title = 'Unsaved changes';
+        item.appendChild(mark);
+      }
+      this.listEl.appendChild(item);
+    }
+  }
+}
+
 class Slot {
   readonly id: SlotId;
   /** Top-level pane element (chip + editor + footer). Hidden when
@@ -749,6 +862,10 @@ class MultiPaneShell {
    *  button again to restore the normal multi-pane layout. */
   private expandedSlot: Slot | null = null;
   private unsubscribeSettings: (() => void) | null = null;
+  /** Doc-switcher overlay — the Alt+Tab-style list that opens
+   *  when the user presses Ctrl+Tab while the focused slot has
+   *  2+ docs. Created lazily in the constructor below. */
+  private docSwitcher!: DocSwitcherOverlay;
 
   constructor() {
     this.layoutMode = settings.get('multiDocLayoutMode');
@@ -851,6 +968,12 @@ class MultiPaneShell {
     // comment on Slot.syncCardIntrinsicWidth for why.
     window.addEventListener('resize', this.onWindowResize);
 
+    // Build the doc-switcher overlay element (Alt+Tab-style list)
+    // and stash a reference. The overlay is hidden until
+    // `onDocCycleKey` opens it, then survives across Ctrl-Tab
+    // chord presses for the duration of the user's Ctrl hold.
+    this.docSwitcher = new DocSwitcherOverlay();
+
     // Mod-1 / Mod-2 / Mod-3 focus the corresponding slot's pane.
     // Listener is on `window` (not the editor's PM keymap) so the
     // shortcut works even when no pane currently has keyboard
@@ -869,6 +992,9 @@ class MultiPaneShell {
     // keydown — web-edition users get Ctrl-Alt-Tab via a
     // separate path (see `onDocCycleKey` body).
     window.addEventListener('keydown', this.onDocCycleKey);
+    // Companion keyup for the doc-switcher overlay: Ctrl/Meta
+    // release commits the highlighted candidate; Escape cancels.
+    window.addEventListener('keyup', this.onDocCycleKeyUp);
 
     // Drag-hover focus + post-drop collapse:
     //
@@ -1073,31 +1199,49 @@ class MultiPaneShell {
     targetSlot.visible?.view.focus();
   };
 
-  /** Ctrl-Tab / Ctrl-Shift-Tab → cycle the visible doc within the
-   *  focused slot. Also accepts Ctrl-Alt-Tab / Ctrl-Alt-Shift-Tab
-   *  as a fallback in the web edition, where the browser reserves
-   *  the plain Ctrl-Tab chord for its own tab cycling and the
-   *  renderer never sees the keydown. (Electron windows have no
-   *  tabs to cycle, so Ctrl-Tab passes through to the renderer
-   *  unmodified — both bindings are equivalent on desktop.)
+  /** Ctrl-Tab / Ctrl-Shift-Tab → open the doc-switcher overlay for
+   *  the focused slot. While Ctrl is held, each Tab advances the
+   *  highlighted candidate by one (Shift+Tab reverses); releasing
+   *  Ctrl commits the highlighted doc as visible. Escape cancels
+   *  without committing. Mirrors the Windows Alt+Tab interaction
+   *  pattern.
    *
-   *  No-op when no slot is focused, the focused slot's stack has
-   *  fewer than two docs, or the keystroke carries non-Tab keys.
-   *  Wraps around at the stack ends. */
+   *  Also accepts Ctrl-Alt-Tab as a fallback for the web edition
+   *  (where the browser reserves plain Ctrl-Tab for tab cycling
+   *  and the renderer never sees the keydown). Electron windows
+   *  have no tabs to cycle, so plain Ctrl-Tab passes through to
+   *  the renderer — both bindings work on desktop. */
   private onDocCycleKey = (e: KeyboardEvent): void => {
     if (e.defaultPrevented) return;
     if (e.key !== 'Tab') return;
     const hasMod = e.ctrlKey || e.metaKey;
     if (!hasMod) return;
-    // Plain Mod-Tab (works in Electron) or Mod-Alt-Tab (works in
-    // web, where Mod-Tab is browser-reserved). Both are accepted —
-    // any Mod+Tab chord, with or without Alt. Shift toggles
-    // direction.
     const slot = this.focusedSlot;
     if (!slot || slot.stack.length < 2) return;
     e.preventDefault();
-    slot.cycleVisible(e.shiftKey ? -1 : 1);
-    slot.visible?.view.focus();
+    const direction = e.shiftKey ? -1 : 1;
+    if (this.docSwitcher.isOpen()) {
+      this.docSwitcher.advance(direction);
+    } else {
+      this.docSwitcher.open(slot, direction);
+    }
+  };
+
+  /** Companion to `onDocCycleKey` — when Ctrl (or Meta) is released
+   *  while the doc-switcher overlay is open, commit the highlighted
+   *  candidate (= make it the slot's visible doc) and close the
+   *  overlay. We listen on `keyup` for `Control` / `Meta` so the
+   *  commit fires the instant the user releases the modifier,
+   *  matching the OS Alt+Tab feel. */
+  private onDocCycleKeyUp = (e: KeyboardEvent): void => {
+    if (!this.docSwitcher.isOpen()) return;
+    if (e.key === 'Control' || e.key === 'Meta') {
+      e.preventDefault();
+      this.docSwitcher.commit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      this.docSwitcher.cancel();
+    }
   };
 
   /** Mark `slot` as focused. The shared ribbon / chrome will route

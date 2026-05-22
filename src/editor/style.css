@@ -5732,6 +5732,62 @@ body.pmd-multi-doc #word-count-display {
   overflow: visible;
 }
 
+/* ---- Doc-switcher overlay (Ctrl+Tab in a multi-pane slot) ---- */
+
+/* Alt+Tab-style list — visible while the user holds Ctrl and
+   cycles through the focused slot's docs via Tab / Shift-Tab.
+   Centered fixed-position popover. No animation: the OS Alt-Tab
+   has none either, and a fade-in adds latency to the discovery
+   loop. */
+.pmd-doc-switcher {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  min-width: 320px;
+  max-width: min(560px, 80vw);
+  max-height: 70vh;
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px var(--pmd-c-shadow-deep);
+  padding: 0.5rem 0;
+  overflow-y: auto;
+  font-family: 'Calibri', 'Helvetica Neue', sans-serif;
+  font-size: 0.9rem;
+  color: var(--pmd-c-text);
+}
+.pmd-doc-switcher-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pmd-doc-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.9rem;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pmd-doc-switcher-item-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pmd-doc-switcher-item-dirty {
+  flex: 0 0 auto;
+  color: var(--pmd-c-accent);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.pmd-doc-switcher-item-active {
+  background: var(--pmd-c-accent-soft);
+  color: var(--pmd-c-accent);
+}
+
 /* ---- Multi-pane shell ---- */
 
 .pmd-multi-shell {
