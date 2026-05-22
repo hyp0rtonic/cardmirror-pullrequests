@@ -4300,18 +4300,34 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
 
 /* ---------------------------------------------- Comments column */
 
-/* `#app` is the editor's main flex container. The editor takes the
-   remaining space; the comments column docks to the right when
-   visible and collapses out of layout when `hidden`. Single-doc
-   `#app` is `position: fixed` with `top: var(--ribbon-height);
-   bottom: var(--status-bar-height)`, so its bounding box is
-   already viewport-tall-minus-chrome — the comments column
-   reaches that full height even when the document is short.
-   Multi-doc's #app has `height: calc(100vh - chrome)` for the
-   same reason. */
-#app {
+/* `.pmd-editor-row` is the editor's main flex container — an inner
+   wrapper inside `#app` that holds `#editor` + `#comments-column`
+   side-by-side. The editor takes the remaining space; the comments
+   column docks to the right when visible and collapses out of
+   layout when `hidden`. Lives INSIDE `#app` rather than `#app`
+   owning the flex because single-doc's `#app` is `position: fixed`
+   + `overflow-y: auto` (a bounded scroller), so making `#app`
+   itself the flex container would size the cross-axis to the
+   bounded viewport — and the comments column's background would
+   only render at the top viewport instead of covering the full
+   scroll extent. The wrapper sizes to content via `min-height:
+   100%`: at least one viewport (so short docs still fill the
+   visible area) and grows with the editor's content height so
+   the column stretches to match. */
+.pmd-editor-row {
   display: flex;
   flex-direction: row;
+  min-height: 100%;
+}
+
+/* Multi-doc replaces single-doc's editor + comments-column with
+   its own per-pane shell, and hides the originals. The wrapper
+   doesn't contain anything visible in that mode (its children
+   are display:none) but we hide it explicitly so it doesn't
+   contribute a stray 0-height layout artifact above the
+   multi-pane shell. */
+body.pmd-multi-doc .pmd-editor-row {
+  display: none;
 }
 #editor {
   flex: 1 1 auto;

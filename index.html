@@ -210,13 +210,28 @@
       <span class="pmd-speech-doc-banner-label">Speech document</span>
     </div>
     <main id="app">
-      <section id="editor"></section>
-      <!-- Right-side comments column. Hidden by default (the
-           comments-toggle-btn in the ribbon flips it on). When
-           visible it sits flex-side-by-side with #editor; when
-           hidden it has display:none and the editor takes full
-           width. -->
-      <aside id="comments-column" class="pmd-comments-column" aria-label="Comments" hidden></aside>
+      <!-- Inner flex row wrapping the editor + comments column.
+           Lives INSIDE #app rather than #app itself owning the
+           flex because #app is `position: fixed` + `overflow-y:
+           auto` (the bounded scroller for single-doc), so its
+           flex container's cross-axis would be viewport-bounded
+           — leaving the comments column's background stranded
+           at the top viewport. The inner row sizes to content
+           (`min-height: 100%`), letting the column stretch to
+           the editor's full doc-content height so its background
+           covers the column for the whole scroll extent. Hidden
+           in multi-doc layout via the existing `body.pmd-multi-
+           doc #editor / #comments-column` display:none rule (and
+           via the wrapper's own rule in style.css). -->
+      <div class="pmd-editor-row">
+        <section id="editor"></section>
+        <!-- Right-side comments column. Hidden by default (the
+             comments-toggle-btn in the ribbon flips it on).
+             When visible it sits flex-side-by-side with
+             #editor; when hidden it has display:none and the
+             editor takes full width. -->
+        <aside id="comments-column" class="pmd-comments-column" aria-label="Comments" hidden></aside>
+      </div>
     </main>
     <button id="nav-pane-pull-tab" type="button"
             title="Show navigation pane" aria-label="Show navigation pane">›</button>
