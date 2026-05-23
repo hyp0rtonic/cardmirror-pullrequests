@@ -48,6 +48,7 @@ import {
 } from './condense.js';
 import { applyPlainPasteFromText, togglePlainPaste } from './paste-plugin.js';
 import { getElectronHost, getHost } from './host/index.js';
+import { classifyChar, isWordChar } from './word-break.js';
 import {
   selectSimilar,
   getOperatingRanges,
@@ -728,37 +729,85 @@ function wordRangeAtCursor(state: EditorState): { from: number; to: number } | n
   const size = parent.content.size;
   if (size === 0) return null;
 
-  // Per-position whitespace map. Each position 0..size-1 corresponds
-  // to one character slot in the textblock (text node chars + inline
-  // leaves at 1 slot each). isWS[i] = true means position i is a word
-  // boundary (whitespace char or non-text leaf).
-  const isWS = new Array<boolean>(size);
+  // Per-position word-class map for the textblock. Inline leaves
+  // (images, etc.) get a sentinel slot that the classifier reads
+  // as non-word ('\0' classifies as 'punct'), which correctly
+  // ends the word at the leaf boundary. Text node characters
+  // classify via the spec's iterator (`isWordChar` from
+  // `word-break.ts`) — letters, digits, U+0027, U+2019. Notably
+  // `.` / `,` / `_` / hyphen / dash family / U+2018 are NOT word
+  // characters under the spec, so `U.S.A.` is three words and
+  // `user_name` is two.
+  const chars = new Array<string>(size);
   let p = 0;
   parent.forEach((child) => {
     if (child.isText) {
       const t = child.text ?? '';
       for (let i = 0; i < t.length; i++) {
-        isWS[p + i] = /\s/.test(t[i] ?? '');
+        chars[p + i] = t[i] ?? '\0';
       }
       p += t.length;
     } else {
-      // Inline leaf — break the word.
       for (let i = 0; i < child.nodeSize; i++) {
-        isWS[p + i] = true;
+        chars[p + i] = '\0';
       }
       p += child.nodeSize;
     }
   });
+  const isW = (i: number): boolean => isWordChar(chars[i] ?? '\0');
 
   const offset = $from.parentOffset;
   let left = offset;
-  while (left > 0 && !isWS[left - 1]) left--;
+  while (left > 0 && isW(left - 1)) left--;
   let right = offset;
-  while (right < size && !isWS[right]) right++;
+  while (right < size && isW(right)) right++;
   if (left === right) return null;
 
   const tbStart = $from.start();
   return { from: tbStart + left, to: tbStart + right };
+}
+
+/** Layer 3 formatting trim — strip ONE trailing space character
+ *  from the end of each range. The Word-selection spec rule: a
+ *  formatting operation never applies to the selection's trailing
+ *  space. (Word's word-unit absorption pulls the space adjacent
+ *  to a word into the selection on double-click; the formatting
+ *  layer un-applies that absorption for the rightmost char only.)
+ *
+ *  Single-char trim: a multi-unit selection like `word word word `
+ *  loses the final space but keeps its internal spaces formatted.
+ *  Spec: see `word-selection-behavior.md` Layer 3. */
+function trimRangesForFormatting(
+  doc: PMNode,
+  ranges: { from: number; to: number }[],
+): { from: number; to: number }[] {
+  return ranges.map(({ from, to }) => {
+    if (from >= to) return { from, to };
+    let last: string;
+    try {
+      last = doc.textBetween(to - 1, to);
+    } catch {
+      return { from, to };
+    }
+    if (last.length === 0) return { from, to };
+    if (classifyChar(last) === 'space') return { from, to: to - 1 };
+    return { from, to };
+  });
+}
+
+/** Drop-in for `getOperatingRanges` in formatting-command sites:
+ *  identical return shape, but ranges have their trailing space
+ *  trimmed per Layer 3. Use the bare `getOperatingRanges` for any
+ *  consumer that should see the user's selection unmodified. */
+function getOperatingRangesForFormatting(
+  state: EditorState,
+): { ranges: { from: number; to: number }[]; fromShadow: boolean } {
+  const op = getOperatingRanges(state);
+  if (op.ranges.length === 0) return op;
+  return {
+    ranges: trimRangesForFormatting(state.doc, op.ranges),
+    fromShadow: op.fromShadow,
+  };
 }
 
 function applyBodyMark(
@@ -773,7 +822,7 @@ function applyBodyMark(
     // shadow-selection matches if any are active, otherwise fall
     // back to the per-command default (word-expand at cursor for
     // F10 Emphasis; nothing for F8 Cite).
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     let opRanges = op.ranges;
     if (opRanges.length === 0) {
       if (!opts.expandToWordWhenEmpty) return false;
@@ -869,21 +918,28 @@ export function emphasizeAcronym(): Command {
       const size = node.content.size;
       if (size === 0) return false;
 
-      // Per-position whitespace map for THIS textblock (same shape
-      // as `wordRangeAtCursor`). Index space is 0..size-1, one slot
-      // per text-node char or inline-leaf position.
-      const isWS = new Array<boolean>(size);
+      // Per-position word-class map for THIS textblock. `isW[i]` is
+      // true iff the char at slot `i` classifies as a word-character
+      // per the spec (`isWordChar` from `word-break.ts`): letters,
+      // digits, `'` U+0027, `'` U+2019. Inline leaves (images, etc.)
+      // get the sentinel `'\0'` which classifies as non-word and
+      // therefore ends any in-progress word. Same index space as
+      // `wordRangeAtCursor`. Under the spec `U.S.A.` becomes three
+      // words (each letter standalone), so the F10 acronym command
+      // emphasizes `U`, `S`, `A` separately — a more useful result
+      // than the prior "treat the whole `U.S.A.` as one word" walk
+      // that only emphasized the leading `U`.
+      const isW = new Array<boolean>(size);
       let p = 0;
       node.forEach((child) => {
         if (child.isText) {
           const t = child.text ?? '';
           for (let i = 0; i < t.length; i++) {
-            isWS[p + i] = /\s/.test(t[i] ?? '');
+            isW[p + i] = isWordChar(t[i] ?? '\0');
           }
           p += t.length;
         } else {
-          // Inline leaf — treat as a word boundary on both sides.
-          for (let i = 0; i < child.nodeSize; i++) isWS[p + i] = true;
+          for (let i = 0; i < child.nodeSize; i++) isW[p + i] = false;
           p += child.nodeSize;
         }
       });
@@ -894,43 +950,39 @@ export function emphasizeAcronym(): Command {
       if (localFrom >= localTo) return false;
 
       // A word is "partially selected" iff at least one of its
-      // non-whitespace characters falls inside the selection.
-      // Find the leftmost and rightmost non-WS positions within
+      // word-class characters falls inside the selection. Find the
+      // leftmost and rightmost word-class positions within
       // [localFrom, localTo). If none exist (selection is entirely
-      // whitespace and doesn't touch any word), skip this block —
-      // matches the user-spec phrasing "encompass completely any
-      // word that is partially selected" rather than "expand
-      // outward through whitespace to find the next word."
-      let leftNonWS = -1;
-      let rightNonWS = -1;
+      // non-word chars), skip this block.
+      let leftW = -1;
+      let rightW = -1;
       for (let i = localFrom; i < localTo; i++) {
-        if (!isWS[i]) {
-          if (leftNonWS < 0) leftNonWS = i;
-          rightNonWS = i;
+        if (isW[i] === true) {
+          if (leftW < 0) leftW = i;
+          rightW = i;
         }
       }
-      if (leftNonWS < 0) return false;
+      if (leftW < 0) return false;
 
       // Expand to whole-word boundaries: extend left through
-      // non-WS preceding `leftNonWS`, and right through non-WS
-      // following `rightNonWS`. The result is the smallest
-      // contiguous range that fully covers every partially-
-      // selected word.
-      let expFrom = leftNonWS;
-      let expTo = rightNonWS + 1;
-      while (expFrom > 0 && !isWS[expFrom - 1]) expFrom--;
-      while (expTo < size && !isWS[expTo]) expTo++;
+      // word-class slots preceding `leftW`, and right through
+      // word-class slots following `rightW`. Smallest contiguous
+      // range fully covering every partially-selected word.
+      let expFrom = leftW;
+      let expTo = rightW + 1;
+      while (expFrom > 0 && isW[expFrom - 1] === true) expFrom--;
+      while (expTo < size && isW[expTo] === true) expTo++;
 
-      // Walk the expanded range, finding each word's first
-      // character (transition from WS to non-WS, or the very first
-      // non-WS position if the range starts on non-WS).
+      // Walk the expanded range; each non-word → word transition
+      // (or the very first slot if it's word-class) is the start
+      // of a new word, and the slot is the word's first character.
       let inWord = false;
       for (let i = expFrom; i < expTo; i++) {
-        const ws = isWS[i] === true;
-        if (!ws && !inWord) {
+        const isWord = isW[i] === true;
+        if (isWord && !inWord) {
           firstLetterRanges.push({ from: tbStart + i, to: tbStart + i + 1 });
           inWord = true;
-        } else if (ws) {
+        } else if (!isWord) {
           inWord = false;
         }
       }
@@ -991,7 +1043,7 @@ export function applyUnderline(
     const directMark = schema.marks['underline_direct']!;
 
     // Operating ranges: PM selection > shadow ranges > word-at-cursor.
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     let opRanges = op.ranges;
     if (opRanges.length === 0) {
       const word = wordRangeAtCursor(state);
@@ -1078,12 +1130,21 @@ const STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE = new Set([
  * single transaction.
  */
 function shadowAwareToggleMark(markType: MarkType): Command {
-  const pmToggle = toggleMark(markType);
   return (state, dispatch, view) => {
-    const op = getOperatingRanges(state);
-    if (!op.fromShadow) return pmToggle(state, dispatch, view);
-    if (op.ranges.length === 0) return false;
+    const op = getOperatingRangesForFormatting(state);
 
+    // No operating ranges (empty PM selection, no shadow matches) —
+    // defer to PM's storedMarks toggle. This is the cursor-only
+    // path where the mark will be applied to the next typed
+    // character.
+    if (op.ranges.length === 0) {
+      return toggleMark(markType)(state, dispatch, view);
+    }
+
+    // All-marked test: walk every operating range and decide
+    // whether to add (some text char lacks the mark) or remove
+    // (every text char already carries it). Matches PM's
+    // `toggleMark` decision, generalized to multiple ranges.
     let allMarked = true;
     let anyText = false;
     for (const { from, to } of op.ranges) {
@@ -1097,6 +1158,11 @@ function shadowAwareToggleMark(markType: MarkType): Command {
     if (!anyText) return false;
     if (!dispatch) return true;
 
+    // Unified add / remove across every operating range — the
+    // ranges already have Layer 3's trailing-space trim baked in
+    // (via `getOperatingRangesForFormatting`), so a double-
+    // clicked `word ` only bolds the word, not the absorbed
+    // space.
     const tr = state.tr;
     if (allMarked) {
       for (const { from, to } of op.ranges) tr.removeMark(from, to, markType);
@@ -1104,7 +1170,7 @@ function shadowAwareToggleMark(markType: MarkType): Command {
       const mark = markType.create();
       for (const { from, to } of op.ranges) tr.addMark(from, to, mark);
     }
-    tr.setMeta(META_OPERATING_ON_SHADOW, true);
+    if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
   };
@@ -1130,7 +1196,7 @@ export function applyHighlight(activeColor: () => string): Command {
     // Operating ranges: PM selection > shadow ranges. No word-expand
     // fallback — highlights typically span multiple words and users
     // select before applying.
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     if (op.ranges.length === 0) return false;
 
     let allMarked = true;
@@ -1175,7 +1241,7 @@ export function applyShading(activeColor: () => string): Command {
     const shadingType = schema.marks['shading'];
     if (!shadingType) return false;
 
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     if (op.ranges.length === 0) return false;
 
     let allMarked = true;
@@ -1218,7 +1284,7 @@ export function setHighlightColor(color: string): Command {
   return (state, dispatch) => {
     const type = schema.marks['highlight'];
     if (!type) return false;
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     if (op.ranges.length === 0) return false;
     if (!dispatch) return true;
     const tr = state.tr;
@@ -1236,7 +1302,7 @@ export function setShadingColor(rgb: string): Command {
   return (state, dispatch) => {
     const type = schema.marks['shading'];
     if (!type) return false;
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     if (op.ranges.length === 0) return false;
     if (!dispatch) return true;
     const tr = state.tr;
@@ -1341,7 +1407,11 @@ export function highlightToShading(): Command {
     if (!highlightType || !shadingType) return false;
     if (state.selection.empty) return false;
     if (!dispatch) return true;
-    const { from, to } = state.selection;
+    // Trim trailing space (Layer 3).
+    const [trimmed] = trimRangesForFormatting(state.doc, [
+      { from: state.selection.from, to: state.selection.to },
+    ]);
+    const { from, to } = trimmed!;
     const tr = state.tr;
     state.doc.nodesBetween(from, to, (node, pos) => {
       if (!node.isText) return true;
@@ -1374,7 +1444,11 @@ export function shadingToHighlight(): Command {
     if (!highlightType || !shadingType) return false;
     if (state.selection.empty) return false;
     if (!dispatch) return true;
-    const { from, to } = state.selection;
+    // Trim trailing space (Layer 3).
+    const [trimmed] = trimRangesForFormatting(state.doc, [
+      { from: state.selection.from, to: state.selection.to },
+    ]);
+    const { from, to } = trimmed!;
     const tr = state.tr;
     state.doc.nodesBetween(from, to, (node, pos) => {
       if (!node.isText) return true;
@@ -1407,8 +1481,12 @@ function runUniColor(
     let to: number;
     if (scope === 'selection') {
       if (state.selection.empty) return false;
-      from = state.selection.from;
-      to = state.selection.to;
+      // Trim trailing space (Layer 3).
+      const [trimmed] = trimRangesForFormatting(state.doc, [
+        { from: state.selection.from, to: state.selection.to },
+      ]);
+      from = trimmed!.from;
+      to = trimmed!.to;
     } else {
       from = 0;
       to = state.doc.content.size;
@@ -1435,7 +1513,7 @@ export function setFontColor(rgb: string | null): Command {
   return (state, dispatch) => {
     const type = schema.marks['font_color'];
     if (!type) return false;
-    const op = getOperatingRanges(state);
+    const op = getOperatingRangesForFormatting(state);
     if (op.ranges.length === 0) return false;
     if (!dispatch) return true;
     const tr = state.tr;
@@ -1479,7 +1557,7 @@ export function adjustFontSize(
     // are active, nudge every text run inside each match (per-run
     // currentPt is the resolver's answer, so a 22pt + an 11pt run
     // get nudged from their own starting points).
-    const shadowOp = sel.empty ? getOperatingRanges(state) : null;
+    const shadowOp = sel.empty ? getOperatingRangesForFormatting(state) : null;
     if (shadowOp && shadowOp.fromShadow && shadowOp.ranges.length > 0) {
       if (!dispatch) return true;
       const tr = state.tr;
@@ -1531,10 +1609,18 @@ export function adjustFontSize(
 
     if (!dispatch) return true;
     const tr = state.tr;
-    state.doc.nodesBetween(sel.from, sel.to, (node, pos, parent) => {
+    // Trim trailing space (Layer 3) so a double-clicked word + its
+    // absorbed space gets the font-size change on the word only.
+    const [trimFrom, trimTo] = (() => {
+      const [t] = trimRangesForFormatting(state.doc, [
+        { from: sel.from, to: sel.to },
+      ]);
+      return [t!.from, t!.to];
+    })();
+    state.doc.nodesBetween(trimFrom, trimTo, (node, pos, parent) => {
       if (!node.isText || !parent) return true;
-      const start = Math.max(sel.from, pos);
-      const end = Math.min(sel.to, pos + node.nodeSize);
+      const start = Math.max(trimFrom, pos);
+      const end = Math.min(trimTo, pos + node.nodeSize);
       if (start >= end) return true;
       const currentPt = effectivePt(node, parent);
       const targetHp = Math.round(nudge(currentPt) * 2);
@@ -1563,7 +1649,7 @@ export function setFontSize(pt: number | null): Command {
 
     // Shadow-selection path: PM sel empty + shadow matches active →
     // apply across all matches as a single tr.
-    const shadowOp = sel.empty ? getOperatingRanges(state) : null;
+    const shadowOp = sel.empty ? getOperatingRangesForFormatting(state) : null;
     if (shadowOp && shadowOp.fromShadow && shadowOp.ranges.length > 0) {
       if (!dispatch) return true;
       const tr = state.tr;
@@ -1591,9 +1677,14 @@ export function setFontSize(pt: number | null): Command {
     }
     if (!dispatch) return true;
     const tr = state.tr;
-    tr.removeMark(sel.from, sel.to, type);
+    // Trim trailing space (Layer 3).
+    const [trimmed] = trimRangesForFormatting(state.doc, [
+      { from: sel.from, to: sel.to },
+    ]);
+    const { from, to } = trimmed!;
+    tr.removeMark(from, to, type);
     if (pt !== null) {
-      tr.addMark(sel.from, sel.to, type.create({ halfPoints: Math.round(pt * 2) }));
+      tr.addMark(from, to, type.create({ halfPoints: Math.round(pt * 2) }));
     }
     dispatch(tr);
     return true;
@@ -1738,7 +1829,7 @@ export function clearToNormal(): Command {
     // don't apply — the user picked specific runs to clean, not
     // whole paragraphs.
     if (isEmpty) {
-      const shadowOp = getOperatingRanges(state);
+      const shadowOp = getOperatingRangesForFormatting(state);
       if (shadowOp.fromShadow && shadowOp.ranges.length > 0) {
         if (!dispatch) return true;
         const tr = state.tr;

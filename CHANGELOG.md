@@ -140,6 +140,28 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **Word-selection behavior now follows Word's actual rules instead
+  of the browser's regex-style word boundaries.** Affects double-
+  click-to-select-word (browser default still drives the gesture,
+  but the formatting and find rules align with it), whole-word
+  Find / Replace, the F7 / F8 / F10 cursor-expansion commands,
+  and more. The rules in brief: letters, digits, `'` (U+0027),
+  and `'` (U+2019) are word characters; `_`, `.`, `,`, `:`, `;`,
+  `-`, em / en dashes, ellipses, and `'` (U+2018) are NOT (they
+  break words). So `user_name` is two words, `1,234` is three,
+  `U.S.A.` is three (each letter alone), `H2O` is one,
+  `don't` / `we're` are one each. Whole-word Find of "don" no
+  longer matches "don" inside "don't", and "user" now matches
+  "user" inside "user_name". F10 Emphasize Acronym on
+  "U.S.C.P." now emphasizes U, S, C, P (instead of just U).
+- **Formatting commands skip the selection's trailing space.**
+  When you double-click "word" Word selects "word + space" and
+  bolding bolds the word only — that behavior now applies in
+  CardMirror across every formatting command (bold, italic,
+  underline, cite, emphasis, highlight, shading, font size,
+  font color, clear-formatting, and friends). A multi-word
+  selection like "the quick fox " loses the trailing space
+  from the formatting only — internal spaces stay formatted.
 - **AI comments are now identified by name and initials, not by
   an invisible flag** — the initials badge always reads `AI`, and
   the author name has `(AI)` appended (e.g. `Clod (AI)` when a

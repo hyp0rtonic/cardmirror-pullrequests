@@ -42,6 +42,7 @@ import {
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import { preciseScrollIntoView } from './precise-scroll.js';
+import { isWordChar } from './word-break.js';
 
 /** Match category, derived from the containing textblock's node type
  *  at scan time. Used by the `categorized` sort mode to bubble
@@ -108,19 +109,15 @@ const DEFAULT_CATEGORY_ORDER: FindCategory[] = ['heading', 'tag', 'cite', 'other
 
 export const findReplaceKey = new PluginKey<FindReplaceState>('find-replace');
 
-/** Word-boundary check used by the whole-word toggle. We treat any
- *  ASCII alphanumeric or `_` as a "word" character (matches `\w` in
- *  the standard regex flavor); everything else is a boundary. */
-function isWordChar(ch: string): boolean {
-  if (ch.length === 0) return false;
-  const c = ch.charCodeAt(0);
-  return (
-    (c >= 0x30 && c <= 0x39) || // 0-9
-    (c >= 0x41 && c <= 0x5a) || // A-Z
-    (c >= 0x61 && c <= 0x7a) || // a-z
-    c === 0x5f                  // _
-  );
-}
+// Whole-word toggle classifies each char via the project-wide
+// word-break iterator (`./word-break.ts`) — letters (incl. non-
+// ASCII), digits, `'` U+0027, `'` U+2019. Differs from regex
+// `\w`: underscore `_` is NOT a word character under the spec,
+// and neither is `.` / `,` / hyphen / dash / `'` U+2018. So e.g.
+// searching "don" whole-word no longer matches "don" inside
+// "don't" (apostrophe joins the word), and "user" matches
+// "user_name" (underscore breaks). See
+// `word-selection-behavior.md` Layer 1 for the full rationale.
 
 /** Map a textblock node type name to its match category. The
  *  three doc-level outline heading types collapse to `heading`;

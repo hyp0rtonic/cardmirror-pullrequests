@@ -36,6 +36,7 @@ import {
   formatKeyForDisplay,
 } from './ribbon-commands.js';
 import { schema } from '../schema/index.js';
+import { classifyChar } from './word-break.js';
 
 type ViewRef = { view: EditorView | null };
 export type PaintbrushMode = 'highlight' | 'shading' | 'fontcolor';
@@ -466,13 +467,24 @@ function closeOpenPicker(): void {
   openPickerDismiss = null;
 }
 
-/** One-shot strip of a named mark across the current selection. */
+/** One-shot strip of a named mark across the current selection.
+ *  Trims one trailing space char from the selection's end before
+ *  removing — same Layer 3 formatting rule used elsewhere. */
 function stripMarkInSelection(view: EditorView, markName: 'highlight' | 'shading'): void {
   const sel = view.state.selection;
   if (sel.empty) return;
   const type = schema.marks[markName];
   if (!type) return;
-  const tr = view.state.tr.removeMark(sel.from, sel.to, type);
+  let { from, to } = sel;
+  if (to > from) {
+    try {
+      const last = view.state.doc.textBetween(to - 1, to);
+      if (last.length > 0 && classifyChar(last) === 'space') to -= 1;
+    } catch {
+      /* range boundary — leave as-is */
+    }
+  }
+  const tr = view.state.tr.removeMark(from, to, type);
   view.dispatch(tr);
 }
 

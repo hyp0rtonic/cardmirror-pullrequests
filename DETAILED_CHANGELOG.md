@@ -7,6 +7,51 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Layer 1 (word-break iterator) + Layer 3 (formatting trim)
+  from the Word-selection spec.** Spec lives at
+  `~/Downloads/word-selection-behavior.md`; this commit lands
+  the first two of three layers (Layer 2 — custom mouse +
+  keyboard selection gestures — comes later).
+
+  New `src/editor/word-break.ts` is the single source of truth
+  for what counts as a word. Three-class scheme: word-character
+  (letters, digits, `'` U+0027, `'` U+2019), space (U+0020 +
+  Unicode whitespace, excluding tab), tab (atomic, never
+  groups), punctuation (everything else, including `'` U+2018,
+  `_`, `-`, em / en dashes, `.`, `,`, `:`, `;`, `…`). Four base
+  units (word, punctuation, space, tab) with asymmetric
+  trailing-space absorption: querying a word OR punctuation
+  unit extends to include any immediately-following space unit,
+  but querying a space unit does NOT reach backward. Tab never
+  absorbs. Implementation uses Unicode-aware character classes
+  (`\p{L}\p{N}`) so non-ASCII letters and digits are word
+  characters; surrogate pairs fall through whichever class
+  their first code unit suggests.
+
+  Both pre-existing word-iterators have been replaced:
+  `wordRangeAtCursor` in `ribbon-commands.ts` (used by the F7
+  Emphasis, F8 Cite, F10 Emphasize Acronym word-expansion
+  fallback) and `isWordChar` in `find-replace-plugin.ts` (used
+  by the whole-word Find toggle) both call into the new
+  iterator. Behavioral consequences: whole-word Find treats `_`
+  as a boundary now (`\w`-style regex matched it as a word
+  char), F10 Emphasize Acronym on "U.S.C.P." emphasizes
+  U / S / C / P instead of just the leading U, and so on.
+
+  Layer 3 lands as a `trimRangesForFormatting(doc, ranges)`
+  helper in `ribbon-commands.ts` and a
+  `getOperatingRangesForFormatting(state)` wrapper around the
+  similar-selection-plugin's `getOperatingRanges` — every
+  formatting command's call-site swapped to the wrapper.
+  Commands that bypass `getOperatingRanges` (the non-shadow
+  branches in `adjustFontSize` / `setFontSize` / `runUniColor`
+  / `highlightToShading` / `shadingToHighlight` / strip-mark in
+  `color-panel.ts`) trim inline against `sel.from / sel.to`.
+  `shadowAwareToggleMark` was previously falling through to
+  PM's `toggleMark` on the non-shadow path; it now unifies
+  through the trimmed-ranges path so the keyboard Ctrl+B /
+  Ctrl+I / Ctrl+U bindings get the trim too.
+
 - **Duplicate-open guard on the file-open path.** The workspace
   doesn't currently support having multiple copies of the same
   doc open — opening a duplicate would create a second
