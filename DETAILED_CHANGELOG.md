@@ -7,6 +7,8 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.4 — 2026-05-22
+
 - **Layer 2 (keyboard navigation keymap) from the Word-selection
   spec.** New `src/editor/word-selection-keymap.ts` adds bindings
   that override the browser's regex-style word iteration:

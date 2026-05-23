@@ -7,6 +7,8 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.4 — 2026-05-22
+
 ### Added
 
 - **Opening a file that's already loaded surfaces the existing
