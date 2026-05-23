@@ -7,6 +7,52 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Comments column ported to multi-pane as a shell-row
+  sibling.** Previously the column was hidden whenever
+  `multiDocWorkspace` was on and the Add Comment / Ask AI ribbon
+  commands refused to run. The shell now adopts the shared
+  `#comments-column` as a sibling of `.pmd-multi-row` —
+  `.pmd-multi-shell` is `flex-direction: row` so the multi-row
+  takes `flex: 1` and the column takes its persisted width via
+  `--pmd-comments-width`. Visually it reads as a narrow fourth
+  slot that shrinks the three doc panes equally instead of
+  cutting into the focused pane only.
+
+  Threads follow focus: `focusSlot` calls
+  `commentsColumn.render()` so cards rebuild against the newly
+  active view (the column's `getView` already returns
+  `setActiveView`'s tracked view). Because the column lives
+  outside every pane's scroll container, scrolling the focused
+  doc would otherwise leave cards stranded at the wrong Y —
+  `attachFocusedScrollSync` installs a rAF-throttled scroll
+  listener on the focused `.pmd-pane-body` that calls
+  `CommentsColumn.relayoutCards()`. The listener tears down and
+  re-installs on every focus change; `handleSlotEmptied`
+  detaches it when the last doc closes.
+
+  Per-record `dispatchTransaction` now calls
+  `notifyCommentsForActiveTransaction` (a new helper exported
+  from `editor/index.ts`); it short-circuits unless the
+  transaction belongs to the active view, so background-stack
+  edits in non-focused panes don't paint over the focused doc's
+  column. `buildDocRecord` now accepts an optional `threads`
+  array and dispatches `loadThreads` after `record` is
+  initialized (a `dispatchTransaction` closing over `record`
+  meant earlier dispatch placement hit a TDZ);
+  `loadOpenedIntoSlot` (docx + cmir) and `onRecoveredDoc` pass
+  threads through so docs land in multi-pane with their
+  comments already in plugin state.
+
+  Layout-pinning cleanups carried over from the single-pane
+  fix: `desiredTop` no longer clamps at 0 — a heading scrolled
+  above the editor's top gives a negative diff in multi-pane
+  (column is decoupled from the scroll container), and cards
+  should slide off the top symmetrically with the bottom rather
+  than pile against `top: 0`. `actualTop` packing math
+  similarly allows negative values. Single-pane is unaffected
+  because column and editor share a scroll container — the
+  diff stays positive in that mode.
+
 - **AI-comment identification moved from `kind: 'ai'` to a
   round-trip-safe shape: fixed `'AI'` initials + a `(AI)` suffix
   on the author name.** The `kind` field doesn't survive a docx

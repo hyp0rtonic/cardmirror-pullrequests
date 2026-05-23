@@ -9,7 +9,11 @@
  * slot. The shared ribbon, status bar, and Save / Save As route
  * through the focused pane via `setActiveView` in `editor/index.ts`.
  *
- * Comments are disabled in multi-doc mode (see SPEC-multi-pane.md).
+ * Comments: a single shared `#comments-column` sits to the right of
+ * the multi-row like a narrow fourth slot. The threads shown follow
+ * focus, and cards relayout against `view.coordsAtPos` on every
+ * focused-pane scroll tick (the column doesn't share a scroll
+ * container with any pane).
  *
  * Layout cells:
  *   - 1 active slot  → full width
@@ -29,7 +33,7 @@ import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull, parseNative, serializeNative, NATIVE_FILE_EXTENSION } from '../index.js';
 import { settings } from './settings.js';
 import { getHost, type OpenedFile } from './host/index.js';
-import { getCommentsState } from './comments-plugin.js';
+import { getCommentsState, loadThreads, type Thread } from './comments-plugin.js';
 
 type DocFormat = 'cmir' | 'docx';
 
@@ -65,6 +69,9 @@ import {
   runSaveFlow,
   runSaveAsFlow,
   refreshWindowTitle,
+  commentsColumn,
+  getCommentsColumnEl,
+  notifyCommentsForActiveTransaction,
 } from './index.js';
 
 type SlotId = 'slot1' | 'slot2' | 'slot3';
@@ -553,6 +560,14 @@ class Slot {
     this.paneEl.style.setProperty('--pmd-card-intrinsic-width', `${width}px`);
   }
 
+  /** Public read access to the editor-body element — the shell
+   *  uses this to attach a scroll-sync listener for the
+   *  comments-column relayout. Stays a private field structurally;
+   *  this getter is the only sanctioned read path. */
+  get bodyElement(): HTMLElement {
+    return this.bodyEl;
+  }
+
   /** The currently-visible doc record (or null when stack is empty). */
   get visible(): DocRecord | null {
     if (this.visibleIndex < 0 || this.visibleIndex >= this.stack.length) return null;
@@ -880,6 +895,15 @@ class MultiPaneShell {
   private navRailEl: HTMLElement;
   private rowEl: HTMLElement;
   private focusedSlot: Slot | null = null;
+  /** Active scroll listener for the comments-column relayout —
+   *  bound to the focused pane's `.pmd-pane-body`. Single
+   *  outstanding listener; focus changes tear down the old one
+   *  before installing the new. Null when no pane is focused. */
+  private focusedScrollSync: {
+    body: HTMLElement;
+    handler: () => void;
+    rafId: number | null;
+  } | null = null;
   private layoutMode: 'compact' | 'wide';
   /** When non-null, the named slot is "expanded" — visible on its
    *  own with every other pane + nav-section hidden, regardless of
@@ -915,6 +939,21 @@ class MultiPaneShell {
     this.rowEl.className = 'pmd-multi-row';
     this.rowEl.dataset['layout'] = this.layoutMode;
     this.shellEl.appendChild(this.rowEl);
+
+    // Adopt the shared `#comments-column` as a sibling of the
+    // multi-row so the multi-shell becomes
+    // `[panes-row | comments-column]`. Visually the column reads
+    // like a narrow fourth slot that shrinks the three doc panes
+    // equally. Its visibility follows the same `commentsVisible`
+    // setting as single-pane (it's hidden via the `hidden` attr
+    // when the user toggles it off). Cards re-layout against the
+    // focused pane's scroll via `attachFocusedScrollSync`, since
+    // the column doesn't share a scroll container with any pane.
+    const commentsEl = getCommentsColumnEl();
+    if (commentsEl) {
+      this.shellEl.appendChild(commentsEl);
+      commentsEl.hidden = !settings.get('commentsVisible');
+    }
 
     this.slots = {
       slot1: new Slot('slot1', this),
@@ -1278,6 +1317,12 @@ class MultiPaneShell {
     if (!wasSame) {
       setActiveView(slot.visible?.view ?? null);
     }
+    // The shared comments column lives at the shell-row level, not
+    // inside any single pane — so re-render its cards against this
+    // doc, and re-point the scroll listener so cards relayout as
+    // the focused pane scrolls.
+    commentsColumn?.render();
+    this.attachFocusedScrollSync(slot);
     const activeCount = SLOT_IDS.filter((id) => this.slots[id].stack.length > 0).length;
     if (this.layoutMode === 'wide' && activeCount === 3) {
       // Compare the pane's box against the row's viewport. If any
@@ -1310,6 +1355,44 @@ class MultiPaneShell {
         });
       }
     }
+  }
+
+  /** Re-point the focused-pane scroll listener at `slot`. The
+   *  shared comments column sits OUTSIDE every pane's scroll
+   *  container in multi-pane, so when the focused editor scrolls,
+   *  cards have to reposition to keep aligned with their anchored
+   *  ranges. rAF-throttled so a fast scroll doesn't queue
+   *  redundant relayouts; old listener is detached before the
+   *  new one attaches. */
+  private attachFocusedScrollSync(slot: Slot): void {
+    this.detachFocusedScrollSync();
+    const column = commentsColumn;
+    if (!column) return;
+    const body = slot.bodyElement;
+    const state: { rafId: number | null } = { rafId: null };
+    const handler = (): void => {
+      if (state.rafId !== null) return;
+      state.rafId = requestAnimationFrame(() => {
+        state.rafId = null;
+        column.relayoutCards();
+      });
+    };
+    body.addEventListener('scroll', handler, { passive: true });
+    this.focusedScrollSync = { body, handler, rafId: state.rafId };
+  }
+
+  /** Detach the scroll-sync listener (e.g. when focus transitions
+   *  to no pane). Idempotent — no-op when no listener is bound. */
+  private detachFocusedScrollSync(): void {
+    if (!this.focusedScrollSync) return;
+    this.focusedScrollSync.body.removeEventListener(
+      'scroll',
+      this.focusedScrollSync.handler,
+    );
+    if (this.focusedScrollSync.rafId !== null) {
+      cancelAnimationFrame(this.focusedScrollSync.rafId);
+    }
+    this.focusedScrollSync = null;
   }
 
   /** Flip the read-mode state of the focused pane's visible doc.
@@ -1465,6 +1548,7 @@ class MultiPaneShell {
       handle: entry.handle,
       format: entry.format,
       uid: entry.uid,
+      threads: entry.threads,
     });
     // Recovery restores content that wasn't successfully saved on
     // the previous session, so the doc is dirty by definition.
@@ -1507,6 +1591,11 @@ class MultiPaneShell {
       }
     }
     setActiveView(null);
+    // No focused doc left — tear down the scroll listener so the
+    // closed pane's body doesn't keep ferrying events, and render
+    // the column once more so it shows the no-view state (empty).
+    this.detachFocusedScrollSync();
+    commentsColumn?.render();
   }
 
   /** Ask the host for a file and load it straight into the named
@@ -1608,15 +1697,17 @@ class MultiPaneShell {
   private async loadOpenedIntoSlot(opened: OpenedFile, target: SlotId): Promise<void> {
     const format = formatFromFilename(opened.name) ?? 'docx';
     let doc: PMNode;
+    let threads: Thread[];
     if (format === 'cmir') {
-      ({ doc } = parseNative(opened.bytes));
+      ({ doc, threads } = parseNative(opened.bytes));
     } else {
-      ({ doc } = await fromDocxFull(opened.bytes));
+      ({ doc, threads } = await fromDocxFull(opened.bytes));
     }
     const slot = this.slots[target];
     const record = buildDocRecord(opened.name, doc, slot, {
       handle: opened.handle ?? null,
       format,
+      threads,
     });
     slot.push(record);
   }
@@ -1846,7 +1937,17 @@ function buildDocRecord(
   filename: string,
   doc: PMNode,
   slot: Slot,
-  opts: { handle: unknown | null; format: DocFormat | null; uid?: string },
+  opts: {
+    handle: unknown | null;
+    format: DocFormat | null;
+    uid?: string;
+    /** Threads from the parser (docx / cmir / crash-recovery
+     *  journal). Dispatched into the comments plugin AFTER
+     *  `record` is initialized — `dispatchTransaction` closes
+     *  over `record`, so a load-threads dispatch earlier in this
+     *  function would hit a temporal-dead-zone error. */
+    threads?: Thread[];
+  },
 ): DocRecord {
   const editorEl = document.createElement('div');
   editorEl.className = 'pmd-pane-editor';
@@ -1872,6 +1973,7 @@ function buildDocRecord(
     // can flip it across all open panes without a reload.
     attributes: { spellcheck: settings.get('editorSpellcheck') ? 'true' : 'false' },
     dispatchTransaction(tx) {
+      const prevState = view.state;
       const next = view.state.apply(tx);
       view.updateState(next);
       // Re-arm the autosave + journal debounces on doc-changing
@@ -1886,6 +1988,12 @@ function buildDocRecord(
         scheduleAutosaveForRecord(record);
         scheduleJournalForRecord(record);
       }
+      // Keep the shared comments column in sync — same updates the
+      // single-doc dispatchTransaction makes, but only when this
+      // view is the active one (the helper short-circuits
+      // otherwise). Background-stack edits in non-focused panes
+      // don't paint over the focused doc's column.
+      notifyCommentsForActiveTransaction(view, prevState, next, tx.docChanged);
       // Debounce both O(doc-size) updates into a single timer:
       //   - navPanel.update walks the doc for headings (and
       //     rebuilds every `<li>`, which would invalidate any
@@ -1960,6 +2068,18 @@ function buildDocRecord(
   getSpeechDocResolver().registerView(record.uid, record.view, {
     onSliceLanded: () => record.navPanel.applyMaxLevelToNewHeadings(),
   });
+
+  // Hydrate comments plugin state from the parser's threads. MUST
+  // run AFTER `record` is initialized — `dispatchTransaction`
+  // closes over `record`, so dispatching earlier hits a TDZ. The
+  // `loadThreads` transaction is `addToHistory: false` so it
+  // stays out of the undo stack. Without this, the
+  // `comment_range` marks render their inline highlight but the
+  // comments column has no thread data to show.
+  if (opts.threads && opts.threads.length > 0) {
+    view.dispatch(loadThreads(view.state, opts.threads));
+  }
+
   return record;
 }
 

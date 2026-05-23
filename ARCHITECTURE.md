@@ -197,12 +197,19 @@ Notes:
   lives in a plugin state map keyed by threadId. Round-trips to
   `<w:commentRangeStart/End>` in document.xml plus the
   `word/comments.xml` and `word/commentsExtended.xml` parts. The
-  side-column UI is a flex-sibling of the editor, toggled by the
-  ribbon's Comments panel; the `comment_range` mark renders with
-  a subtle inline indicator so commented text is visible at a
-  glance. `kind: 'ai' | 'human'` exists on the data type so the
-  planned AI-explainer feature can mark threads it created without
-  a schema migration.
+  side-column UI is a grid-sibling of the editor in single-pane
+  mode, toggled by the ribbon's Comments panel. In multi-pane
+  mode the shell adopts the same column as a sibling of the
+  three-pane row — visually a narrow fourth slot that shrinks
+  the doc panes equally; threads shown follow focus, and cards
+  re-layout as the focused pane scrolls. The `comment_range`
+  mark renders with a subtle inline indicator so commented text
+  is visible at a glance. AI-comment identification rides on
+  `initials: 'AI'` + an author name ending in `(AI)` so it
+  survives docx round-trip (Word strips the `kind` field on
+  export); `isAiComment` recognizes either signal and honors
+  legacy `kind: 'ai'` for back-compat with comments saved
+  before the switch.
 - **Track changes are accepted on import.** Wrapped runs inside
   `<w:ins>` / `<w:moveTo>` are recursed into as kept content;
   `<w:del>` / `<w:moveFrom>` are dropped entirely. `<w:pPrChange>` /

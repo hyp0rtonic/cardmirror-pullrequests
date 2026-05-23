@@ -525,15 +525,13 @@ export function enableMultiDocMode(opts: {
   multiDocNotifyFocusedSaved = opts.notifyFocusedSaved ?? null;
   multiDocOnRecoveredDoc = opts.onRecoveredDoc ?? null;
   multiDocJournalAll = opts.journalAll ?? null;
-  // Hide the single-doc surfaces. The multi-pane shell mounts its
-  // own DOM into #app, alongside #editor + #comments-column which
-  // we hide here.
+  // Hide the single-doc editor surface. The multi-pane shell
+  // mounts its own DOM into #app alongside it. The comments
+  // column is NOT hidden — the shell adopts it as a sibling of
+  // the multi-row (a narrow fourth slot that shrinks the three
+  // doc panes equally) and its visibility follows the same
+  // `commentsVisible` setting as in single-pane.
   editorEl.hidden = true;
-  if (commentsColumnEl) commentsColumnEl.hidden = true;
-  // Hide the single-pane comments toggle/add buttons — comments are
-  // unavailable in multi-doc mode.
-  if (commentsToggleBtn) commentsToggleBtn.style.display = 'none';
-  if (commentsAddBtn) commentsAddBtn.style.display = 'none';
   // Hide the global single-pane nav panel; the multi-pane shell
   // renders its own per-section nav.
   navEl.hidden = true;
@@ -642,10 +640,6 @@ const ribbonContext: RibbonContext = {
   },
   openShortcutsReference: () => openReference(),
   toggleCommentsVisible: () => {
-    // Comments are disabled in multi-doc mode; if the user has
-    // rebound this command to a key, refuse rather than re-show the
-    // hidden column on top of the multi-pane layout.
-    if (multiDocActive) return;
     if (!commentsColumn || !commentsColumnEl) return;
     const next = commentsColumnEl.hidden;
     commentsColumn.setVisible(next);
@@ -653,11 +647,6 @@ const ribbonContext: RibbonContext = {
     commentsColumn.render();
   },
   addCommentToSelection: () => {
-    // Comments are disabled in multi-doc mode (the column is hidden
-    // and the toggle/add ribbon buttons are removed). The keyboard
-    // shortcut still routes here, so refuse rather than silently
-    // creating a thread the user can't see.
-    if (multiDocActive) return;
     if (!view || !commentsColumn) return;
     const newId = addCommentToSelection(view);
     if (!newId) return;
@@ -669,9 +658,6 @@ const ribbonContext: RibbonContext = {
     commentsColumn.focusReplyForThread(newId);
   },
   aiAskAboutSelection: () => {
-    // Same gating as `addCommentToSelection` — AI-ask materializes
-    // a comment thread, which has nowhere to live in multi-doc mode.
-    if (multiDocActive) return;
     if (!view || !commentsColumn) return;
     const newId = commentsColumn.addAiThreadFromSelection(view);
     if (!newId) return;
@@ -1197,9 +1183,40 @@ if (speechSendEndBtn) {
 // further down so doc edits, plugin meta, and selection changes all
 // keep the panel in sync. setVisible flips the `hidden` attr +
 // stores the setting + dispatches a `set-visible` meta to the plugin.
-const commentsColumn = commentsColumnEl
+export const commentsColumn = commentsColumnEl
   ? new CommentsColumn(commentsColumnEl, () => view ?? null)
   : null;
+/** The DOM element for the comments column — exposed so the
+ *  multi-pane shell can adopt it as a sibling of the multi-row.
+ *  Returns null when the host build doesn't include the column
+ *  (the element is conditionally present in `index.html`). */
+export function getCommentsColumnEl(): HTMLElement | null {
+  return commentsColumnEl;
+}
+/** Per-pane `dispatchTransaction` in the multi-pane shell calls
+ *  this with each transaction to mirror the single-pane comment
+ *  column updates: render-schedule on doc/plugin changes and
+ *  active-thread tracking on selection changes. No-op when the
+ *  column doesn't exist or when the transaction's view isn't the
+ *  current active one — background-stack edits in non-focused
+ *  panes shouldn't paint over the focused doc's column. */
+export function notifyCommentsForActiveTransaction(
+  v: EditorView,
+  prevState: EditorState,
+  next: EditorState,
+  docChanged: boolean,
+): void {
+  if (!commentsColumn) return;
+  if (view !== v) return;
+  const prevCommentsState = commentsKey.getState(prevState);
+  if (docChanged || commentsKey.getState(next) !== prevCommentsState) {
+    commentsColumn.scheduleRender();
+  }
+  if (prevState.selection !== next.selection || docChanged) {
+    const id = threadIdAtCursor(next);
+    commentsColumn.setActiveThread(id);
+  }
+}
 if (commentsToggleBtn && commentsColumn) {
   commentsToggleBtn.addEventListener('click', () => {
     const next = commentsColumnEl?.hidden ?? true;
@@ -1235,7 +1252,7 @@ if (commentsAddBtn && commentsColumn) {
  *  inherited marks at $from / $to, plus the marks of the text node
  *  immediately before / after the cursor — so a cursor parked at
  *  the very start of a marked range still resolves to that thread. */
-function threadIdAtCursor(state: EditorState): string | null {
+export function threadIdAtCursor(state: EditorState): string | null {
   const sel = state.selection;
   const harvest = (markSources: readonly (readonly Mark[])[]): string | null => {
     for (const marks of markSources) {

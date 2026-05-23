@@ -5597,9 +5597,29 @@ body.pmd-recovery-active.pmd-multi-doc #app {
  * try to reach in.
  */
 body.pmd-multi-doc #editor,
-body.pmd-multi-doc #comments-column,
 body.pmd-multi-doc #nav-panel {
   display: none !important;
+}
+/* In multi-pane, the shared `#comments-column` is reparented out
+ * of `.pmd-editor-row` and mounted as a sibling of `.pmd-multi-
+ * row` inside the shell — visually a narrow fourth slot that
+ * shrinks the three doc panes equally rather than cutting into
+ * the focused doc's pane. Cards re-layout against the focused
+ * pane's `view.coordsAtPos` on every scroll tick (see
+ * `attachFocusedScrollSync` in `multi-pane-shell.ts`) because
+ * the column doesn't share a scroll container with any pane. */
+body.pmd-multi-doc #comments-column {
+  flex: 0 0 var(--pmd-comments-width, 320px);
+  min-width: 0;
+  /* Cards positioned at very negative top (heading scrolled
+   * above the editor top) shouldn't bleed into the ribbon, and
+   * cards past the bottom shouldn't bleed into the status bar
+   * — clip to the column's own box. */
+  overflow: hidden;
+}
+body.pmd-multi-doc #comments-column .pmd-comments-content {
+  height: 100%;
+  position: relative;
 }
 body.pmd-multi-doc {
   /* No page-level scrolling in multi-doc mode — every editor
@@ -5784,7 +5804,11 @@ body.pmd-multi-doc #word-count-display {
 .pmd-multi-shell {
   flex: 1 1 auto;
   display: flex;
-  flex-direction: column;
+  /* Row direction so the shared `#comments-column` (reparented in
+   * here by the shell) sits to the right of `.pmd-multi-row` like
+   * a narrow fourth slot. The multi-row takes `flex: 1` and the
+   * column takes its persisted width via `--pmd-comments-width`. */
+  flex-direction: row;
   min-height: 0;
   /* Explicit `min-width: 0` is needed so a child with a wide
    * intrinsic content size (from `content-visibility: auto` cards

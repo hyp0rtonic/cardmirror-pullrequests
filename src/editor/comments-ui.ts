@@ -565,7 +565,14 @@ export class CommentsColumn {
       if (range) {
         try {
           const coords = view.coordsAtPos(range.from);
-          desiredTop = Math.max(0, coords.top - columnRect.top);
+          // No `Math.max(0, ...)` floor here: in multi-pane the
+          // column sits outside the focused pane's scroll
+          // container, so a heading scrolled above the editor top
+          // produces a negative diff and the card should slide off
+          // the column top accordingly. (Single-pane is a no-op:
+          // column and editor share a scroll container so both
+          // quantities move together and the diff stays positive.)
+          desiredTop = coords.top - columnRect.top;
         } catch {
           // Range out of view / detached — leave at top.
         }
@@ -581,7 +588,12 @@ export class CommentsColumn {
       active.actualTop = active.desiredTop;
       // Above active: cards whose desiredTop is ≤ active.desiredTop.
       // Walk closest-to-active first, pushing each upward only as
-      // much as needed to clear the next card's actualTop.
+      // much as needed to clear the next card's actualTop. Cards
+      // are allowed to take negative `actualTop` — in multi-pane
+      // a heading scrolled above the editor top gives a negative
+      // desiredTop and the card should slide off the column top
+      // (clipped by the column's own `overflow: hidden`) rather
+      // than pile at top:0.
       const above = items
         .filter((it) => it !== active && it.desiredTop <= active.desiredTop)
         .sort((a, b) => b.desiredTop - a.desiredTop);
@@ -589,7 +601,7 @@ export class CommentsColumn {
       for (const it of above) {
         const desiredBottom = it.desiredTop + it.height;
         const cappedBottom = Math.min(desiredBottom, prevTop - minGap);
-        it.actualTop = Math.max(0, cappedBottom - it.height);
+        it.actualTop = cappedBottom - it.height;
         prevTop = it.actualTop;
       }
       // Below active: walk farthest-from-active last, pushing each
@@ -603,9 +615,12 @@ export class CommentsColumn {
         prevBottom = it.actualTop + it.height;
       }
     } else {
-      // No active card — top-down greedy packing.
+      // No active card — top-down greedy packing. Initial cursor
+      // is `-Infinity` so the first card honors its desiredTop
+      // even when negative (multi-pane scroll-past-top case);
+      // subsequent cards only get pushed down to avoid overlap.
       const sorted = [...items].sort((a, b) => a.desiredTop - b.desiredTop);
-      let cursor = 0;
+      let cursor = Number.NEGATIVE_INFINITY;
       for (const it of sorted) {
         it.actualTop = Math.max(it.desiredTop, cursor);
         cursor = it.actualTop + it.height + minGap;

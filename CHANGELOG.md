@@ -9,6 +9,14 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Comments work in multi-pane mode.** A single shared comments
+  column sits to the right of the three pane slots — visually a
+  narrow fourth slot that shrinks the doc slots equally. Threads
+  shown follow focus: click, drag, Ctrl+Tab, or Ctrl+1/2/3 — the
+  column repaints with the new doc's threads. Add Comment, Ask
+  AI, and the comments toggle all work the same as in
+  single-pane. Cards re-layout against the focused pane's scroll
+  so each card stays aligned with the heading it annotates.
 - **Multi-pane workspace shortcuts are now user-rebindable** via
   Settings → Keybindings. Eight new entries in the keybindings
   editor (in their own "Multi-pane workspace" group): Focus
