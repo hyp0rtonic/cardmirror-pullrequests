@@ -2362,7 +2362,7 @@ body.pmd-nav-resize-active {
 
 .pmd-nav-level-group {
   display: flex;
-  gap: 2px;
+  gap: 3px;
 }
 
 .pmd-nav-level-btn {
