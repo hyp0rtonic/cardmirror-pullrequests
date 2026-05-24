@@ -835,15 +835,22 @@ ipcMain.handle('host:open-path-release', async (event, p: string) => {
 });
 
 ipcMain.handle('host:speech-set', async (event, uid: string | null) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win) return;
+  const senderWin = BrowserWindow.fromWebContents(event.sender);
+  if (!senderWin) return;
   if (uid === null) {
     speechRegistration = null;
     broadcastSpeechState();
     return;
   }
   if (typeof uid !== 'string' || !uid) return;
-  speechRegistration = { uid, windowId: win.id };
+  // Look up the OWNING window for this uid (which may not be the
+  // sender's — the Select Speech Doc modal lets a renderer pick a
+  // doc that lives in a different window). Fall back to the
+  // sender's window if the uid isn't registered yet, which is the
+  // legacy "Mark Active as Speech" path where caller == owner.
+  const ownerId = docOwners.get(uid);
+  const targetId = ownerId ?? senderWin.id;
+  speechRegistration = { uid, windowId: targetId };
   broadcastSpeechState();
 });
 
