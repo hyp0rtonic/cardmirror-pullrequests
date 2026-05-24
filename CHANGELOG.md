@@ -9,6 +9,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Grayscale text antialiasing on high-DPI displays** (DPR ≥
+  1.5 — Retina, most modern phones, HiDPI Windows / Linux
+  scaled past 150%). On those displays the chrome and editor
+  text now render with `font-smooth: grayscale` (via
+  `-webkit-font-smoothing` and `-moz-osx-font-smoothing`),
+  which matches the macOS system default since Mojave and
+  produces a thinner, lighter glyph consistent with the rest
+  of the OS. Low-DPI displays keep the browser-default
+  subpixel rendering, which is crisper at that resolution.
 - **Searchbar on Settings → Keybindings and the Keyboard
   Shortcuts reference modal.** Filters rows live against the
   command label AND its current keybinding text (searching "f7"

@@ -83,6 +83,24 @@ body {
   color: var(--pmd-c-text);
 }
 
+/* Switch text rendering to grayscale antialiasing on high-DPI
+   displays. On low-DPI screens, subpixel antialiasing uses the
+   RGB stripes inside each pixel as extra sub-resolution and is
+   often crisper — so we leave the browser default alone there.
+   At DPR ≥ 1.5 (Retina, most modern phones, HiDPI Windows /
+   Linux scaled past 150%), individual subpixels are too small to
+   notice the trick, and grayscale matches the system-wide
+   rendering (macOS Mojave+ dropped subpixel by default) for a
+   thinner, lighter glyph that reads consistently with the rest
+   of the OS chrome. Applied to body so it cascades to both UI
+   surfaces and the editor content. */
+@media (min-resolution: 1.5dppx) {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
 /* Default <button> color follows its container's text color
    instead of the OS-level `ButtonText` system color. Without
    this rule, every button without an explicit `color` would
