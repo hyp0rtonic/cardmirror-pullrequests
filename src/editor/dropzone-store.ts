@@ -166,10 +166,12 @@ function writeSessionItems(items: DropzoneItem[]): void {
 export const dropzoneStore = new DropzoneStore();
 
 /** Compose the human-readable label for a shelf item from its
- *  slice. Special-cased per schema node type:
+ *  slice. Per schema node type:
  *    - `card`: tag text + cite-marked tokens (same processing as
  *      the nav pane's cite-preview, via `collectCiteText`).
- *    - `analytic_unit`: analytic heading text.
+ *    - `analytic_unit`: the analytic heading text only.
+ *    - `pocket` / `hat` / `block` / `analytic`: the heading's own
+ *      text, NOT the textContent of everything underneath it.
  *    - everything else: first chunk of the slice's text content,
  *      whitespace-collapsed.
  *  Result is clipped to ~120 characters with an ellipsis. */
@@ -186,6 +188,14 @@ export function deriveDropzoneLabel(slice: Slice, type: string): string {
   if (first && (type === 'analytic_unit' || first.type.name === 'analytic_unit')) {
     const analytic = first.firstChild?.textContent?.trim() ?? '';
     return clip(analytic || first.textContent || '(analytic)');
+  }
+  // Top-level outline headings carry a subtree of cards / sub-
+  // headings when dragged from the nav pane. Label off the heading
+  // node's own inline text, not the subtree's flattened text.
+  const headingTypes = new Set(['pocket', 'hat', 'block', 'analytic']);
+  if (first && (headingTypes.has(type) || headingTypes.has(first.type.name))) {
+    const headingText = first.textContent?.trim() ?? '';
+    return clip(headingText || `(${type || first.type.name})`);
   }
   const text = slice.content.textBetween(0, slice.content.size, ' ', ' ').trim();
   return text ? clip(text) : `(${type || 'item'})`;
