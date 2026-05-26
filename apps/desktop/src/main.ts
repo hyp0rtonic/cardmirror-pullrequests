@@ -773,6 +773,51 @@ ipcMain.handle('host:list-docs', async (event) => {
   return out;
 });
 
+// ─── Dropzone shelf (cross-window scratch space) ───────────────────
+// Renderers drop slice content here; main keeps the list in memory
+// and broadcasts every change so every window's bubble stays in
+// sync. Cleared on app restart per spec (no disk persistence).
+
+interface DropzoneItem {
+  id: string;
+  label: string;
+  sliceJson: unknown;
+  createdAt: number;
+}
+
+let dropzoneItems: DropzoneItem[] = [];
+
+function broadcastDropzoneState(): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('dropzone:changed', dropzoneItems);
+  }
+}
+
+ipcMain.handle('host:dropzone-list', async () => dropzoneItems);
+
+ipcMain.handle('host:dropzone-add', async (_event, item: DropzoneItem) => {
+  if (!item || typeof item.id !== 'string' || !item.id) return;
+  // De-dup by id — re-adding the same id moves it to the end (most
+  // recent), which is the natural "use this again" semantics.
+  dropzoneItems = dropzoneItems.filter((x) => x.id !== item.id);
+  dropzoneItems.push(item);
+  broadcastDropzoneState();
+});
+
+ipcMain.handle('host:dropzone-remove', async (_event, id: string) => {
+  if (typeof id !== 'string' || !id) return;
+  const next = dropzoneItems.filter((x) => x.id !== id);
+  if (next.length === dropzoneItems.length) return;
+  dropzoneItems = next;
+  broadcastDropzoneState();
+});
+
+ipcMain.handle('host:dropzone-clear', async () => {
+  if (dropzoneItems.length === 0) return;
+  dropzoneItems = [];
+  broadcastDropzoneState();
+});
+
 // Pre-load duplicate-open check. Renderer calls this BEFORE
 // loading a file from disk. If another window owns the path, we
 // focus that window and tell the caller `takenByOther: true` so

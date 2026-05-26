@@ -133,6 +133,60 @@ in each release, see `CHANGELOG.md`.
   through `ctx.selectSpeechDoc()`; `index.ts` binds that to
   `openSelectSpeechDocModal()`.
 
+- **Dropzone shelf — cross-window scratch space for dragged
+  content.** Floating bubble pinned to the bottom of every nav
+  pane; absorbs any drag from the existing `drag-controller`
+  (nav-pane headings, editor surface card/analytic drags) and
+  exposes the absorbed items via a click-to-open popover where
+  each row is draggable back out into the editor or nav pane.
+  Items are shared across every CardMirror window in the same
+  session.
+
+  Architecture:
+  - **Store** (`src/editor/dropzone-store.ts`) — backend-agnostic
+    cross-window state. In Electron, mutations flow through new
+    `host:dropzone-{list,add,remove,clear}` IPCs; main holds the
+    list in a module variable and broadcasts `dropzone:changed`
+    on every change. In web, the store falls back to
+    `sessionStorage` (single-window but survives the in-tab
+    reload that the multi-pane mode toggle triggers).
+  - **Drag-controller extension** (`drag-controller.ts`) —
+    `DragItem.prebuilt?: Slice` lets a session carry a slice
+    that wasn't sliced from any view's doc; `DragSession.virtual`
+    marks the session as having no real source location; new
+    `DropTarget.absorb?` callback lets a surface act as a shelf-
+    style sink instead of inserting into a view. `commit()`
+    routes through `absorb` first when present, falls through to
+    the standard cross-view insert path otherwise.
+  - **UI** (`src/editor/dropzone-ui.ts`) — one
+    `DropzoneController` per nav-pane (so each multi-pane slot
+    has its own bubble; they all share state via the store).
+    Registers a `DragSurface` whose hitTest returns the bubble's
+    bounding rect and whose `absorb` extracts each session
+    item's slice (or uses `item.prebuilt` for virtual sessions),
+    derives a label, and pushes to the store. The popover's
+    rows watch pointerdown + threshold-crossing pointermove to
+    start a `virtual` drag session via
+    `dragController.begin({...virtual: true})`; the existing
+    controller pipeline routes the drop through the normal
+    surfaces.
+  - **Styling** uses `--pmd-c-drop`, `--pmd-c-drop-outline`,
+    `--pmd-c-drop-tint` — the same blue accent the nav drop
+    indicator and editor drop indicator use — so the
+    accept-state highlight matches the rest of the drag UI.
+    Resting state is a muted grey bubble with the
+    `--pmd-c-surface-soft` / `--pmd-c-border-soft` tokens to
+    blend into the nav-pane chrome.
+
+  Notes:
+  - When the nav pane is hidden via `toggleNavPane`, the bubble
+    hides with it — accessible again by re-showing the nav.
+  - Drag-out always copies (the source isn't a real view
+    location), regardless of whether the user holds the
+    copy modifier.
+  - No drag-out-to-other-app yet; the controller's surfaces
+    only know about nav-pane and editor-surface drops.
+
 - **Ribbon tooltip system unified behind a controller +
   `ribbonTooltipMode` setting.** Previously, ribbon button
   tooltips were a patchwork: the formatting / cite panel buttons

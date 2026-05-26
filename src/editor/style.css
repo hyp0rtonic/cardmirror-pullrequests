@@ -2313,6 +2313,188 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   color: var(--pmd-c-text);
 }
 
+/* ---- Dropzone shelf bubble (cross-window scratch space) ----
+   Pinned to the bottom of the nav pane. Resting state: small
+   unobtrusive grey bubble. Drag-over: animates to a wider drop
+   target with the blue `--pmd-c-drop` accent used elsewhere for
+   drag-target highlighting. Click opens a popover above the
+   bubble listing every shelf item. */
+.pmd-dropzone-root {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.5rem;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 12;
+}
+.pmd-dropzone-bubble {
+  pointer-events: auto;
+  appearance: none;
+  font: inherit;
+  color: var(--pmd-c-text-muted);
+  background: var(--pmd-c-surface-soft);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 999px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px var(--pmd-c-shadow-fade);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    min-width 0.15s ease,
+    padding 0.15s ease;
+}
+.pmd-dropzone-bubble:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+}
+.pmd-dropzone-bubble-open {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+  border-color: var(--pmd-c-border);
+}
+/* Drag-over accept state — blue, matching the editor + nav drop
+   indicators. Wider footprint so it reads as a clear target. */
+.pmd-dropzone-bubble-drop-target {
+  color: var(--pmd-c-drop);
+  background: var(--pmd-c-drop-tint);
+  border-color: var(--pmd-c-drop);
+  box-shadow: 0 0 0 2px var(--pmd-c-drop-outline);
+  min-width: 120px;
+  padding: 0 0.9rem;
+}
+.pmd-dropzone-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.pmd-dropzone-count {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--pmd-c-accent-soft);
+  color: var(--pmd-c-accent);
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  min-width: 1.1rem;
+  text-align: center;
+  line-height: 1.3;
+}
+.pmd-dropzone-bubble-empty .pmd-dropzone-count {
+  display: none;
+}
+
+/* Popover — floats above the bubble. Position is set inline by JS;
+   styling here owns layout + chrome. */
+.pmd-dropzone-popover {
+  position: fixed;
+  z-index: 1000;
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--pmd-c-bg);
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px var(--pmd-c-shadow-deep);
+  font-family: var(--pmd-ui-font);
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+.pmd-dropzone-popover-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--pmd-c-divider);
+  background: var(--pmd-c-surface-soft);
+}
+.pmd-dropzone-popover-title {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--pmd-c-text);
+}
+.pmd-dropzone-popover-clear {
+  appearance: none;
+  font: inherit;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-dropzone-popover-clear:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+}
+.pmd-dropzone-popover-empty {
+  margin: 0;
+  padding: 0.75rem;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.pmd-dropzone-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+}
+.pmd-dropzone-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+}
+.pmd-dropzone-row:hover {
+  background: var(--pmd-c-hover);
+}
+.pmd-dropzone-row-handle {
+  flex: 0 0 auto;
+  color: var(--pmd-c-text-muted);
+  font-size: 0.85rem;
+  letter-spacing: -1px;
+  cursor: grab;
+}
+.pmd-dropzone-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pmd-dropzone-row-delete {
+  appearance: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+}
+.pmd-dropzone-row-delete:hover {
+  background: var(--pmd-c-hover);
+  color: var(--pmd-c-text);
+}
+
 .pmd-nav-panel {
   background: var(--pmd-c-bg);
   border-right: 1px solid var(--pmd-c-border-soft);
@@ -2450,6 +2632,11 @@ body.pmd-nav-resize-active {
   overscroll-behavior: contain;
   /* Leave room on the right so the scrollbar doesn't run into the handle. */
   padding-right: 8px;
+  /* Bottom space for the floating dropzone bubble (`.pmd-dropzone-
+     root` is `position: absolute; bottom: 0.5rem` inside the nav
+     panel). Without this padding the bubble overlays the last
+     heading row when the list is scrolled to the end. */
+  padding-bottom: 2.75rem;
   list-style: none;
   margin: 0;
   padding-top: 0.5rem;

@@ -18,6 +18,17 @@ see `DETAILED_CHANGELOG.md`.
   produces a thinner, lighter glyph consistent with the rest
   of the OS. Low-DPI displays keep the browser-default
   subpixel rendering, which is crisper at that resolution.
+- **Dropzone shelf** — a small floating bubble at the bottom of
+  the nav pane. Drag any card / heading / selection onto it and
+  the bubble absorbs the content into a cross-window shelf;
+  click the bubble to expand a popover listing every shelved
+  item; drag any item out of the popover into the editor or
+  nav pane to insert a copy at the drop point. Shared across
+  every CardMirror window in the same session; survives the
+  renderer reload that toggling multi-pane mode triggers; does
+  NOT persist between app restarts (per spec — clean slate
+  every launch). On web, single-window only with
+  `sessionStorage` survival.
 - **Searchbar on Settings → Keybindings and the Keyboard
   Shortcuts reference modal.** Filters rows live against the
   command label AND its current keybinding text (searching "f7"

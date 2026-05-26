@@ -55,6 +55,25 @@ interface ElectronAPI {
   /** Push the current filename for a uid so the Select-Speech-Doc
    *  modal can show meaningful row labels across every window. */
   docInfoUpdate(uid: string, filename: string | null): Promise<void>;
+  /** Cross-window dropzone shelf. List returns current items;
+   *  add/remove/clear mutate and broadcast via onDropzoneChanged. */
+  dropzoneList(): Promise<
+    Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>
+  >;
+  dropzoneAdd(item: {
+    id: string;
+    label: string;
+    sliceJson: unknown;
+    createdAt: number;
+  }): Promise<void>;
+  dropzoneRemove(id: string): Promise<void>;
+  dropzoneClear(): Promise<void>;
+  onDropzoneChanged(
+    handler: (
+      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+    ) => void,
+  ): () => void;
+
   /** Return every open doc across every window with its current
    *  filename, owning window, and speech-doc status. */
   listDocs(): Promise<
@@ -249,6 +268,37 @@ export class ElectronHost implements Host {
 
   async docInfoUpdate(uid: string, filename: string | null): Promise<void> {
     await api().docInfoUpdate(uid, filename);
+  }
+
+  async dropzoneList(): Promise<
+    Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>
+  > {
+    return api().dropzoneList();
+  }
+
+  async dropzoneAdd(item: {
+    id: string;
+    label: string;
+    sliceJson: unknown;
+    createdAt: number;
+  }): Promise<void> {
+    await api().dropzoneAdd(item);
+  }
+
+  async dropzoneRemove(id: string): Promise<void> {
+    await api().dropzoneRemove(id);
+  }
+
+  async dropzoneClear(): Promise<void> {
+    await api().dropzoneClear();
+  }
+
+  onDropzoneChanged(
+    handler: (
+      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+    ) => void,
+  ): () => void {
+    return api().onDropzoneChanged(handler);
   }
 
   async listDocs(): Promise<

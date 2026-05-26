@@ -173,6 +173,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   docInfoUpdate: (uid: string, filename: string | null) =>
     ipcRenderer.invoke('host:doc-info-update', { uid, filename }),
 
+  /** Dropzone shelf — cross-window in-memory scratch space for
+   *  dragged content. List returns the current items; add/remove/
+   *  clear mutate and broadcast via `dropzone:changed`. Cleared on
+   *  app restart per spec. */
+  dropzoneList: () =>
+    ipcRenderer.invoke('host:dropzone-list') as Promise<
+      Array<{
+        id: string;
+        label: string;
+        sliceJson: unknown;
+        createdAt: number;
+      }>
+    >,
+  dropzoneAdd: (item: { id: string; label: string; sliceJson: unknown; createdAt: number }) =>
+    ipcRenderer.invoke('host:dropzone-add', item),
+  dropzoneRemove: (id: string) =>
+    ipcRenderer.invoke('host:dropzone-remove', id),
+  dropzoneClear: () => ipcRenderer.invoke('host:dropzone-clear'),
+  onDropzoneChanged(
+    handler: (
+      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+    ) => void,
+  ): () => void {
+    const listener = (
+      _evt: unknown,
+      items: Array<{ id: string; label: string; sliceJson: unknown; createdAt: number }>,
+    ): void => handler(items);
+    ipcRenderer.on('dropzone:changed', listener);
+    return () => ipcRenderer.removeListener('dropzone:changed', listener);
+  },
+
   /** List every open doc across every window. Each entry carries
    *  the uid, filename (or null), its owning window's id + title,
    *  whether it's the current speech doc, whether it lives in the

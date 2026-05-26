@@ -24,24 +24,40 @@ import { newHeadingId } from '../schema/ids.js';
 
 export interface DragItem {
   /** Doc position range covering the dragged unit (heading + its
-   *  subtree, or a card/analytic_unit container). */
+   *  subtree, or a card/analytic_unit container). Meaningless when
+   *  the session is `virtual` and `prebuilt` is set — fill in
+   *  zeros in that case. */
   from: number;
   to: number;
   /** Stable heading id, when one exists. */
   id: string | null;
-  /** Schema type name (pocket / hat / block / card / analytic_unit). */
+  /** Schema type name (pocket / hat / block / card / analytic_unit).
+   *  For virtual sessions (dropzone shelf) this is informational
+   *  only — no schema dispatch reads it. */
   type: string;
   /** Outline level (1–4). */
   level: number;
   /** Display label for the pickup pill (the heading's text). */
   label: string;
+  /** Pre-built slice for synthetic-source drags (dropzone shelf).
+   *  When set, the controller uses this slice directly instead of
+   *  slicing from `srcView.state.doc[from..to]`. Used together
+   *  with `DragSession.virtual = true`. */
+  prebuilt?: Slice;
 }
 
 export interface DragSession {
-  /** The view the source content lives in. */
+  /** The view the source content lives in. For `virtual` sessions
+   *  this points at the currently-focused view (or any view) and
+   *  is only used to compare against the drop target — its doc
+   *  isn't sliced when items carry `prebuilt`. */
   view: EditorView;
   /** All items being dragged, in document order. */
   items: DragItem[];
+  /** True when the session's items come from a virtual source
+   *  (the dropzone shelf) rather than a real view region. Drops
+   *  always copy in this mode; the source view is never mutated. */
+  virtual?: boolean;
 }
 
 export interface DropTarget {
@@ -50,6 +66,12 @@ export interface DropTarget {
   view: EditorView;
   /** Document position to insert at, in the target view's current doc. */
   insertPos: number;
+  /** Optional shelf-style sink. When present, the controller calls
+   *  this with the session items and skips the default insert-into-
+   *  view path. Used by surfaces that absorb dragged content into
+   *  their own store (the dropzone bubble) rather than land it at
+   *  a doc position. */
+  absorb?: (items: DragItem[]) => Promise<void> | void;
 }
 
 type DragEvent = 'begin' | 'move' | 'end';
@@ -68,7 +90,13 @@ export interface DragSurface {
    *  cross-view (Phase 3) drops; when omitted the controller defaults
    *  to the source view. */
   hitTest(clientX: number, clientY: number):
-    | { el: HTMLElement; insertPos: number; dy: number; view?: EditorView }
+    | {
+        el: HTMLElement;
+        insertPos: number;
+        dy: number;
+        view?: EditorView;
+        absorb?: (items: DragItem[]) => Promise<void> | void;
+      }
     | null;
   /** Highlight the given indicator element (or none). The controller
    *  passes the winner across all surfaces; losing surfaces receive
@@ -155,12 +183,30 @@ class DragControllerImpl {
       return false;
     }
 
-    // Cross-view drop: always copy. Source content stays in its
-    // doc; a clone (with fresh heading IDs) lands in the target.
-    // The user explicitly chose a different surface for the drop,
-    // so we never silently move data across documents.
-    if (srcView !== tgtView) {
-      const slices = items.map((item) => srcView.state.doc.slice(item.from, item.to));
+    // Shelf-style drop (dropzone bubble): the target surface
+    // absorbs the items into its own store instead of inserting
+    // into a view. The controller still tears down the session
+    // afterward via the same path as a view-inserting commit.
+    if (this.hoverTarget.absorb) {
+      void this.hoverTarget.absorb(items);
+      this.session = null;
+      this.hoverTarget = null;
+      this.copyMode = false;
+      this.notify('end');
+      return true;
+    }
+
+    // Cross-view drop OR virtual-source drop (dropzone shelf):
+    // always copy. Source content stays put (or doesn't exist as
+    // a view location); a clone with fresh heading IDs lands in
+    // the target. Virtual sessions use `item.prebuilt` for the
+    // slice content; real cross-view sessions slice from the
+    // source doc on the fly.
+    const isVirtual = !!this.session.virtual;
+    if (isVirtual || srcView !== tgtView) {
+      const slices = items.map((item) =>
+        item.prebuilt ?? srcView.state.doc.slice(item.from, item.to),
+      );
       const tr = tgtView.state.tr;
       let target = insertPos;
       for (const slice of slices) {
@@ -227,6 +273,7 @@ class DragControllerImpl {
           insertPos: number;
           dy: number;
           view?: EditorView;
+          absorb?: (items: DragItem[]) => Promise<void> | void;
         }
       | null = null;
     for (const surface of this.surfaces) {
@@ -244,6 +291,7 @@ class DragControllerImpl {
       this.setHoverTarget({
         view: winner.view ?? this.session.view,
         insertPos: winner.insertPos,
+        absorb: winner.absorb,
       });
     } else {
       this.setHoverTarget(null);
