@@ -30,7 +30,12 @@
 
 import { Slice } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
-import { dragController, type DragItem, type DragSurface } from './drag-controller.js';
+import {
+  dragController,
+  rewriteHeadingIds,
+  type DragItem,
+  type DragSurface,
+} from './drag-controller.js';
 import { dropzoneStore, type DropzoneItem } from './dropzone-store.js';
 import { schema } from '../schema/index.js';
 
@@ -62,6 +67,7 @@ export class DropzoneController {
     startY: number;
     item: DropzoneItem;
     started: boolean;
+    altKey: boolean;
   } | null = null;
 
   mount(opts: DropzoneMountOptions): void {
@@ -254,6 +260,7 @@ export class DropzoneController {
         startY: e.clientY,
         item,
         started: false,
+        altKey: e.altKey,
       };
       window.addEventListener('pointermove', this.onDragOutPointerMove);
       window.addEventListener('pointerup', this.onDragOutPointerUp);
@@ -303,10 +310,19 @@ export class DropzoneController {
     dragController.dispatchHit(e.clientX, e.clientY);
   };
 
-  private onDragOutPointerUp = (_e: PointerEvent): void => {
+  private onDragOutPointerUp = (e: PointerEvent): void => {
     if (!this.dragOutSource) return;
-    if (this.dragOutSource.started) {
+    const src = this.dragOutSource;
+    if (src.started) {
       dragController.commit({ copy: true });
+    } else {
+      // Click without crossing the drag threshold → insert the
+      // item into the active doc. Alt held at release time (or at
+      // pointerdown — either counts as user intent) means insert
+      // at end; otherwise at cursor. Same semantic as send-to-
+      // speech's ` (at-cursor) vs Alt-\` (at-end) split.
+      const atEnd = src.altKey || e.altKey;
+      this.insertItem(src.item, atEnd);
     }
     this.endDragOut();
   };
@@ -331,6 +347,29 @@ export class DropzoneController {
     };
     dragController.begin({ view, items: [dragItem], virtual: true });
     return true;
+  }
+
+  /** Insert the item's slice into the active view at the cursor
+   *  position (atEnd=false) or at the end of the doc (atEnd=true).
+   *  Mirrors send-to-speech's at-cursor vs at-end semantic.
+   *  Heading IDs are rewritten so re-inserting the same shelf item
+   *  multiple times never produces ID collisions. */
+  private insertItem(item: DropzoneItem, atEnd: boolean): void {
+    const view = this.getFocusedView();
+    if (!view) return;
+    let slice: Slice;
+    try {
+      slice = Slice.fromJSON(schema, item.sliceJson as Parameters<typeof Slice.fromJSON>[1]);
+    } catch {
+      return;
+    }
+    const rewritten = rewriteHeadingIds(slice);
+    const insertPos = atEnd
+      ? view.state.doc.content.size
+      : view.state.selection.head;
+    const tr = view.state.tr.insert(insertPos, rewritten.content);
+    view.dispatch(tr.scrollIntoView());
+    view.focus();
   }
 
   private endDragOut(): void {
