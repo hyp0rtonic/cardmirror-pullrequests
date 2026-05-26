@@ -2337,21 +2337,17 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 10px;
-  transition:
-    background-color 0.22s ease,
-    border-color 0.22s ease,
-    box-shadow 0.22s ease,
-    align-items 0s linear 0.22s;
+  /* No transitions on state changes — the open/closed and
+     drop-target morphs read better as instant flips. User
+     A/B-tested against an animated version and preferred the
+     instant feel. */
+  transition: none;
 }
 .pmd-dropzone-root[data-open="true"] {
   align-items: stretch;
   background: var(--pmd-c-bg);
   border-color: var(--pmd-c-border);
   box-shadow: 0 6px 18px var(--pmd-c-shadow-fade);
-  transition:
-    background-color 0.22s ease,
-    border-color 0.22s ease,
-    box-shadow 0.22s ease;
 }
 /* Drop-target accept state — applies in both closed and open;
    tints the WHOLE root (when open) and just the bar (when
@@ -2495,14 +2491,8 @@ body.pmd-nav-hidden #nav-pane-pull-tab {
   border-radius: 999px;
   box-shadow: 0 2px 6px var(--pmd-c-shadow-fade);
   user-select: none;
-  transition:
-    background-color 0.22s ease,
-    border-color 0.22s ease,
-    color 0.22s ease,
-    border-radius 0.22s ease,
-    box-shadow 0.22s ease,
-    padding 0.22s ease,
-    width 0.22s ease;
+  /* See `.pmd-dropzone-root` — state morphs are instant. */
+  transition: none;
 }
 .pmd-dropzone-bar:hover {
   background: var(--pmd-c-hover);
