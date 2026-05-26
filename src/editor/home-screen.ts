@@ -82,13 +82,16 @@ class HomeScreen {
     header.appendChild(tagline);
     inner.appendChild(header);
 
-    // Primary action cards. Order matters: index 0/1/2 map to the
-    // 1 / 2 / 3 keyboard shortcuts (handled in onKeyDown), mirroring
-    // the number-key panels elsewhere in the UI.
+    // Number-key actions. Order matters: index 0/1/2/3 map to the
+    // 1 / 2 / 3 / 4 keyboard shortcuts (handled in onKeyDown),
+    // mirroring the number-key panels elsewhere in the UI. The first
+    // three are the primary action cards; 4 is Manage quick cards
+    // (its card is built further down).
     this.actionRunners = [
       () => this.callbacks?.newDoc(),
       () => this.callbacks?.newSpeechDoc(),
       () => this.callbacks?.open(),
+      () => this.callbacks?.manageQuickCards(),
     ];
     const actions = document.createElement('div');
     actions.className = 'pmd-home-actions';
@@ -224,13 +227,13 @@ class HomeScreen {
       this.hide();
       return;
     }
-    // 1 / 2 / 3 trigger the three primary actions, mirroring the
-    // number-key button panels elsewhere. Bare keys only — the
-    // home screen has no text inputs to conflict with, but still
-    // ignore the chord variants so a stray modifier doesn't fire
-    // an action unexpectedly.
+    // 1 / 2 / 3 / 4 trigger New / New speech / Open / Manage quick
+    // cards, mirroring the number-key button panels elsewhere. Bare
+    // keys only — the home screen has no text inputs to conflict with,
+    // but still ignore the chord variants so a stray modifier doesn't
+    // fire an action unexpectedly.
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const idx = { '1': 0, '2': 1, '3': 2 }[e.key];
+    const idx = { '1': 0, '2': 1, '3': 2, '4': 3 }[e.key];
     if (idx === undefined) return;
     const run = this.actionRunners[idx];
     if (run) {
