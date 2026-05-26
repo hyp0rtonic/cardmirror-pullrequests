@@ -178,7 +178,7 @@ export function deriveDropzoneLabel(slice: Slice, type: string): string {
   if (first && (type === 'card' || first.type.name === 'card')) {
     const tagText = first.firstChild?.textContent?.trim() ?? '';
     const cite = collectCiteText(first).trim();
-    if (tagText && cite) return clip(`${tagText} — ${cite}`);
+    if (tagText && cite) return clip(`${tagText} | ${cite}`);
     if (tagText) return clip(tagText);
     if (cite) return clip(cite);
     return clip(first.textContent ?? '(card)');
