@@ -27,15 +27,25 @@ import { getElectronHost } from './host/index.js';
  *  heavy-update timer; single-doc has nothing to do here. */
 export type AfterInsertHook = (speechView: EditorView) => void;
 
-/** Compute the slice to send from `sourceView`. Returns the user's
- *  selection if any, otherwise the enclosing card / heading range.
- *  Returns `null` if the cursor isn't inside a structure that has
- *  natural send semantics (e.g., empty doc). */
-export function resolveSendSlice(view: EditorView): Slice | null {
+/** Document range `[from, to)` that "send"-style commands act on. */
+export interface SendRange {
+  from: number;
+  to: number;
+}
+
+/** Compute the range to act on from `sourceView`. Returns the user's
+ *  selection if any, otherwise the enclosing card / analytic_unit /
+ *  heading range. Returns `null` if the cursor isn't inside a
+ *  structure that has natural send semantics (e.g., empty doc).
+ *
+ *  This is the shared cursor→bounds logic behind send-to-speech,
+ *  send-to-dropzone, and the select/copy-current-heading commands;
+ *  `resolveSendSlice` is just `doc.slice(...)` over this range. */
+export function resolveSendRange(view: EditorView): SendRange | null {
   const state = view.state;
   const sel = state.selection;
   if (!sel.empty) {
-    return state.doc.slice(sel.from, sel.to);
+    return { from: sel.from, to: sel.to };
   }
   const $pos = sel.$from;
   const doc = state.doc;
@@ -44,7 +54,7 @@ export function resolveSendSlice(view: EditorView): Slice | null {
     const t = node.type.name;
     if (t === 'card' || t === 'analytic_unit') {
       const from = $pos.before(depth);
-      return doc.slice(from, from + node.nodeSize);
+      return { from, to: from + node.nodeSize };
     }
     if (t === 'pocket' || t === 'hat' || t === 'block') {
       // Heading + everything until the next equal-or-shallower
@@ -66,10 +76,20 @@ export function resolveSendSlice(view: EditorView): Slice | null {
         }
         return true;
       });
-      return doc.slice(from, to);
+      return { from, to };
     }
   }
   return null;
+}
+
+/** Compute the slice to send from `sourceView`. Returns the user's
+ *  selection if any, otherwise the enclosing card / heading range.
+ *  Returns `null` if the cursor isn't inside a structure that has
+ *  natural send semantics (e.g., empty doc). */
+export function resolveSendSlice(view: EditorView): Slice | null {
+  const range = resolveSendRange(view);
+  if (!range) return null;
+  return view.state.doc.slice(range.from, range.to);
 }
 
 /** Insert a slice into the speech view at-cursor or at-end. Handles

@@ -3303,6 +3303,12 @@ export type RibbonCommandId =
   | 'sendToSpeechAtCursor'
   | 'sendToSpeechAtEnd'
   | 'sendToDropzone'
+  // Select / copy the cursor's enclosing structure (selection if any,
+  // else the current card / analytic_unit / heading + its subtree),
+  // reusing the same bounds logic as send-to-speech / -dropzone. No
+  // default bindings — wire up via Settings → Keybindings.
+  | 'selectCurrentHeading'
+  | 'copyCurrentHeading'
   | 'insertImage'
   | 'zoomIn'
   | 'zoomOut'
@@ -3421,6 +3427,8 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'sendToSpeechAtCursor',
   'sendToSpeechAtEnd',
   'sendToDropzone',
+  'selectCurrentHeading',
+  'copyCurrentHeading',
   'insertImage',
   'zoomIn',
   'zoomOut',
@@ -3524,6 +3532,8 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   sendToSpeechAtCursor: 'Send to Speech (At Cursor)',
   sendToSpeechAtEnd: 'Send to Speech (At End)',
   sendToDropzone: 'Send to Dropzone',
+  selectCurrentHeading: 'Select Current Heading',
+  copyCurrentHeading: 'Copy Current Heading',
   insertImage: 'Insert Image at Cursor',
   zoomIn: 'Zoom In',
   zoomOut: 'Zoom Out',
@@ -3647,6 +3657,8 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   sendToSpeechAtCursor: '`',
   sendToSpeechAtEnd: 'Alt-`',
   sendToDropzone: 'Mod-`',
+  selectCurrentHeading: '',
+  copyCurrentHeading: '',
   newSpeechDocument: '',
   markActiveAsSpeech: '',
   insertImage: '',
@@ -3793,6 +3805,11 @@ export interface RibbonContext {
   sendToSpeechAtCursor: () => void;
   sendToSpeechAtEnd: () => void;
   sendToDropzone: () => void;
+  /** Select / copy the cursor's enclosing structure (selection if
+   *  any, else the current card / analytic_unit / heading + subtree),
+   *  using the same bounds logic as the send-to-* commands. */
+  selectCurrentHeading: () => void;
+  copyCurrentHeading: () => void;
   /** Open the file picker that prompts for an image to insert at
    *  the editor's current cursor. Pasting an image from the
    *  clipboard goes through paste-plugin instead — no ctx hook
@@ -3884,6 +3901,8 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   sendToSpeechAtCursor: () => {},
   sendToDropzone: () => {},
   sendToSpeechAtEnd: () => {},
+  selectCurrentHeading: () => {},
+  copyCurrentHeading: () => {},
   insertImage: () => {},
   zoomIn: () => {},
   zoomOut: () => {},
@@ -4130,6 +4149,18 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.sendToDropzone();
+        return true;
+      };
+    case 'selectCurrentHeading':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.selectCurrentHeading();
+        return true;
+      };
+    case 'copyCurrentHeading':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.copyCurrentHeading();
         return true;
       };
     case 'insertImage':

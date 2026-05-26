@@ -92,6 +92,8 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
       'copyPreviousCite',
       'createReference',
       'insertImage',
+      'selectCurrentHeading',
+      'copyCurrentHeading',
     ],
   },
   {

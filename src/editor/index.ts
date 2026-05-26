@@ -12,7 +12,7 @@ import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { history, undo, redo } from 'prosemirror-history';
 import { baseKeymap } from 'prosemirror-commands';
-import { Node as PMNode, type Mark } from 'prosemirror-model';
+import { Node as PMNode, type Mark, DOMSerializer } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull, toDocx, serializeNative, parseNative } from '../index.js';
 import { transformForExport } from '../export/transform-for-export.js';
@@ -33,6 +33,7 @@ import {
 import {
   sendToSpeech as runSendToSpeech,
   resolveSendSlice,
+  resolveSendRange,
   installIncomingSpeechSliceHandler,
 } from './speech-doc-send.js';
 import { promptForText } from './text-prompt.js';
@@ -256,6 +257,49 @@ export async function sendViewToDropzone(sourceView: EditorView): Promise<void> 
     sliceJson: slice.toJSON(),
     createdAt: Date.now(),
   });
+}
+
+/** Select the cursor's enclosing structure — selection if present,
+ *  else the current card / analytic_unit / heading + subtree — using
+ *  the exact bounds logic the send-to-speech / -dropzone commands use
+ *  (`resolveSendRange`). `TextSelection.between` snaps the raw block
+ *  bounds to a valid text selection spanning the whole region. */
+function selectCurrentHeadingIn(sourceView: EditorView): void {
+  const range = resolveSendRange(sourceView);
+  if (!range) return;
+  const { doc } = sourceView.state;
+  const sel = TextSelection.between(doc.resolve(range.from), doc.resolve(range.to));
+  sourceView.dispatch(sourceView.state.tr.setSelection(sel).scrollIntoView());
+  sourceView.focus();
+}
+
+/** Copy the cursor's enclosing structure to the clipboard (same
+ *  bounds as `selectCurrentHeadingIn`) as both HTML and plain text,
+ *  without moving the cursor or changing the selection. Mirrors the
+ *  nav pane's copy-heading serialization. */
+async function copyCurrentHeadingIn(sourceView: EditorView): Promise<void> {
+  const range = resolveSendRange(sourceView);
+  if (!range) return;
+  const slice = sourceView.state.doc.slice(range.from, range.to);
+  const serializer = DOMSerializer.fromSchema(sourceView.state.schema);
+  const tmp = document.createElement('div');
+  tmp.appendChild(serializer.serializeFragment(slice.content));
+  const html = tmp.innerHTML;
+  const text = slice.content.textBetween(0, slice.content.size, '\n', '\n');
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+        }),
+      ]);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+  } catch (err) {
+    console.error('copy current heading failed:', err);
+  }
 }
 
 /** Single-doc new-speech-document. Verbatim's `NewSpeech` prompts
@@ -761,6 +805,15 @@ const ribbonContext: RibbonContext = {
       return;
     }
     if (view) void sendViewToDropzone(view);
+  },
+  // Source-only operations on the focused view — no cross-doc
+  // destination, so unlike send-to-* they need no multi-doc routing
+  // (`view` is the focused pane's view in both modes).
+  selectCurrentHeading: () => {
+    if (view) selectCurrentHeadingIn(view);
+  },
+  copyCurrentHeading: () => {
+    if (view) void copyCurrentHeadingIn(view);
   },
   insertImage: () => {
     if (!view) return;
