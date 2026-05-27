@@ -7,6 +7,23 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Bulk convert utility (desktop).** Home-screen button (in the Quick
+  Cards action row, right of Manage; shown only when
+  `getHost().kind === 'electron'`) opening `bulk-convert-ui.ts`'s
+  modal. Two toggles — direction (`.docx`→`.cmir` / reverse) and output
+  (in-place vs a single `.zip`) — plus Choose file / Choose folder.
+  - Conversion (`convertBytes`): docx→cmir = `fromDocxFull` →
+    `serializeNative`; cmir→docx = `parseNative` → `toDocx`. Threads
+    (comments) preserved.
+  - File: `host.openFile` (scoped to the source ext); in-place writes
+    via `writeFileAtPath(swapExt(handle))`, zip via `host.saveAs`.
+  - Folder: recursed via the new `host.listFilesRecursive(dir, ext)`
+    ({path, relPath}); each file read → convert → in-place write
+    (swapped ext) or added to a JSZip (relPath, `\`→`/`); failures
+    counted, not fatal; zip saved once at the end.
+  - New main IPC + host methods: `host:list-files-recursive` (recursive
+    `readdir` walk by extension) and `host:write-file-at-path`.
+
 - **Quick Cards — store foundation (no UI yet).** First slice of the
   Quick Cards feature (see `reference-docs/SPEC-quick-cards.md`): a
   persistent, cross-window library of reusable rich-text snippets.

@@ -6615,6 +6615,101 @@ body.pmd-recovery-active.pmd-multi-doc #app {
   cursor: pointer;
 }
 
+/* ─── Bulk convert modal ──────────────────────────────────────────── */
+.pmd-bulk-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--pmd-c-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1300;
+}
+.pmd-bulk-dialog {
+  background: var(--pmd-c-bg);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px var(--pmd-c-shadow-deep);
+  width: 90%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--pmd-ui-font);
+}
+.pmd-bulk-dialog.pmd-bulk-busy {
+  pointer-events: none;
+  opacity: 0.75;
+}
+.pmd-bulk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--pmd-c-divider);
+}
+.pmd-bulk-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.pmd-bulk-close {
+  appearance: none;
+  background: transparent;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--pmd-c-text-muted);
+  padding: 0 0.25rem;
+}
+.pmd-bulk-close:hover { color: var(--pmd-c-text); }
+.pmd-bulk-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.pmd-bulk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.pmd-bulk-field-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pmd-c-text-muted);
+}
+.pmd-bulk-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.pmd-bulk-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+.pmd-bulk-btn {
+  flex: 1 1 0;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  border: 1px solid var(--pmd-c-accent);
+  background: var(--pmd-c-accent);
+  color: var(--pmd-c-text-on-accent);
+  cursor: pointer;
+}
+.pmd-bulk-btn:hover { background: var(--pmd-c-accent-hover); }
+.pmd-bulk-status {
+  font-size: 0.82rem;
+  color: var(--pmd-c-text-muted);
+  min-height: 1.2em;
+}
+
 .pmd-reference-overlay {
   position: fixed;
   inset: 0;

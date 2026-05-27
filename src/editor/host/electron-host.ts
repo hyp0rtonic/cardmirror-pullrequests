@@ -62,6 +62,8 @@ interface ElectronAPI {
     opts: { filters: FileFilter[] },
   ): Promise<{ name: string; handle: string } | null>;
   saveExisting(handle: string, bytes: Uint8Array): Promise<void>;
+  listFilesRecursive(dir: string, ext: string): Promise<Array<{ path: string; relPath: string }>>;
+  writeFileAtPath(filePath: string, bytes: Uint8Array): Promise<void>;
   writeJournal(entry: JournalEntry): Promise<void>;
   readJournals(): Promise<JournalEntry[]>;
   deleteJournal(uid: string): Promise<void>;
@@ -242,6 +244,14 @@ export class ElectronHost implements Host {
       );
     }
     await api().saveExisting(handle, bytes);
+  }
+
+  async listFilesRecursive(dir: string, ext: string): Promise<Array<{ path: string; relPath: string }>> {
+    return api().listFilesRecursive(dir, ext);
+  }
+
+  async writeFileAtPath(filePath: string, bytes: Uint8Array): Promise<void> {
+    await api().writeFileAtPath(filePath, bytes);
   }
 
   async writeJournal(entry: JournalEntry): Promise<void> {

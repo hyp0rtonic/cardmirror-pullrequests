@@ -9,6 +9,13 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Bulk convert** (desktop) — a Home-screen button (next to Manage
+  quick cards) that batch-converts between `.docx` and `.cmir`. Pick a
+  single file or a whole folder (recursed through subfolders), choose
+  the direction, and choose the output: written next to each original
+  (same name, swapped extension) or bundled into a single `.zip` of
+  just the converted files. Comments carry across the conversion.
+
 - **Quick Cards** — a persistent, cross-window library of reusable
   rich-text snippets (think Verbatim's quick cards), reached from a
   new 2×2 ribbon cluster (Search / Tag Picker / Manage / Add) between

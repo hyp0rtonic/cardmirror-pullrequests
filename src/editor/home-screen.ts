@@ -34,6 +34,10 @@ export interface HomeScreenCallbacks {
   openRecent: (recent: RecentFile) => void;
   /** Open the Quick Cards manage overlay. */
   manageQuickCards: () => void;
+  /** Open the bulk .docx↔.cmir converter. Omitted (undefined) on
+   *  hosts that can't do recursive folder I/O (the web edition), in
+   *  which case the button isn't shown. */
+  bulkConvert?: () => void;
 }
 
 class HomeScreen {
@@ -156,6 +160,21 @@ class HomeScreen {
     const qcActions = document.createElement('div');
     qcActions.className = 'pmd-home-qc-actions';
     qcActions.appendChild(qcManage);
+    // Bulk convert sits to the right of Manage (Electron only).
+    if (callbacks.bulkConvert) {
+      const conv = document.createElement('button');
+      conv.type = 'button';
+      conv.className = 'pmd-home-action pmd-home-qc-convert';
+      const convT = document.createElement('span');
+      convT.className = 'pmd-home-action-title';
+      convT.textContent = 'Bulk convert';
+      const convS = document.createElement('span');
+      convS.className = 'pmd-home-action-sub';
+      convS.textContent = 'Batch-convert a file or folder between .docx and .cmir.';
+      conv.append(convT, convS);
+      conv.addEventListener('click', () => this.callbacks?.bulkConvert?.());
+      qcActions.appendChild(conv);
+    }
     qcSection.appendChild(qcActions);
     inner.appendChild(qcSection);
 

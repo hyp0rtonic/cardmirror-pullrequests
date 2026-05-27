@@ -51,6 +51,7 @@ import {
 import { openQuickCardAdd } from './quick-card-add-ui.js';
 import { quickCardsManageUI } from './quick-cards-manage-ui.js';
 import { quickCardSearchUI, openQuickCardTagPicker } from './quick-card-search-ui.js';
+import { openBulkConvert } from './bulk-convert-ui.js';
 import { homeScreen, type HomeScreenCallbacks } from './home-screen.js';
 import { recordRecent, removeRecent, type RecentFile } from './recents-store.js';
 import {
@@ -3603,6 +3604,8 @@ const homeCallbacks: HomeScreenCallbacks = {
   manageQuickCards: () => {
     void quickCardsManageUI.open();
   },
+  // Bulk convert needs recursive folder I/O — desktop only.
+  bulkConvert: getHost().kind === 'electron' ? () => openBulkConvert() : undefined,
 };
 
 /** Mount a fresh blank starter doc in this window, resetting the

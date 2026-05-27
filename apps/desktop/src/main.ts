@@ -403,6 +403,40 @@ ipcMain.handle('host:read-file-at-path', async (_event, filePath: string) => {
   }
 });
 
+// Bulk-convert support: recursively list files of a given extension
+// under a directory, and write bytes to an arbitrary path. Used by the
+// home-screen .docx↔.cmir bulk converter.
+ipcMain.handle(
+  'host:list-files-recursive',
+  async (_event, dir: string, ext: string): Promise<Array<{ path: string; relPath: string }>> => {
+    if (typeof dir !== 'string' || !dir || typeof ext !== 'string' || !ext) return [];
+    const suffix = `.${ext.toLowerCase()}`;
+    const out: Array<{ path: string; relPath: string }> = [];
+    async function walk(cur: string): Promise<void> {
+      let entries;
+      try {
+        entries = await fs.readdir(cur, { withFileTypes: true });
+      } catch {
+        return; // unreadable dir — skip
+      }
+      for (const ent of entries) {
+        const full = path.join(cur, ent.name);
+        if (ent.isDirectory()) await walk(full);
+        else if (ent.isFile() && ent.name.toLowerCase().endsWith(suffix)) {
+          out.push({ path: full, relPath: path.relative(dir, full) });
+        }
+      }
+    }
+    await walk(dir);
+    return out;
+  },
+);
+
+ipcMain.handle('host:write-file-at-path', async (_event, filePath: string, bytes: unknown) => {
+  if (typeof filePath !== 'string' || !filePath) throw new Error('write-file-at-path: no path');
+  await fs.writeFile(filePath, bytesToBuffer(bytes));
+});
+
 ipcMain.handle(
   'host:save-as',
   async (

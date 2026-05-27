@@ -98,6 +98,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveExisting: (handle: string, bytes: Uint8Array) =>
     ipcRenderer.invoke('host:save-existing', handle, bytes),
 
+  /** Bulk-convert helpers: recursively list files of an extension
+   *  under a directory, and write bytes to an arbitrary path. */
+  listFilesRecursive: (dir: string, ext: string) =>
+    ipcRenderer.invoke('host:list-files-recursive', dir, ext) as Promise<
+      Array<{ path: string; relPath: string }>
+    >,
+  writeFileAtPath: (filePath: string, bytes: Uint8Array) =>
+    ipcRenderer.invoke('host:write-file-at-path', filePath, bytes),
+
   /** Crash-recovery journal API. Stores per-doc snapshots under
    *  `app.getPath('userData')/journals/{uid}.cmir-journal`. */
   writeJournal: (entry: JournalEntry) =>
