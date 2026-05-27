@@ -2588,10 +2588,13 @@ html.pmd-dropzone-pill-hidden .pmd-nav-list {
    Drag-over: blue accept-state via --pmd-c-drop tokens. */
 .pmd-dropzone-root {
   position: absolute;
-  bottom: 0.5rem;
+  /* Raised off the nav-pane's bottom edge (to the search palette's
+     ~6rem height) so dragging onto the pill no longer lands in the
+     list's bottom auto-scroll zone and scrolls the outline. */
+  bottom: 6rem;
   left: 0.5rem;
   right: 0.5rem;
-  max-height: calc(100% - 1rem);
+  max-height: calc(100% - 6.5rem);
   pointer-events: auto;
   z-index: 12;
   display: flex;
