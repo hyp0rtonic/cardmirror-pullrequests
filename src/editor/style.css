@@ -2590,6 +2590,10 @@ html.pmd-dropzone-pill-hidden .pmd-dropzone-root {
   bottom: 0.5rem;
   left: calc(var(--nav-width) + 0.5rem);
   right: auto;
+  /* Fallback width cap before `positionDropzone` runs; it then sets an
+     exact inline max-width from the editor's rect so the expanded
+     shelf keeps an equal margin on the right. */
+  max-width: calc(100vw - var(--nav-width) - 1rem);
   max-height: 60vh;
   pointer-events: auto;
   z-index: 12;
@@ -2612,11 +2616,11 @@ html.pmd-dropzone-pill-hidden .pmd-dropzone-root {
   border-color: var(--pmd-c-border);
   box-shadow: 0 6px 18px var(--pmd-c-shadow-fade);
 }
-/* Drop-target accept state — applies in both closed and open;
-   tints the WHOLE root (when open) and just the bar (when
-   closed, via the bar override below). */
+/* Drop-target accept state — applies in both closed and open. Keep
+   the element's OPAQUE background (it floats over the editor now, so a
+   translucent tint showed the doc through it); signal acceptance with
+   the blue border + outline glow only. */
 .pmd-dropzone-root[data-open="true"].pmd-dropzone-root-drop-target {
-  background: var(--pmd-c-drop-tint);
   border-color: var(--pmd-c-drop);
   box-shadow: 0 0 0 2px var(--pmd-c-drop-outline);
 }
@@ -2776,7 +2780,6 @@ html.pmd-dropzone-pill-hidden .pmd-dropzone-root {
    and open modes so the pill turns blue regardless. */
 .pmd-dropzone-root-drop-target .pmd-dropzone-bar {
   color: var(--pmd-c-drop);
-  background: var(--pmd-c-drop-tint);
   border-color: var(--pmd-c-drop);
   box-shadow: 0 0 0 2px var(--pmd-c-drop-outline);
 }

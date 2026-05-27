@@ -4578,6 +4578,10 @@ function positionDropzone(): void {
   if (r.width === 0 || r.height === 0) return;
   root.style.left = `${Math.max(4, Math.round(r.left + 8))}px`;
   root.style.bottom = `${Math.max(4, Math.round(window.innerHeight - r.bottom + 8))}px`;
+  // Cap the expanded shelf so its right edge keeps the same 8px margin
+  // as the left (it's left-anchored, so without this it grows toward
+  // the window edge).
+  root.style.maxWidth = `${Math.max(160, Math.round(r.width - 16))}px`;
 }
 if (BOOT_MULTI_DOC_WORKSPACE) {
   void import('./multi-pane-shell.js').then(async (m) => {
