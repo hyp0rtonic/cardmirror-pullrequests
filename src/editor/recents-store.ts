@@ -21,7 +21,7 @@
  */
 
 const STORAGE_KEY = 'pmd-recent-files';
-const MAX_RECENTS = 12;
+const MAX_RECENTS = 6;
 
 export interface RecentFile {
   /** Absolute path on Electron; null on web (unserializable
