@@ -203,6 +203,15 @@ in each release, see `CHANGELOG.md`.
     card has Edit / Suspend / Delete. A broken anchor never touches the
     card's schedule or file association (the store is never mutated by
     edit-tracking; "unanchored" is derived from non-resolution).
+    Resolution gates on context, not just the quote: `resolveDescriptor`
+    scores every quote hit (even a lone one) by how much its surroundings
+    overlap the stored prefix/suffix and **rejects** the best (→ null →
+    Unanchored) unless it clears `MIN_CONTEXT_FRACTION` (⅓) of the
+    available context (`avail = min(prefix,CONTEXT)+min(suffix,CONTEXT)`),
+    so a card whose anchored text was deleted unanchors instead of
+    grounding onto a coincidental same-words hit elsewhere; one intact
+    side clears the bar, and quotes near a doc boundary aren't
+    over-penalized. `CONTEXT` is 60 chars each side.
   - Deferred: refreshing a descriptor from its live range on save (§4.2 —
     editing the *quoted text* unanchors on reload; re-resolution covers
     moves, re-ground covers the rest), deck management, and migrating

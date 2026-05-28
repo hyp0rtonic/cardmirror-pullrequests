@@ -28,8 +28,9 @@ see `DETAILED_CHANGELOG.md`.
     collaborator's) breaks a card's anchor, it drops into an
     **"Unanchored"** section at the bottom of the pane showing the text
     it was attached to, with a **Re-ground** button — select new text and
-    click it to re-attach. A broken anchor never affects the card's
-    review schedule.
+    click it to re-attach. It won't silently re-attach to an unrelated
+    passage that happens to share the same words. A broken anchor never
+    affects the card's review schedule.
   - **Manage flashcards** (Home → Learn, or the command palette): browse
     every card grouped by the file it's anchored to — so you can see
     which cards belong to which document — filter by text, edit a card's

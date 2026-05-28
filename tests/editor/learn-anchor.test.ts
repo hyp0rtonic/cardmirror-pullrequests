@@ -66,4 +66,33 @@ describe('resolveDescriptor', () => {
   it('empty quote never resolves', () => {
     expect(resolveDescriptor(docOf('abc'), { quote: '', prefix: '', suffix: '', approxPos: 0 })).toBeNull();
   });
+
+  it('does not ground on a coincidental hit with unrelated context', () => {
+    // Original text was deleted; the quote 'cd' still occurs once, but in
+    // surroundings nothing like the stored context → must unanchor, not
+    // ground onto it.
+    const doc = docOf('the quick brown fox cd jumps over the lazy dog');
+    const d: AnchorDescriptor = {
+      quote: 'cd',
+      prefix: 'evidence that the war powers resolution',
+      suffix: 'constrains executive overreach significantly',
+      approxPos: 200,
+    };
+    expect(resolveDescriptor(doc, d)).toBeNull();
+  });
+
+  it('still grounds when the quote moved with its surroundings intact', () => {
+    const d: AnchorDescriptor = { quote: 'cd', prefix: 'ZZZZ', suffix: 'YYYY', approxPos: 0 };
+    const doc = docOf('start ZZZZcdYYYY end'); // relocated; context preserved
+    const r = resolveDescriptor(doc, d)!;
+    expect(doc.textBetween(r.from, r.to)).toBe('cd');
+  });
+
+  it('grounds when only one side of the context survives an edit', () => {
+    // Prefix rewritten, suffix intact — one side clearing the bar is enough.
+    const d: AnchorDescriptor = { quote: 'cd', prefix: 'oldoldoldold', suffix: 'YYYYYYYY', approxPos: 0 };
+    const doc = docOf('brand new text cdYYYYYYYY tail');
+    const r = resolveDescriptor(doc, d)!;
+    expect(doc.textBetween(r.from, r.to)).toBe('cd');
+  });
 });

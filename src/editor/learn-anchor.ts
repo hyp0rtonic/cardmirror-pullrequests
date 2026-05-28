@@ -16,8 +16,18 @@
 
 import type { Node as PMNode } from 'prosemirror-model';
 
-/** ~30 chars of context on each side — enough to disambiguate repeats. */
-const CONTEXT = 30;
+/** Chars of context captured on each side of a quote. Wide enough to
+ *  disambiguate repeats AND to tell a real match (surroundings intact)
+ *  from a coincidental hit on the quote substring after the original
+ *  text was deleted/edited (see the context gate in `resolveDescriptor`). */
+const CONTEXT = 60;
+
+/** A candidate match must overlap the stored context by at least this
+ *  fraction of what's available, or it's rejected (→ unanchored) rather
+ *  than grounding the annotation onto unrelated text. A third tolerates
+ *  heavy edits to one side (the other side alone clears the bar) while
+ *  still rejecting a hit whose surroundings don't match at all. */
+const MIN_CONTEXT_FRACTION = 1 / 3;
 
 export interface AnchorDescriptor {
   quote: string;
@@ -96,7 +106,10 @@ function frontMatch(a: string, b: string): number {
 
 /**
  * Re-resolve a descriptor against `doc`. Returns the matched range, or
- * `null` if the quote no longer occurs (the "broken grounding" case).
+ * `null` if the quote no longer occurs OR the best occurrence's
+ * surroundings don't match the stored context (both are "broken
+ * grounding" — the annotation goes to the Unanchored list with a
+ * Re-ground action rather than silently grounding onto unrelated text).
  * Multiple matches are disambiguated by surrounding-context match, then by
  * nearest position to `approxPos`; ties set `ambiguous`.
  */
@@ -109,26 +122,39 @@ export function resolveDescriptor(doc: PMNode, d: AnchorDescriptor): ResolveResu
   }
   if (hits.length === 0) return null;
 
-  let bestIdx = hits[0]!;
-  let ambiguous = false;
-  if (hits.length > 1) {
-    const scored = hits.map((i) => {
-      const before = flat.text.slice(Math.max(0, i - CONTEXT), i);
-      const after = flat.text.slice(i + d.quote.length, i + d.quote.length + CONTEXT);
-      const context = backMatch(before, d.prefix) + frontMatch(after, d.suffix);
-      return { i, context, dist: Math.abs(i - d.approxPos) };
-    });
-    scored.sort((a, b) => b.context - a.context || a.dist - b.dist);
-    bestIdx = scored[0]!.i;
-    // Ambiguous if the runner-up matched context just as well and sat equally
-    // close — i.e. context didn't actually distinguish them.
-    const top = scored[0]!;
-    ambiguous = scored.some((s) => s.i !== top.i && s.context === top.context && s.dist === top.dist);
-  }
+  // Score EVERY hit (even a lone one) by how well its surroundings match
+  // the stored context, then pick the best, breaking ties by nearest
+  // position. Scoring the single-hit case too is what lets the context
+  // gate below reject a coincidental substring match.
+  const scored = hits.map((i) => {
+    const before = flat.text.slice(Math.max(0, i - CONTEXT), i);
+    const after = flat.text.slice(i + d.quote.length, i + d.quote.length + CONTEXT);
+    const context = backMatch(before, d.prefix) + frontMatch(after, d.suffix);
+    return { i, context, dist: Math.abs(i - d.approxPos) };
+  });
+  scored.sort((a, b) => b.context - a.context || a.dist - b.dist);
+  const best = scored[0]!;
+
+  // Context gate: require the best match to overlap the stored context by
+  // at least MIN_CONTEXT_FRACTION of what's available. After the anchored
+  // text is deleted, the quote may still occur elsewhere with totally
+  // unrelated surroundings (context ≈ 0) — grounding there is worse than
+  // unanchoring. `avail` is how much context we even have to match
+  // against, so a quote near a doc boundary (little/no context) isn't
+  // over-penalized.
+  const avail = Math.min(d.prefix.length, CONTEXT) + Math.min(d.suffix.length, CONTEXT);
+  const need = Math.ceil(avail * MIN_CONTEXT_FRACTION);
+  if (best.context < need) return null;
+
+  // Ambiguous if the runner-up matched context just as well and sat equally
+  // close — i.e. context didn't actually distinguish them.
+  const ambiguous = scored.some(
+    (s) => s.i !== best.i && s.context === best.context && s.dist === best.dist,
+  );
 
   return {
-    from: flat.pos[bestIdx]!,
-    to: endPos(flat, bestIdx + d.quote.length),
+    from: flat.pos[best.i]!,
+    to: endPos(flat, best.i + d.quote.length),
     ambiguous,
   };
 }
