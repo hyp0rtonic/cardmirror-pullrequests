@@ -183,39 +183,22 @@ export class CommentsColumn {
    *  sticky-active. Dismisses sticky when the user clicks somewhere
    *  not inside the active card. */
   private stickyDismissHandler: ((e: MouseEvent) => void) | null = null;
-  /** ResizeObserver watching the editor's PM root so cards relayout
-   *  when the editor reflows (window resize, font load, content
-   *  edits). Attaches lazily on first render() once a view is
-   *  available; re-attaches if the view's DOM root changes. */
-  private editorResizeObserver: ResizeObserver | null = null;
-  private observedEditorDom: HTMLElement | null = null;
-  /** rAF coalescing handle for the resize-driven relayout — fast
-   *  drag-resizes fire many ResizeObserver entries per frame, so
-   *  we collapse them to one relayout per frame. */
-  private resizeRelayoutRaf: number | null = null;
-  /** Persistent card elements keyed by thread id. Reused across
-   *  renders so position changes animate (`top` transition) and a
-   *  per-card ResizeObserver can reflow neighbors when any card's
-   *  height changes (expand/collapse, AI stream, reply box) — the
-   *  Docs-like behavior. render() reconciles this map instead of
-   *  wiping the DOM. */
+  /** Persistent card elements keyed by thread id (or `fc:<cardId>` for
+   *  flashcards). Reused across renders so reconcile only re-populates a
+   *  card whose content changed — keeping the active reply textarea's
+   *  focus/value intact. The column is a plain flow list (Model 1), so
+   *  there's no absolute positioning to maintain. */
   private cardEls = new Map<string, HTMLElement>();
   /** Last-rendered content signature per card, so render() skips
-   *  re-populating a card whose content + active state are unchanged
-   *  (position-only changes just relayout). Keeps the active reply
-   *  textarea's focus/value intact across unrelated renders. */
+   *  re-populating a card whose content + active state are unchanged. */
   private cardSigs = new Map<string, string>();
-  /** Observes every card so any height change (expand/collapse,
-   *  streamed AI text, reply box) reflows the whole stack. */
-  private cardResizeObserver: ResizeObserver | null = null;
-  /** Latest thread→range map, kept so a persistent card's once-bound
-   *  click handler can look up its current range (ranges change as
-   *  the doc is edited, but the handler is attached only once). Keyed
-   *  by comment threadId and by `fc:<cardId>` for flashcards. */
+  /** Latest thread→range map, kept so a card's once-bound click handler
+   *  can look up its current range (for scroll-to-text), and so cards
+   *  order top-to-bottom by document position. Keyed by comment threadId
+   *  and by `fc:<cardId>` for flashcards. */
   private lastRanges: Map<string, { from: number; to: number }> = new Map();
-  /** The "Unanchored (n)" section element at the bottom of the pane
-   *  (flashcards whose anchor didn't resolve). Persistent + positioned
-   *  by layoutCards below the anchored cards. Null when none. */
+  /** The "Unanchored (n)" footer element (flashcards whose anchor didn't
+   *  resolve), appended at the end of the list. Null when none. */
   private unanchoredEl: HTMLElement | null = null;
   /** Whether the Unanchored section is collapsed (persists across
    *  renders within a session). */
@@ -250,19 +233,6 @@ export class CommentsColumn {
     this.content = document.createElement('div');
     this.content.className = 'pmd-comments-content';
     this.root.appendChild(this.content);
-    // Any card changing height (expand/collapse, AI text streaming in,
-    // reply box opening) reflows the whole stack so neighbors glide out
-    // of the way rather than overlapping. Coalesced to one relayout per
-    // frame via `resizeRelayoutRaf`.
-    if (typeof ResizeObserver !== 'undefined') {
-      this.cardResizeObserver = new ResizeObserver(() => {
-        if (this.resizeRelayoutRaf !== null) return;
-        this.resizeRelayoutRaf = requestAnimationFrame(() => {
-          this.resizeRelayoutRaf = null;
-          this.relayoutCards();
-        });
-      });
-    }
     // Permanent subscription: re-resolve + re-render whenever a card is
     // created / edited / deleted / re-grounded anywhere. Must NOT be
     // gated on `setVisible` — on boot the column is shown by setting
@@ -528,343 +498,86 @@ export class CommentsColumn {
     const placeholder = this.content.querySelector('.pmd-comments-empty');
     if (placeholder) placeholder.remove();
     const ranges = collectRanges(view.state.doc);
-    // Merge resolved flashcard ranges (synthetic `fc:` ids) so
-    // layoutCards positions flashcard cards next to their text too.
+    // Merge resolved flashcard ranges (synthetic `fc:` ids) so the list
+    // orders flashcards by their text position and click-to-scroll works.
     for (const a of anchoredFc) {
       const r = fcRangeMap.get(a.cardId);
       if (r) ranges.set(FC_PREFIX + a.cardId, r);
     }
     this.lastRanges = ranges;
 
-    // Iterate threads in document order so the column matches the
-    // top-to-bottom flow of the editor. Orphans (mark removed but
-    // plugin state not yet GC'd) append at the end.
-    const orderedIds = Array.from(ranges.keys()).filter((id) => state.threads.has(id));
-    for (const id of state.threads.keys()) {
-      if (!ranges.has(id)) orderedIds.push(id);
+    // Build the ordered list of cards (comments + anchored flashcards),
+    // top-to-bottom by document position; cards with no position (orphan
+    // comments) sink to the end.
+    interface Item {
+      id: string;
+      kind: 'comment' | 'flashcard';
+      cardId: string;
+      sortKey: number;
     }
-    // Reconcile: reuse persistent card elements (so positions animate
-    // and the per-card ResizeObserver tracks height changes), only
-    // re-populating a card whose content/active signature changed.
-    const wantedIds = new Set<string>(orderedIds);
-    for (const a of anchoredFc) wantedIds.add(FC_PREFIX + a.cardId);
+    const items: Item[] = [];
+    for (const id of state.threads.keys()) {
+      const r = ranges.get(id);
+      items.push({ id, kind: 'comment', cardId: '', sortKey: r ? r.from : Number.MAX_SAFE_INTEGER });
+    }
+    for (const a of anchoredFc) {
+      const r = fcRangeMap.get(a.cardId);
+      items.push({
+        id: FC_PREFIX + a.cardId,
+        kind: 'flashcard',
+        cardId: a.cardId,
+        sortKey: r ? r.from : Number.MAX_SAFE_INTEGER,
+      });
+    }
+    items.sort((x, y) => x.sortKey - y.sortKey);
+
+    // Reconcile persistent card elements (preserves the active reply
+    // textarea's focus/value; only re-populates when content changed),
+    // then append in document order — a plain flow list (Model 1). The
+    // column scrolls internally, so a card expanding never moves the doc.
+    const wantedIds = new Set(items.map((it) => it.id));
     for (const [id, el] of this.cardEls) {
       if (!wantedIds.has(id)) {
-        this.cardResizeObserver?.unobserve(el);
         el.remove();
         this.cardEls.delete(id);
         this.cardSigs.delete(id);
       }
     }
-    for (const id of orderedIds) {
-      const thread = state.threads.get(id);
-      if (!thread) continue;
-      const isActive = this.activeThreadId === id;
-      const el = this.ensureCardEl(id);
-      const sig = 'c' + this.threadSignature(thread, isActive);
-      if (this.cardSigs.get(id) !== sig) {
-        this.populateThread(el, thread, isActive);
-        this.cardSigs.set(id, sig);
+    for (const it of items) {
+      const isActive = this.activeThreadId === it.id;
+      const el = this.ensureCardEl(it.id);
+      if (it.kind === 'comment') {
+        const thread = state.threads.get(it.id)!;
+        const sig = 'c' + this.threadSignature(thread, isActive);
+        if (this.cardSigs.get(it.id) !== sig) {
+          this.populateThread(el, thread, isActive);
+          this.cardSigs.set(it.id, sig);
+        }
+      } else {
+        const sig = 'f' + this.flashcardSignature(it.cardId, isActive);
+        if (this.cardSigs.get(it.id) !== sig) {
+          this.populateFlashcard(el, it.cardId, isActive);
+          this.cardSigs.set(it.id, sig);
+        }
       }
-      // Keep DOM order in sync with document order (appendChild on an
-      // existing child moves it). Cheap when already in order.
-      this.content.appendChild(el);
+      this.content.appendChild(el); // flow order
     }
-    // Anchored flashcard cards — positioned by layoutCards like comments.
-    for (const a of anchoredFc) {
-      const id = FC_PREFIX + a.cardId;
-      const isActive = this.activeThreadId === id;
-      const el = this.ensureCardEl(id);
-      const sig = 'f' + this.flashcardSignature(a.cardId, isActive);
-      if (this.cardSigs.get(id) !== sig) {
-        this.populateFlashcard(el, a.cardId, isActive);
-        this.cardSigs.set(id, sig);
-      }
-      this.content.appendChild(el);
-    }
-    // Unanchored flashcards → collapsible section pinned at the bottom.
+    // Unanchored flashcards → collapsible footer at the end of the list.
     this.renderUnanchoredSection(unanchoredFc);
 
-    // Realize content-visibility:auto wrappers that hold a comment
-    // range before we read positions. Without this, multiple
-    // comments inside the same skipped wrapper all return the
-    // wrapper's outer top from `coordsAtPos` and stack at the
-    // same y. Synchronous offsetHeight read after the style
-    // writes forces a layout pass so the upcoming rAF reads
-    // realized positions.
-    this.realizeCommentWrappers(view, ranges);
-    // Make sure a resize observer is watching the editor's root so
-    // cards reposition on window resize, font load, content
-    // reflow, etc.
-    this.syncEditorResizeObserver(view);
-    // Defer measurement to the next frame so the browser has
-    // committed the new card DOM and computed their natural heights.
-    requestAnimationFrame(() => this.layoutCards(view, ranges));
+    // Keep the active card visible within the self-scrolling column.
+    // `block:'nearest'` is a no-op when it's already in view, so this
+    // doesn't fight manual scrolling.
+    if (this.activeThreadId) {
+      this.cardEls.get(this.activeThreadId)?.scrollIntoView({ block: 'nearest' });
+    }
   }
 
-  /** Reposition existing cards without rebuilding their DOM. Used
-   *  by the editor ResizeObserver to track reflows. Cheap
-   *  (no DOM rebuild, no thread iteration). No-op when the column
-   *  is hidden or no view is available. */
+  /** Retained as a no-op for the multi-pane shell, which calls it on
+   *  pane scroll. Model 1 is a flow list — nothing to reposition on
+   *  scroll (the column scrolls its own content). */
   relayoutCards(): void {
-    const view = this.getView();
-    if (!view) return;
-    if (this.root.hidden) return;
-    const ranges = collectRanges(view.state.doc);
-    // Merge the resolved flashcard ranges too (synthetic `fc:` ids) —
-    // otherwise a relayout (ResizeObserver reflow on expand/collapse,
-    // editor resize) would drop them and flashcard cards would fall to
-    // top:0. render() merges the same set.
-    for (const [cardId, r] of flashcardRangeMap(view.state)) {
-      ranges.set(FC_PREFIX + cardId, r);
-    }
-    this.lastRanges = ranges;
-    this.realizeCommentWrappers(view, ranges);
-    this.layoutCards(view, ranges);
-  }
-
-  /** Set `content-visibility: visible` on every `.pmd-card` /
-   *  `.pmd-analytic-unit` / `.pmd-pocket` / `.pmd-hat` /
-   *  `.pmd-block` wrapper ancestor of a comment range. Those
-   *  wrappers carry `content-visibility: auto` so the browser
-   *  skips their internal layout when off-viewport;
-   *  `view.coordsAtPos(rangeFrom)` then returns the wrapper's
-   *  outer top instead of the position-specific y, and multiple
-   *  comments inside the same skipped wrapper collapse to the
-   *  same column y. Per-range walk (not blanket `querySelectorAll`)
-   *  preserves the optimization for cards without comments. We
-   *  don't revert — re-skipping on a later relayout would make
-   *  `coordsAtPos` regress, and the placeholder size from
-   *  `contain-intrinsic-size: auto` is essentially identical to
-   *  the realized size, so leaving these specific wrappers
-   *  realized is essentially free. */
-  private realizeCommentWrappers(
-    view: EditorView,
-    ranges: Map<string, { from: number; to: number }>,
-  ): void {
-    if (ranges.size === 0) return;
-    const realized = new Set<HTMLElement>();
-    for (const [, range] of ranges) {
-      let node: Node | null;
-      try {
-        node = view.domAtPos(range.from).node;
-      } catch {
-        continue;
-      }
-      while (node && node !== view.dom) {
-        if (
-          node instanceof HTMLElement &&
-          !realized.has(node) &&
-          (node.classList.contains('pmd-card') ||
-            node.classList.contains('pmd-analytic-unit') ||
-            node.classList.contains('pmd-pocket') ||
-            node.classList.contains('pmd-hat') ||
-            node.classList.contains('pmd-block'))
-        ) {
-          if (node.style.contentVisibility !== 'visible') {
-            node.style.contentVisibility = 'visible';
-          }
-          realized.add(node);
-        }
-        node = node.parentNode;
-      }
-    }
-    // One sync layout pass forces realized wrappers' internal
-    // layout NOW so the rAF that follows can read fresh coords.
-    // Reading on `view.dom` (the editor root) rather than each
-    // individual wrapper keeps this to a single layout flush.
-    void (view.dom as HTMLElement).offsetHeight;
-  }
-
-  /** Hook a ResizeObserver to the editor's root so cards relayout
-   *  whenever the editor's content box changes — window resize,
-   *  font load, content edits that reflow headings, etc. Idempotent
-   *  when the editor root hasn't changed since the last call. */
-  private syncEditorResizeObserver(view: EditorView): void {
-    const target = view.dom as HTMLElement;
-    if (this.observedEditorDom === target) return;
-    if (this.editorResizeObserver) {
-      this.editorResizeObserver.disconnect();
-    }
-    this.observedEditorDom = target;
-    this.editorResizeObserver = new ResizeObserver(() => {
-      if (this.resizeRelayoutRaf !== null) return;
-      this.resizeRelayoutRaf = requestAnimationFrame(() => {
-        this.resizeRelayoutRaf = null;
-        this.relayoutCards();
-      });
-    });
-    this.editorResizeObserver.observe(target);
-  }
-
-  /** True in single-doc layout (vs the multi-pane shell, which manages
-   *  the column itself). */
-  private isSingleDoc(): boolean {
-    return !document.body.classList.contains('pmd-multi-doc');
-  }
-
-  /** Position each thread card next to its anchored range using
-   *  `view.coordsAtPos`. Layout has two modes:
-   *
-   *  - No active card: greedy top-down packing — cards anchor at
-   *    their desired Y, walking in order; each later card is
-   *    pushed down only if it would overlap the previous one.
-   *  - Active card set: the active card pins at its desired Y;
-   *    cards above are packed UPWARD from the active card's top
-   *    (each pushed up only as much as needed to clear), cards
-   *    below are packed DOWNWARD from the active card's bottom.
-   *    This is what makes clicking a thread bring it next to its
-   *    range, displacing neighbors out of the way. */
-  private layoutCards(
-    view: EditorView,
-    ranges: Map<string, { from: number; to: number }>,
-  ): void {
-    const cards = Array.from(this.root.querySelectorAll<HTMLElement>('.pmd-comment-thread'));
-    if (cards.length === 0) {
-      // No anchored cards — but the Unanchored section may still need
-      // placing (e.g. all flashcards lost their anchor).
-      this.positionUnanchored(0);
-      return;
-    }
-    const columnRect = this.root.getBoundingClientRect();
-    const minGap = 8; // px between adjacent cards
-
-    interface Layout {
-      card: HTMLElement;
-      id: string;
-      desiredTop: number;
-      height: number;
-      actualTop: number;
-    }
-    const items: Layout[] = [];
-    for (const card of cards) {
-      const id = card.dataset['threadId'] ?? '';
-      const range = ranges.get(id);
-      let desiredTop = 0;
-      if (range) {
-        try {
-          const coords = view.coordsAtPos(range.from);
-          // No `Math.max(0, ...)` floor here: in multi-pane the
-          // column sits outside the focused pane's scroll
-          // container, so a heading scrolled above the editor top
-          // produces a negative diff and the card should slide off
-          // the column top accordingly. (Single-pane is a no-op:
-          // column and editor share a scroll container so both
-          // quantities move together and the diff stays positive.)
-          desiredTop = coords.top - columnRect.top;
-        } catch {
-          // Range out of view / detached — leave at top.
-        }
-      }
-      items.push({ card, id, desiredTop, height: card.offsetHeight, actualTop: 0 });
-    }
-
-    const active = this.activeThreadId
-      ? items.find((it) => it.id === this.activeThreadId) ?? null
-      : null;
-
-    if (active) {
-      active.actualTop = active.desiredTop;
-      // Above active: cards whose desiredTop is ≤ active.desiredTop.
-      // Walk closest-to-active first, pushing each upward only as
-      // much as needed to clear the next card's actualTop. Cards
-      // are allowed to take negative `actualTop` — in multi-pane
-      // a heading scrolled above the editor top gives a negative
-      // desiredTop and the card should slide off the column top
-      // (clipped by the column's own `overflow: hidden`) rather
-      // than pile at top:0.
-      const above = items
-        .filter((it) => it !== active && it.desiredTop <= active.desiredTop)
-        .sort((a, b) => b.desiredTop - a.desiredTop);
-      let prevTop = active.actualTop;
-      for (const it of above) {
-        const desiredBottom = it.desiredTop + it.height;
-        const cappedBottom = Math.min(desiredBottom, prevTop - minGap);
-        it.actualTop = cappedBottom - it.height;
-        prevTop = it.actualTop;
-      }
-      // Below active: walk farthest-from-active last, pushing each
-      // downward only as much as needed to clear the previous card.
-      const below = items
-        .filter((it) => it !== active && it.desiredTop > active.desiredTop)
-        .sort((a, b) => a.desiredTop - b.desiredTop);
-      let prevBottom = active.actualTop + active.height;
-      for (const it of below) {
-        it.actualTop = Math.max(it.desiredTop, prevBottom + minGap);
-        prevBottom = it.actualTop + it.height;
-      }
-    } else {
-      // No active card — top-down greedy packing. Initial cursor
-      // is `-Infinity` so the first card honors its desiredTop
-      // even when negative (multi-pane scroll-past-top case);
-      // subsequent cards only get pushed down to avoid overlap.
-      const sorted = [...items].sort((a, b) => a.desiredTop - b.desiredTop);
-      let cursor = Number.NEGATIVE_INFINITY;
-      for (const it of sorted) {
-        it.actualTop = Math.max(it.desiredTop, cursor);
-        cursor = it.actualTop + it.height + minGap;
-      }
-    }
-
-    let maxBottom = 0;
-    const unsettled: HTMLElement[] = [];
-    for (const it of items) {
-      it.card.style.top = `${it.actualTop}px`;
-      // `pmd-laid-out` flips visibility to visible — until this
-      // point the card was hidden so the brief top:0 default
-      // before measurement didn't flash a visible card at the top
-      // of the column on every doc edit.
-      it.card.classList.add('pmd-laid-out');
-      // First placement is instant (no `top` transition until
-      // `pmd-card-settled`); subsequent relayouts animate. Avoids a
-      // slide-in from top:0 when a card first appears.
-      if (!it.card.classList.contains('pmd-card-settled')) unsettled.push(it.card);
-      maxBottom = Math.max(maxBottom, it.actualTop + it.height);
-    }
-    this.positionUnanchored(maxBottom);
-    if (unsettled.length > 0) {
-      requestAnimationFrame(() => {
-        for (const c of unsettled) c.classList.add('pmd-card-settled');
-      });
-    }
-  }
-
-  /** Pin the Unanchored section below the anchored cards and size the
-   *  column to fit it. The sole place that sets `minHeight` so the
-   *  section's height is always included.
-   *
-   *  Changing `minHeight` changes the page's scroll height, which jolts
-   *  the view when a card expands/collapses. In single-doc (where the
-   *  column shares the page scroll and relayout is NOT scroll-driven) we
-   *  capture + restore the scroll so the view stays put. In multi-pane
-   *  relayout fires on scroll, so restoring would fight the user — skip. */
-  private positionUnanchored(cardsBottom: number): void {
-    const el = this.unanchoredEl;
-    if (this.isSingleDoc()) {
-      // Single-doc: the column's height comes from the grid stretching
-      // it to the editor's height — NOT from the cards. Setting
-      // height/minHeight here (off the cards' extent) is exactly what
-      // grew the page scroll height and jolted the view on collapse, so
-      // leave both unset. The Unanchored section is a CSS-pinned bottom
-      // footer.
-      this.root.style.minHeight = '';
-      this.root.style.height = '';
-      if (el && el.parentNode) {
-        el.style.top = '';
-        el.classList.add('pmd-laid-out');
-      }
-      return;
-    }
-    // Multi-pane: size to content; the Unanchored section sits below the
-    // anchored cards.
-    if (!el || !el.parentNode) {
-      this.root.style.minHeight = cardsBottom > 0 ? `${cardsBottom}px` : '';
-      return;
-    }
-    const top = cardsBottom > 0 ? cardsBottom + 12 : 0;
-    el.style.top = `${top}px`;
-    el.classList.add('pmd-laid-out');
-    this.root.style.minHeight = `${top + el.offsetHeight}px`;
+    /* intentionally empty */
   }
 
   /** Get or create the persistent card element for a thread. The
@@ -896,7 +609,6 @@ export class CommentsColumn {
       if (r) this.scrollToRange(r);
     });
     this.cardEls.set(threadId, card);
-    this.cardResizeObserver?.observe(card);
     return card;
   }
 
@@ -950,7 +662,6 @@ export class CommentsColumn {
 
   /** Drop all persistent card elements (view gone / empty state). */
   private clearAllCards(): void {
-    for (const el of this.cardEls.values()) this.cardResizeObserver?.unobserve(el);
     this.cardEls.clear();
     this.cardSigs.clear();
     this.lastRanges = new Map();

@@ -5122,15 +5122,32 @@ body.pmd-multi-doc .pmd-editor-row {
 }
 .pmd-comments-column[hidden] { display: none; }
 
-/* Single-doc: the column scrolls WITH the page (cards stay glued to
-   their text as you scroll — no reposition-on-scroll needed). Its
-   height comes from the grid stretching it to the editor's height, NOT
-   from the cards — so a card expanding/collapsing never changes the
-   page's scroll height and can't jolt the view. `overflow: hidden`
-   clips a card that expands past the doc's end so its overflow can't
-   re-grow the page scroll height. Multi-pane manages its own column. */
+/* Single-doc (Model 1): the column is a fixed, self-scrolling panel
+   pinned to the editor's viewport band. Cards are a plain flow list that
+   scrolls INSIDE the column — so expanding/collapsing a card scrolls the
+   column's own content and never touches the page scroll (no jolt,
+   structurally), and below-the-fold cards are reached by scrolling the
+   column. Being fixed (out of grid flow), it needs its width reserved in
+   the editor row so the editor doesn't render under it. */
 body:not(.pmd-multi-doc) #comments-column {
-  overflow: hidden;
+  position: fixed;
+  top: var(--ribbon-height);
+  bottom: var(--status-bar-height);
+  right: 0;
+  width: var(--pmd-comments-width, 320px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  z-index: 100;
+}
+body.pmd-speech-banner-visible:not(.pmd-multi-doc) #comments-column {
+  top: calc(var(--ribbon-height) + var(--speech-banner-height));
+}
+/* Reserve the column's width in the editor row while it's open (the
+   fixed column is out of grid flow, so the `auto` track would otherwise
+   collapse to 0 and the editor would slide under the column). */
+body:not(.pmd-multi-doc):has(#comments-column:not([hidden])) .pmd-editor-row {
+  grid-template-columns: 1fr var(--pmd-comments-width, 320px);
 }
 
 /* Inner wrapper that holds the column's renderable content
@@ -5142,8 +5159,14 @@ body:not(.pmd-multi-doc) #comments-column {
    parent height so the sticky toggle's containing block is the
    full column, not just the content's natural height. */
 .pmd-comments-content {
-  height: 100%;
   width: 100%;
+  box-sizing: border-box;
+  /* Flow list (Model 1): cards stack top-to-bottom with a gap; the
+     column scrolls this content internally. */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0.5rem 0.6rem 1rem;
 }
 
 /* Resize handle: a thin strip overlaying the LEFT edge of the
@@ -5184,32 +5207,17 @@ body.pmd-comments-resize-active {
   text-align: center;
 }
 
+/* Flow-list card (Model 1): a normal block in the column's flex list,
+   full width with a gap between cards. No absolute positioning — the
+   column scrolls its own content, so a card's height changing just
+   reflows the list, never the document. */
 .pmd-comment-thread {
-  position: absolute;
-  /* The 0.6rem inset matches the old in-column padding so cards
-     don't kiss the column border. */
-  left: 0.6rem;
-  right: 0.6rem;
-  /* `top` is set by layoutCards. */
-  top: 0;
   background: var(--pmd-c-bg);
   border: 1px solid var(--pmd-c-border-soft);
   border-radius: 6px;
   padding: 0.4rem 0.6rem;
   cursor: pointer;
-  visibility: hidden;
   box-sizing: border-box;
-}
-.pmd-comment-thread.pmd-laid-out { visibility: visible; }
-/* Docs-like reflow: once a card has been placed once, animate `top`
-   so neighbors glide around each other when a card expands/collapses
-   or its height changes. First placement stays instant (no
-   `pmd-card-settled` yet) to avoid a slide-in from the top. */
-.pmd-comment-thread.pmd-card-settled {
-  transition: top 0.18s ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  .pmd-comment-thread.pmd-card-settled { transition: none; }
 }
 
 /* Flashcard cards in the column — same positioned-card machinery as
@@ -5263,28 +5271,15 @@ body.pmd-comments-resize-active {
 
 /* Unanchored section — pinned below the anchored cards (top set by
    layoutCards). Absolute like the cards so it scrolls with the editor. */
+/* Flow-list: the Unanchored section is the last item in the column's
+   flex list (after all anchored cards), with a little extra top gap. */
 .pmd-comments-unanchored {
-  position: absolute;
-  left: 0.6rem;
-  right: 0.6rem;
-  top: 0;
-  visibility: hidden;
   background: var(--pmd-c-surface);
   border: 1px dashed var(--pmd-c-border-soft);
   border-radius: 6px;
   padding: 0.35rem 0.5rem;
   box-sizing: border-box;
-}
-.pmd-comments-unanchored.pmd-laid-out { visibility: visible; }
-/* Single-doc overlay: pin the Unanchored list to the bottom of the
-   viewport-height column (a footer), above the cards. */
-body:not(.pmd-multi-doc) .pmd-comments-unanchored {
-  top: auto;
-  bottom: 0.4rem;
-  z-index: 2;
-  max-height: 45%;
-  overflow-y: auto;
-  box-shadow: 0 -4px 12px var(--pmd-c-bg-soft);
+  margin-top: 0.5rem;
 }
 .pmd-comments-unanchored-header {
   appearance: none;
@@ -7279,15 +7274,14 @@ body.pmd-multi-doc #nav-panel {
 body.pmd-multi-doc #comments-column {
   flex: 0 0 var(--pmd-comments-width, 320px);
   min-width: 0;
-  /* Cards positioned at very negative top (heading scrolled
-   * above the editor top) shouldn't bleed into the ribbon, and
-   * cards past the bottom shouldn't bleed into the status bar
-   * — clip to the column's own box. */
-  overflow: hidden;
+  /* Model 1: the column is its own scrolling flow list (bounded by the
+   * shell row's height), independent of the panes' scroll. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 body.pmd-multi-doc #comments-column .pmd-comments-content {
-  height: 100%;
-  position: relative;
+  /* Natural height so the list grows and the column scrolls it. */
+  height: auto;
 }
 body.pmd-multi-doc {
   /* No page-level scrolling in multi-doc mode — every editor
