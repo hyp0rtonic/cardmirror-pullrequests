@@ -4270,6 +4270,13 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   font-size: 0.65rem;
   margin-left: 0.35rem;
 }
+/* The modern chevron icon reads wider / heavier than the classic ▾
+   glyph (which has its own side-bearing), so the Table / Doc / Card
+   dropdowns feel cramped only in modern mode. Pull the arrow closer to
+   its label there to free up room at the button edges. */
+:root[data-icons='modern'] .ribbon-doc-menu-arrow {
+  margin-left: 0.12rem;
+}
 
 .pmd-doc-menu {
   position: fixed;
