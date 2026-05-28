@@ -42,7 +42,12 @@ import { learnStore, localToday } from './learn-store-host.js';
 import { resolveDescriptor, buildDescriptor } from './learn-anchor.js';
 import { openCardEditor } from './learn-create-ui.js';
 import { isDue } from './learn-scheduler.js';
-import { setFlashcardRangesTr, flashcardRangeMap, type FlashcardRange } from './learn-highlight-plugin.js';
+import {
+  setFlashcardRangesTr,
+  setActiveAnnotationRangeTr,
+  flashcardRangeMap,
+  type FlashcardRange,
+} from './learn-highlight-plugin.js';
 import type { CardAnchor } from './learn-store.js';
 
 /** Synthetic column-card id prefix for a flashcard, distinguishing it
@@ -200,6 +205,10 @@ export class CommentsColumn {
   /** The "Unanchored (n)" footer element (flashcards whose anchor didn't
    *  resolve), appended at the end of the list. Null when none. */
   private unanchoredEl: HTMLElement | null = null;
+  /** `${from}:${to}` of the last active-annotation range dispatched to
+   *  the highlight plugin (or '' for none), so render only re-dispatches
+   *  the doc emphasis when the active selection actually changes. */
+  private lastActiveRangeKey = '';
   /** Whether the Unanchored section is collapsed (persists across
    *  renders within a session). */
   private unanchoredCollapsed = false;
@@ -383,10 +392,14 @@ export class CommentsColumn {
       // permanent store subscription keeps them current thereafter.)
       this.refreshFlashcardAnchors();
     } else {
-      // Drop the highlights when the column closes (resolved fresh on
-      // the next open).
+      // Drop the highlights + active emphasis when the column closes
+      // (resolved fresh on the next open).
       const v = this.getView();
-      if (v) v.dispatch(setFlashcardRangesTr(v.state, []));
+      if (v) {
+        v.dispatch(setFlashcardRangesTr(v.state, []));
+        v.dispatch(setActiveAnnotationRangeTr(v.state, null));
+      }
+      this.lastActiveRangeKey = '';
     }
   }
 
@@ -576,6 +589,16 @@ export class CommentsColumn {
     if (this.activeThreadId) {
       this.cardEls.get(this.activeThreadId)?.scrollIntoView({ block: 'nearest' });
     }
+
+    // Emphasize the active annotation's range in the document (so the
+    // selected comment/flashcard is visible in the text too). Only
+    // re-dispatch when it changed — the tr is doc-neutral.
+    const activeRange = this.activeThreadId ? (this.lastRanges.get(this.activeThreadId) ?? null) : null;
+    const key = activeRange ? `${activeRange.from}:${activeRange.to}` : '';
+    if (key !== this.lastActiveRangeKey) {
+      this.lastActiveRangeKey = key;
+      view.dispatch(setActiveAnnotationRangeTr(view.state, activeRange));
+    }
   }
 
   /** Retained as a no-op for the multi-pane shell, which calls it on
@@ -670,6 +693,7 @@ export class CommentsColumn {
     this.cardEls.clear();
     this.cardSigs.clear();
     this.lastRanges = new Map();
+    this.lastActiveRangeKey = '';
     if (this.unanchoredEl) {
       this.unanchoredEl.remove();
       this.unanchoredEl = null;

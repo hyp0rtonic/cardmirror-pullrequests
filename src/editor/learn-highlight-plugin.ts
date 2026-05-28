@@ -26,19 +26,31 @@ export interface FlashcardRange {
   to: number;
 }
 
+interface Range {
+  from: number;
+  to: number;
+}
+
 interface HighlightState {
   ranges: FlashcardRange[];
+  /** The annotation (comment OR flashcard) whose card is active in the
+   *  column — emphasized in the doc so you can see which one is selected.
+   *  Null when nothing is active. */
+  active: Range | null;
   decos: DecorationSet;
 }
 
 export const learnHighlightKey = new PluginKey<HighlightState>('learn-highlight');
 
-interface SetMeta {
-  type: 'set';
-  ranges: FlashcardRange[];
-}
+type Meta =
+  | { type: 'set'; ranges: FlashcardRange[] }
+  | { type: 'active'; active: Range | null };
 
-function buildDecos(doc: EditorState['doc'], ranges: FlashcardRange[]): DecorationSet {
+function buildDecos(
+  doc: EditorState['doc'],
+  ranges: FlashcardRange[],
+  active: Range | null,
+): DecorationSet {
   const decos = ranges
     .filter((r) => r.to > r.from)
     .map((r) =>
@@ -47,33 +59,52 @@ function buildDecos(doc: EditorState['doc'], ranges: FlashcardRange[]): Decorati
         'data-card-id': r.cardId,
       }),
     );
+  // Active-annotation emphasis sits ON TOP (added last) of any flashcard
+  // highlight; works for plain comments too (they have no flashcard deco).
+  if (active && active.to > active.from) {
+    decos.push(Decoration.inline(active.from, active.to, { class: 'pmd-annotation-active' }));
+  }
   return DecorationSet.create(doc, decos);
+}
+
+/** Map a range through an edit, dropping it if its span collapsed. */
+function mapRange(r: Range, tr: Transaction): Range | null {
+  const from = tr.mapping.map(r.from, 1);
+  const to = tr.mapping.map(r.to, -1);
+  return to > from ? { from, to } : null;
 }
 
 export const learnHighlightPlugin = new Plugin<HighlightState>({
   key: learnHighlightKey,
   state: {
     init() {
-      return { ranges: [], decos: DecorationSet.empty };
+      return { ranges: [], active: null, decos: DecorationSet.empty };
     },
     apply(tr, prev, _old, newState) {
-      const meta = tr.getMeta(learnHighlightKey) as SetMeta | undefined;
-      if (meta) {
+      const meta = tr.getMeta(learnHighlightKey) as Meta | undefined;
+      if (meta?.type === 'set') {
         const ranges = meta.ranges.filter((r) => r.to > r.from).map((r) => ({ ...r }));
-        return { ranges, decos: buildDecos(newState.doc, ranges) };
+        return { ranges, active: prev.active, decos: buildDecos(newState.doc, ranges, prev.active) };
+      }
+      if (meta?.type === 'active') {
+        return {
+          ranges: prev.ranges,
+          active: meta.active,
+          decos: buildDecos(newState.doc, prev.ranges, meta.active),
+        };
       }
       if (!tr.docChanged) return prev;
       // Track edits: bias from→right, to→left so edits at the exact
       // boundary stay outside the span (matches comment_range's
-      // inclusive:false), and a fully-deleted span collapses (to<=from)
-      // and is dropped.
+      // inclusive:false), and a fully-deleted span collapses and is
+      // dropped.
       const mapped: FlashcardRange[] = [];
       for (const r of prev.ranges) {
-        const from = tr.mapping.map(r.from, 1);
-        const to = tr.mapping.map(r.to, -1);
-        if (to > from) mapped.push({ cardId: r.cardId, from, to });
+        const m = mapRange(r, tr);
+        if (m) mapped.push({ cardId: r.cardId, from: m.from, to: m.to });
       }
-      return { ranges: mapped, decos: buildDecos(newState.doc, mapped) };
+      const active = prev.active ? mapRange(prev.active, tr) : null;
+      return { ranges: mapped, active, decos: buildDecos(newState.doc, mapped, active) };
     },
   },
   props: {
@@ -102,4 +133,13 @@ export function setFlashcardRangesTr(
   ranges: FlashcardRange[],
 ): Transaction {
   return state.tr.setMeta(learnHighlightKey, { type: 'set', ranges }).setMeta('addToHistory', false);
+}
+
+/** Emphasize the active annotation's range in the doc (or clear it with
+ *  null). Doc-neutral + out of undo history. */
+export function setActiveAnnotationRangeTr(
+  state: EditorState,
+  active: { from: number; to: number } | null,
+): Transaction {
+  return state.tr.setMeta(learnHighlightKey, { type: 'active', active }).setMeta('addToHistory', false);
 }
