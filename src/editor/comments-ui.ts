@@ -220,6 +220,14 @@ export class CommentsColumn {
   /** Whether the Unanchored section is collapsed (persists across
    *  renders within a session). */
   private unanchoredCollapsed = false;
+  /** Single-doc only: high-water mark for the column's `minHeight`. The
+   *  column shares the page scroll, so SHRINKING it (when a card
+   *  collapses) shrinks the page's scroll height and the browser clamps
+   *  the scroll — a visible jolt. We only ever grow it within a doc
+   *  session (collapsing leaves a little slack below the cards instead),
+   *  and reset on doc swap. Growing doesn't clamp, so expanding is fine. */
+  private minHeightFloor = 0;
+  private minHeightFloorDocId = '';
 
   /** Resolve the focused doc's annotation id (single-doc global or the
    *  focused multi-pane record). Flashcards for this id are resolved +
@@ -834,14 +842,30 @@ export class CommentsColumn {
    *  relayout fires on scroll, so restoring would fight the user — skip. */
   private positionUnanchored(cardsBottom: number): void {
     const el = this.unanchoredEl;
+    let desired: number;
     if (!el || !el.parentNode) {
-      this.root.style.minHeight = cardsBottom > 0 ? `${cardsBottom}px` : '';
-      return;
+      desired = cardsBottom > 0 ? cardsBottom : 0;
+    } else {
+      const top = cardsBottom > 0 ? cardsBottom + 12 : 0;
+      el.style.top = `${top}px`;
+      el.classList.add('pmd-laid-out');
+      desired = top + el.offsetHeight;
     }
-    const top = cardsBottom > 0 ? cardsBottom + 12 : 0;
-    el.style.top = `${top}px`;
-    el.classList.add('pmd-laid-out');
-    this.root.style.minHeight = `${top + el.offsetHeight}px`;
+
+    let minH = desired;
+    // Single-doc: hold a high-water mark so collapsing a card never
+    // shrinks the page (which would clamp + jolt the shared scroll).
+    // Multi-pane has its own per-pane scroll model — size to content.
+    if (!document.body.classList.contains('pmd-multi-doc')) {
+      const docId = this.getDocId();
+      if (docId !== this.minHeightFloorDocId) {
+        this.minHeightFloor = 0;
+        this.minHeightFloorDocId = docId;
+      }
+      minH = Math.max(desired, this.minHeightFloor);
+      this.minHeightFloor = minH;
+    }
+    this.root.style.minHeight = minH > 0 ? `${minH}px` : '';
   }
 
   /** Get or create the persistent card element for a thread. The
@@ -931,6 +955,7 @@ export class CommentsColumn {
     this.cardEls.clear();
     this.cardSigs.clear();
     this.lastRanges = new Map();
+    this.minHeightFloor = 0;
     if (this.unanchoredEl) {
       this.unanchoredEl.remove();
       this.unanchoredEl = null;
