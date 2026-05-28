@@ -546,6 +546,11 @@ export class CommentsColumn {
     for (const it of items) {
       const isActive = this.activeThreadId === it.id;
       const el = this.ensureCardEl(it.id);
+      // Defensive: the flow list never sets an inline `top`, but a card
+      // element that survived a hot-reload from the old positioned layout
+      // could carry a stale one (which `position: relative` would honor,
+      // shifting the card out of order). Clear it.
+      if (el.style.top) el.style.top = '';
       if (it.kind === 'comment') {
         const thread = state.threads.get(it.id)!;
         const sig = 'c' + this.threadSignature(thread, isActive);
