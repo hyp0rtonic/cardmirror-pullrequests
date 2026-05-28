@@ -27,7 +27,9 @@ export function openCardEditor(
   const seed = (opts.selectedText ?? '').trim();
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
-    overlay.className = 'pmd-route-overlay';
+    // Own overlay class (above the manage / review overlays) so editing a
+    // card from the manage list stacks on top of it, not behind.
+    overlay.className = 'pmd-route-overlay pmd-learn-create-overlay';
     const dialog = document.createElement('div');
     dialog.className = 'pmd-route-dialog pmd-learn-create-dialog';
 

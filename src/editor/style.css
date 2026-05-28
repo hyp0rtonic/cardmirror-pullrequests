@@ -7929,6 +7929,9 @@ textarea.pmd-text-prompt-input {
 /* ---- Create-flashcard dialog (learn-create-ui) ----
  * Re-uses the route-dialog chrome; adds the anchored-quote note, a
  * Q&A / Cloze type toggle, and the front/back fields. */
+/* Above the manage (1090) + review (1100) overlays, so editing a card
+   from the manage list stacks on top of it. */
+.pmd-learn-create-overlay { z-index: 1200; }
 .pmd-learn-create-dialog {
   min-width: 440px;
   max-width: 520px;

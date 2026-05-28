@@ -327,7 +327,7 @@ class HomeScreen {
     );
     actions.appendChild(
       this.actionCard(
-        'Manage cards',
+        'Manage flashcards',
         'Browse, edit, suspend, and delete your flashcards by file.',
         () => openLearnManage(),
       ),

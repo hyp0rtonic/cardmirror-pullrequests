@@ -4151,13 +4151,27 @@ export async function runSaveAsFlow(): Promise<boolean> {
       // (commitSaveResult leaves docId untouched, but read first to be
       // explicit about which doc we're forking FROM).
       const { docId: srcDocId, sessionUid } = activeDocIdentity();
+      // Did this doc have a real on-disk original? (file.handle is the
+      // PRE-save handle.) A never-saved doc has no original to preserve,
+      // so its annotations MOVE to the new file rather than copy —
+      // otherwise an in-doc flashcard's minted docId would linger as a
+      // phantom "Untitled" group.
+      const hadOnDiskOriginal = file.handle != null;
       commitSaveResult(result.name, result.handle ?? null, choice.format);
       if (forkDocId) {
-        // Carry this doc's annotations onto the fork so the cards follow:
-        // copy from a saved doc (original keeps its set), or move from the
-        // session uid for a never-saved doc.
-        if (srcDocId) learnStore.copyDocAnnotations(srcDocId, forkDocId);
-        else learnStore.rekeyDoc(sessionUid, forkDocId);
+        if (srcDocId && hadOnDiskOriginal) {
+          // Real file → fork: the original keeps its cards; the copy
+          // follows the new file.
+          learnStore.copyDocAnnotations(srcDocId, forkDocId);
+        } else if (srcDocId) {
+          // Never-saved doc whose docId was minted by an in-doc
+          // flashcard: move it, don't copy.
+          learnStore.rekeyDoc(srcDocId, forkDocId);
+        } else {
+          // Never-saved + never-minted: annotations are still under the
+          // session uid.
+          learnStore.rekeyDoc(sessionUid, forkDocId);
+        }
         setActiveDocId(forkDocId);
         learnStore.registerDoc({
           docId: forkDocId,
