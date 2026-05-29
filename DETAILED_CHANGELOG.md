@@ -7,13 +7,13 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
-- **AI threads → local annotation layer (in progress; create + render).**
-  Migrating the "Ask AI about selection" explainer off comment threads
-  (round-tripping `comment_range` marks) onto the same per-user local
-  layer flashcards use (SPEC-learn-system §"one local layer"), so AI
-  questions never serialize into a shared `.docx`/`.cmir`. Design (per
-  the user): **local-only** (like flashcards) and **going-forward only**
-  (existing AI *comments* in documents stay as comments; no auto-migration).
+- **AI threads → local annotation layer.** Migrated the "Ask AI about
+  selection" explainer off comment threads (round-tripping
+  `comment_range` marks) onto the same per-user local layer flashcards
+  use (SPEC-learn-system §"one local layer"), so AI questions never
+  serialize into a shared `.docx`/`.cmir`. Design (per the user):
+  **local-only** (like flashcards) and **going-forward only** (existing
+  AI *comments* in documents stay as comments; no auto-migration).
   - **Store.** Wired the previously-unused `AiThread` / `LocalComment`
     scaffolding in `learn-store.ts`: added `getAiThread` and
     `appendAiComment` alongside the existing `addAiThread` /
@@ -35,11 +35,22 @@ in each release, see `CHANGELOG.md`.
     "ask" input when empty, collapsed preview, active conversation
     (`LocalComment[]`) with reply box + two-click delete, plus a
     re-ground row + Unanchored section (mirroring flashcards).
-  - **Deferred to next increment:** the model call itself — `askAi`
-    currently records the user's turn only; porting `invokeAi` (context
-    caching, Clod personas, Thinking… placeholder/ticker, `@AI`
-    re-invocation) to write `ai: true` turns into the local thread comes
-    next. The old comment-based `addAiThreadFromSelection` is now unused.
+  - **Model call.** `askAi` records the user's turn then calls
+    `invokeAiLocal`, which mirrors the comment-thread `invokeAi` against
+    the store `AiThread`: builds the multi-turn message list from
+    `LocalComment[]` (user turns → `user`, `ai: true` turns →
+    `assistant`, first user turn wrapped in `formatExplainPrompt`), shows
+    the Thinking… placeholder + Clod activity ticker while in-flight, and
+    `appendAiComment`s the reply as an `ai: true` turn. Context is cached
+    at activation from the original selection (`buildExplainContext`,
+    captured before scroll moves the caret), with `contextFromAiThread`
+    (resolve the anchor → range → context) as the post-reload fallback.
+    Reply turns re-invoke automatically (it's an AI thread).
+  - **Cleanup.** Removed the now-dead comment-based AI creation path:
+    `addAiThreadFromSelection` and the `pendingAiFirst` machinery (its
+    only writer) — `renderPrimaryInput` / `commitRootText` lose their
+    AI-specific branches. The `@AI`-mention-in-a-comment path (a separate
+    surface) is unchanged and still uses the comment-thread `invokeAi`.
 
 - **Paste stamps fresh heading ids (nav pane works on pasted sections).**
   The heading nodes (pocket/hat/block/tag/analytic) carry a stable `id`

@@ -256,6 +256,18 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **"Ask AI about selection" notes are now private to you.** AI
+  explanations no longer live as comments in the document — they're kept
+  in the same per-user, on-your-machine layer as flashcards, so they
+  never get written into a `.docx`/`.cmir` you share (sending a file
+  no longer leaks your AI Q&A). It works the same as before: select
+  text, ask, and follow up in a back-and-forth — but the thread shows
+  up as a purple note in the comments pane, anchored to the text, and
+  follows it as you edit (dropping into the **Unanchored** list with a
+  **Re-ground** button if its text is deleted). Existing AI *comments*
+  in older documents are left as-is. (Typing `@AI` inside a regular
+  comment still works the usual way, as a comment.)
+
 - **Save As dialog reorganized around presets.** **Name** and
   **Format** sections sit at the top; a **Save** section below
   offers three one-click save buttons — **As-Is** (everything),

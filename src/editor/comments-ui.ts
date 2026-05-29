@@ -159,10 +159,6 @@ export class CommentsColumn {
   private activeReplyThreadId: string | null = null;
   private activeReplyText = '';
   private suppressBlurReset = false;
-  /** Threads whose first submission should auto-invoke the AI
-   *  explainer. Set by `addAiThreadFromSelection`; cleared the
-   *  moment the first submission fires the request. */
-  private pendingAiFirst: Set<string> = new Set();
   /** Threads with an in-flight AI request. UI renders a transient
    *  "thinking…" placeholder while present. */
   private aiInFlight: Set<string> = new Set();
@@ -983,6 +979,14 @@ export class CommentsColumn {
    *  to its text, and focus the question input. Called by the "Ask AI"
    *  command after it adds the thread to the store. */
   activateAiThread(threadId: string): void {
+    // Capture the explainer context from the ORIGINAL selection now,
+    // before refresh/scroll move it — so the model sees what the user
+    // selected even if the doc later shifts (multi-turn reuses it).
+    const view0 = this.getView();
+    if (view0) {
+      const ctx = buildExplainContext(view0.state);
+      if (ctx) this.aiContextByThread.set(threadId, ctx);
+    }
     const itemId = AI_PREFIX + threadId;
     this.activeThreadId = itemId;
     this.activeBy = 'click';
@@ -1160,8 +1164,8 @@ export class CommentsColumn {
     return form;
   }
 
-  /** Record a user turn on an AI thread. (Phase 2 will fire the model
-   *  request here and append the reply as an `ai: true` turn.) */
+  /** Record a user turn on an AI thread, then fire the model request;
+   *  the reply lands as an `ai: true` turn in the same local thread. */
   private askAi(threadId: string, text: string): void {
     this.suppressBlurReset = true;
     this.activeReplyThreadId = null;
@@ -1175,8 +1179,102 @@ export class CommentsColumn {
       ai: false,
     });
     this.suppressBlurReset = false;
-    // TODO(phase 2): invoke the model over the local thread and append
-    // its reply (`ai: true`); keep the Thinking… placeholder + ticker.
+    this.invokeAiLocal(threadId);
+  }
+
+  /** Run the AI explainer against a LOCAL AI thread. Mirrors `invokeAi`
+   *  (the comment-thread variant) but reads turns from / writes the
+   *  reply to the LearnStore `AiThread` — no `comment_range` mark, so
+   *  nothing serializes into the shared doc. Builds the multi-turn
+   *  message list (user turns → `user`, `ai: true` turns → `assistant`),
+   *  wrapping the first user turn in the context-rich explainer prompt. */
+  private invokeAiLocal(threadId: string): void {
+    const view = this.getView();
+    if (!view) return;
+    if (!settings.get('aiFeaturesEnabled')) {
+      showToast('AI features are disabled — enable them in Settings.');
+      return;
+    }
+    const apiKey = settings.get('anthropicApiKey').trim();
+    if (!apiKey) {
+      showToast('Set an Anthropic API key in Settings to use AI features.');
+      return;
+    }
+    const thread = learnStore.getAiThread(threadId);
+    if (!thread) return;
+
+    let ctx = this.aiContextByThread.get(threadId) ?? null;
+    if (!ctx) ctx = this.contextFromAiThread(threadId);
+    if (!ctx) {
+      showToast('Could not build context for AI request.');
+      return;
+    }
+    const promptCtx = ctx;
+    this.aiContextByThread.set(threadId, promptCtx);
+
+    const messages = thread.comments.flatMap((c, i): { role: 'user' | 'assistant'; content: string }[] => {
+      if (!c.text.trim()) return [];
+      if (c.ai) return [{ role: 'assistant', content: c.text }];
+      const isFirstUserTurn = !thread.comments.slice(0, i).some((p) => !p.ai && p.text.trim());
+      const content = isFirstUserTurn ? formatExplainPrompt(c.text, promptCtx) : c.text;
+      return [{ role: 'user', content }];
+    });
+    if (messages.length === 0) return;
+
+    this.aiInFlight.add(threadId);
+    this.activeThreadId = AI_PREFIX + threadId;
+    this.activeBy = 'click';
+    this.refreshStickyDismissListener();
+    this.render();
+    this.startActivityTicker();
+
+    void (async () => {
+      try {
+        const reply = await callAnthropic({ apiKey, system: EXPLAIN_SYSTEM_PROMPT, messages });
+        // Drop the in-flight flag BEFORE appending so the store-driven
+        // re-render shows the reply without the Thinking… placeholder.
+        this.aiInFlight.delete(threadId);
+        if (this.aiInFlight.size === 0) this.stopActivityTicker();
+        learnStore.appendAiComment(threadId, {
+          author: aiAuthorName(),
+          text: reply.text.trim(),
+          at: new Date().toISOString(),
+          ai: true,
+        });
+      } catch (e) {
+        if (e instanceof AnthropicError) showToast(`AI: ${e.message}`);
+        else showToast(`AI error: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        this.aiInFlight.delete(threadId);
+        if (this.aiInFlight.size === 0) this.stopActivityTicker();
+        this.render();
+      }
+    })();
+  }
+
+  /** Build an `ExplainContext` from an AI thread's current grounding —
+   *  the live highlight range if resolved, else the stored descriptor —
+   *  for the case where no context was cached at creation (e.g. a
+   *  follow-up after reload). */
+  private contextFromAiThread(threadId: string): ReturnType<typeof buildExplainContext> {
+    const view = this.getView();
+    if (!view) return null;
+    let range = this.lastRanges.get(AI_PREFIX + threadId) ?? null;
+    if (!range) {
+      const t = learnStore.getAiThread(threadId);
+      if (t?.anchor) {
+        const r = resolveDescriptor(view.state.doc, t.anchor);
+        if (r) range = { from: r.from, to: r.to };
+      }
+    }
+    if (!range) return null;
+    const TextSelection = (view.state.selection.constructor as unknown) as {
+      create: (doc: PMNode, from: number, to: number) => never;
+    };
+    const synth = view.state.apply(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, range.from, range.to)),
+    );
+    return buildExplainContext(synth);
   }
 
   /** Action row for an active AI card: two-click Delete. */
@@ -1409,13 +1507,9 @@ export class CommentsColumn {
   }
 
   private renderPrimaryInput(thread: Thread, root: Comment): HTMLElement {
-    const isAi = this.pendingAiFirst.has(thread.id);
-    const placeholder = isAi ? 'Ask a question' : 'Add a comment…';
-    const submitLabel = isAi ? 'Ask' : 'Comment';
-    const form = this.buildInputForm(thread, placeholder, (text) => {
+    return this.buildInputForm(thread, 'Add a comment…', (text) => {
       this.commitRootText(thread.id, root.id, text);
-    }, submitLabel);
-    return form;
+    }, 'Comment');
   }
 
   private renderReplyForm(thread: Thread): HTMLElement {
@@ -1485,17 +1579,6 @@ export class CommentsColumn {
     );
     this.suppressBlurReset = false;
     view.focus();
-
-    // AI auto-invoke flow: a thread created via the "Ask AI"
-    // button carries a pending flag. The user's first text submit
-    // becomes the root comment; we fire the request and append
-    // the model's reply as a kind:'ai' comment in the same thread.
-    // `invokeAi` reads the thread state for itself so we don't
-    // need to pass the just-committed text through.
-    if (this.pendingAiFirst.has(threadId)) {
-      this.pendingAiFirst.delete(threadId);
-      this.invokeAi(threadId);
-    }
   }
 
   private renderComment(thread: Thread, comment: Comment, isRoot: boolean): HTMLElement {
@@ -1770,50 +1853,6 @@ export class CommentsColumn {
     } catch {
       // Position detached / not yet laid out — ignore.
     }
-  }
-
-  /** Apply a comment_range mark to the current selection, build an
-   *  empty thread, and mark it so the user's first submission
-   *  auto-invokes the AI explainer. Returns the new thread id (or
-   *  null when the selection was empty / AI was disabled).
-   *
-   *  Also caches the explainer context at this moment — so if the
-   *  doc shifts before the user submits, the AI still sees what
-   *  the original selection meant. */
-  addAiThreadFromSelection(view: EditorView): string | null {
-    if (!settings.get('aiFeaturesEnabled')) {
-      showToast('AI features are disabled — enable them in Settings.');
-      return null;
-    }
-    const { state } = view;
-    const sel = state.selection;
-    if (sel.empty) return null;
-    const commentType = schema.marks['comment_range'];
-    if (!commentType) return null;
-
-    const ctx = buildExplainContext(state);
-    if (!ctx) return null;
-
-    const threadId = newCommentId();
-    const root: Comment = {
-      id: threadId,
-      author: settings.get('commentAuthor'),
-      initials: settings.get('commentAuthorInitials').trim(),
-      date: new Date().toISOString(),
-      text: '',
-      kind: 'human',
-      parentId: null,
-    };
-    const thread: Thread = { id: threadId, comments: [root] };
-
-    this.pendingAiFirst.add(threadId);
-    this.aiContextByThread.set(threadId, ctx);
-
-    const tr = state.tr;
-    tr.addMark(sel.from, sel.to, commentType.create({ threadId }));
-    tr.setMeta(commentsKey, addThreadMeta(thread));
-    view.dispatch(tr);
-    return threadId;
   }
 
   /** Focus the brand-new thread's reply input so the user can
