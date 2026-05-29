@@ -3251,8 +3251,15 @@ function mountView(doc: PMNode, threads: Thread[] = []): void {
       // refresh, comments-plugin orphan GC) is all O(doc) and the
       // dominant per-keystroke cost on big docs. Debounce so it only
       // fires once the user pauses typing for 200ms.
-      if (tx.docChanged) needsCommentsGC = true;
-      scheduleHeavyUpdate();
+      // Only the doc-walking work (nav rebuild, word count, GC) needs the
+      // debounced flush, and only when the doc actually changed. Skipping
+      // it for selection-only transactions avoids rebuilding the nav's
+      // `<li>`s on every cursor move — a perf win, and it keeps a plain
+      // nav click from re-rendering the outline mid-double-click.
+      if (tx.docChanged) {
+        needsCommentsGC = true;
+        scheduleHeavyUpdate();
+      }
       // Comments column refresh on doc / plugin-state change is
       // debounced via the column's own scheduleRender (matches the
       // 200ms heavy-update cadence).

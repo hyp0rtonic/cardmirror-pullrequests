@@ -351,6 +351,14 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Double-clicking a heading in the navigation pane reliably collapses
+  / expands it.** The first click jumps the editor to that section,
+  which used to re-render the outline a beat later and swap out the row
+  you'd clicked — so the second click of a double often landed on a fresh
+  row and the browser never registered the double-click. Double-clicks
+  are now detected directly and survive the re-render, so collapsing /
+  expanding from the outline works every time.
+
 - **Settings: the selected-tab underline shows on every tab.** The blue
   active-tab line could vanish on tabs the tab strip has to scroll to
   reach (Keyboard, Comments & AI) — a scrolled tab strip was clipping the

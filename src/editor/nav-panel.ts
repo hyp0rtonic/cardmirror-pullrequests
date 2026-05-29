@@ -32,6 +32,11 @@ import { setIcon } from './icons';
 const NAV_WIDTH_MIN = 180;
 const NAV_WIDTH_MAX = 800;
 
+/** Max gap between two plain clicks on the same nav entry to count as a
+ *  double-click (collapse toggle). Approximates the OS double-click
+ *  window; see `handlePlainClickDouble`. */
+const NAV_DOUBLE_CLICK_MS = 500;
+
 /**
  * Whether the user is holding the platform's "copy" modifier during
  * a drag. File-manager convention: Ctrl on Windows/Linux, Option (Alt)
@@ -80,6 +85,18 @@ export class NavigationPanel {
    *  pointerup-without-drag does a jumpTo (plain click) or just
    *  finalizes selection (Ctrl/Shift click). */
   private pointerDownModifier: 'none' | 'shift' | 'meta' = 'none';
+  /** Manual double-click detection. The native `dblclick` is unreliable
+   *  here: a plain click jumps the editor, whose transaction schedules a
+   *  debounced nav re-render that recreates every `<li>` — and the
+   *  browser only fires `dblclick` when both clicks hit the *same* node.
+   *  We instead match the entry id + timestamp across two plain clicks,
+   *  which is immune to the `<li>` being rebuilt between them. */
+  private lastClickId: string | null = null;
+  private lastClickTime = 0;
+  /** Entry ids that have children (so can be collapse-toggled). Rebuilt
+   *  each render; keyed by id so double-click detection survives the
+   *  `<li>` being recreated. */
+  private collapsibleIds: Set<string> = new Set();
 
   // ---- Drag-and-drop state ----
   private liEntries: Map<HTMLLIElement, HeadingEntry> = new Map();
@@ -501,6 +518,7 @@ export class NavigationPanel {
     // diff against the previous render.
     this.listEl.innerHTML = '';
     this.liEntries.clear();
+    this.collapsibleIds.clear();
 
     if (entries.length === 0) {
       this.listEl.style.display = 'none';
@@ -527,6 +545,7 @@ export class NavigationPanel {
       const next = entries[i + 1];
       const hasChildren = next != null && next.level > entry.level;
       const collapsed = entry.id != null && this.collapsed.has(entry.id);
+      if (hasChildren && entry.id != null) this.collapsibleIds.add(entry.id);
 
       const li = document.createElement('li');
       li.className = `pmd-nav-item pmd-nav-level-${entry.level} pmd-nav-type-${entry.type}`;
@@ -568,13 +587,11 @@ export class NavigationPanel {
         li.appendChild(citePreview);
       }
 
-      // Pointer-based handler: distinguishes click (jump-to) from
-      // drag (move heading). dblclick still fires natively from the
-      // browser on two consecutive low-movement pointerdown/up cycles.
+      // Pointer-based handler: distinguishes click (jump-to) from drag
+      // (move heading), and detects double-clicks (collapse toggle) in
+      // `onDragUp` rather than via the native `dblclick`, which a plain
+      // click's nav re-render would invalidate.
       li.addEventListener('pointerdown', (e) => this.onLiPointerDown(e, entry, li));
-      li.addEventListener('dblclick', () => {
-        if (hasChildren) this.toggleCollapsed(entry);
-      });
       li.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         this.openContextMenu(e.clientX, e.clientY, entry);
@@ -904,11 +921,35 @@ export class NavigationPanel {
           this.selectSingle(this.deferredClickFinalize);
         }
         this.jumpTo(this.dragStartEntry);
+        this.handlePlainClickDouble(this.dragStartEntry);
       }
     }
     this.deferredClickFinalize = null;
     this.pointerDownModifier = 'none';
     this.cleanupDrag(committed);
+  }
+
+  /** Manual double-click → collapse toggle. Runs after the click's
+   *  jump, so a double-click both navigates and toggles (matching the
+   *  old native-`dblclick` behavior) — but reliable, because it keys on
+   *  the entry id rather than the `<li>` node the jump's re-render
+   *  replaces. The second click of a double resets `lastClickId` so a
+   *  third click starts a fresh single (no triple-click chaining). */
+  private handlePlainClickDouble(entry: HeadingEntry): void {
+    if (entry.id == null) {
+      this.lastClickId = null;
+      return;
+    }
+    const now = Date.now();
+    const isDouble =
+      this.lastClickId === entry.id && now - this.lastClickTime < NAV_DOUBLE_CLICK_MS;
+    if (isDouble) {
+      this.lastClickId = null;
+      if (this.collapsibleIds.has(entry.id)) this.toggleCollapsed(entry);
+      return;
+    }
+    this.lastClickId = entry.id;
+    this.lastClickTime = now;
   }
 
   private onDragKey(e: KeyboardEvent): void {
@@ -1038,10 +1079,10 @@ export class NavigationPanel {
       needsRerender = true;
     }
 
-    // Important: only re-render if something actually changed. A
-    // plain click (no drag, no doc change) shouldn't tear down and
-    // rebuild the <li> elements — that destroys the browser's
-    // dblclick detection between the two clicks of a double-click.
+    // Only re-render if something actually changed: a plain click (no
+    // drag, no doc change) shouldn't tear down and rebuild the <li>s.
+    // (Our double-click detection keys on entry id so it survives a
+    // rebuild — but a needless rebuild on every click still flickers.)
     if (needsRerender && this.currentDoc) {
       this.render(this.currentDoc);
     }

@@ -287,6 +287,30 @@ in each release, see `CHANGELOG.md`.
   positions, so the highlight self-corrects. Single-doc path only; the
   multi-pane per-pane nav doesn't track the caret highlight at all.
 
+- **Nav-pane double-click (collapse toggle) no longer relies on the
+  native `dblclick`.** A plain nav click's `jumpTo` dispatches a
+  selection-only transaction; `dispatchTransaction` then scheduled the
+  debounced `scheduleHeavyUpdate` → `navPanel.update()` → `render()`,
+  which does `listEl.innerHTML = ''` and rebuilds every `<li>`. Because
+  `scheduleIdle` (requestIdleCallback) fires in the idle gap *between*
+  the two clicks of a double, the clicked `<li>` was usually gone before
+  the second click — and `dblclick` only fires when both clicks share a
+  target node, so the collapse toggle silently dropped. (A regression
+  since the heavy flush moved from a fixed 200ms `setTimeout` to idle
+  dispatch in alpha.1; the multi-pane code even had a comment warning a
+  per-keystroke rebuild "would invalidate any dblclick in progress".)
+  Two-part fix: (1) the nav pane detects double-clicks itself in
+  `onDragUp` — `handlePlainClickDouble(entry)` matches `entry.id` +
+  timestamp (`NAV_DOUBLE_CLICK_MS`, 500ms) across two plain clicks and
+  toggles via `toggleCollapsed` when the id is in a per-render
+  `collapsibleIds` set; keying on the stable id rather than the DOM node
+  makes it immune to the `<li>` being recreated between clicks. (2) Both
+  `dispatchTransaction`s (single-doc and the multi-pane per-pane view)
+  now gate the heavy flush on `tx.docChanged`, so a selection-only jump
+  doesn't rebuild the outline at all — killing the mid-gesture re-render
+  (and an O(doc) nav rebuild on every cursor move). The native `dblclick`
+  listener is removed.
+
 - **Comments column: Docs-like reflow layout.** `comments-ui.ts`'s
   `render()` no longer wipes + rebuilds the card DOM each pass — it
   reconciles a persistent `Map<threadId, element>` (and `fc:<cardId>`

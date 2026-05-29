@@ -2144,14 +2144,20 @@ function buildDocRecord(
       // Running these on every transaction makes typing in large
       // docs O(N) per keystroke. The 200ms timer matches the
       // single-doc `scheduleHeavyUpdate` cadence.
-      if (record.heavyUpdateTimer !== null) {
-        cancelIdle(record.heavyUpdateTimer);
+      // Only on doc changes: a selection-only transaction (e.g. a nav
+      // click's jump) doesn't change the outline, so skip the rebuild —
+      // a perf win, and it stops a plain nav click from recreating the
+      // `<li>`s mid-double-click.
+      if (tx.docChanged) {
+        if (record.heavyUpdateTimer !== null) {
+          cancelIdle(record.heavyUpdateTimer);
+        }
+        record.heavyUpdateTimer = scheduleIdle(() => {
+          record.heavyUpdateTimer = null;
+          record.navPanel.update(view.state.doc);
+          slot.refreshWordCount();
+        }, 200);
       }
-      record.heavyUpdateTimer = scheduleIdle(() => {
-        record.heavyUpdateTimer = null;
-        record.navPanel.update(view.state.doc);
-        slot.refreshWordCount();
-      }, 200);
       // Cheap O(1) chrome refresh — keeps the font-size chip in
       // sync as the cursor moves. `setActiveView`'s call to
       // `refreshWordCount` short-circuits in multi-doc mode
