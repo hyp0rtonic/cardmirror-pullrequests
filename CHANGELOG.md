@@ -77,6 +77,13 @@ see `DETAILED_CHANGELOG.md`.
   across the conversion. Esc closes the dialog without also dismissing
   the Home screen behind it.
 
+- **Keyboard macros** — in **Settings → Keyboard shortcuts**, a new
+  section below the shortcut list lets you bind a key to **type a snippet
+  of text** at the cursor. Click **Set shortcut**, press your keys, type
+  the text — done; add as many as you like. Handy for repetitive
+  insertions you'd otherwise retype by hand. A macro key takes
+  precedence over any command bound to the same key.
+
 - **Quick Cards** — a persistent, cross-window library of reusable
   rich-text snippets (think Verbatim's quick cards), reached from a
   new 2×2 ribbon cluster (Search / Tag Picker / Manage / Add) between

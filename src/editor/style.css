@@ -4794,6 +4794,51 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
   background: var(--pmd-c-info-bg);
 }
 
+/* Keyboard macros — a section below the shortcut list. Rows reuse the
+   `.pmd-keybinding-row` + binding-chip styling so they read as the same
+   box; only the typed-text field and the section's Add button are new. */
+.pmd-keybindings-macros {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--pmd-c-border-soft);
+}
+/* Reuse the shortcuts list box, but lay rows out as a flush divider
+   list (the base list's 0.6rem gap is meant for group sections). */
+.pmd-macro-list {
+  gap: 0;
+  margin: 0.4rem 0 0;
+}
+/* The typed-text field takes the row's flex:1 "label" slot. */
+.pmd-macro-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  color: var(--pmd-c-text);
+}
+.pmd-macro-text:focus {
+  outline: 2px solid var(--pmd-c-accent);
+  outline-offset: -1px;
+}
+.pmd-macro-delete:hover {
+  color: var(--pmd-c-error);
+  border-color: var(--pmd-c-error);
+}
+.pmd-macro-add {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+  border: 1px solid var(--pmd-c-border);
+  border-radius: 4px;
+  background: var(--pmd-c-bg);
+  cursor: pointer;
+}
+.pmd-macro-add:hover { background: var(--pmd-c-info-bg); }
+
 /* Select Similar Formatting (shadow selection)
    `.pmd-similar-scope` is the outer container the user picked for
    the scoped variant — faint background tint that doesn't compete

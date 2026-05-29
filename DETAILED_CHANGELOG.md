@@ -7,6 +7,30 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Keyboard macros — bind a key to type a snippet.** New
+  `keyboardMacros: KeyboardMacro[]` setting (`{ id, key, text }`;
+  sanitized; default `[]`). `keyboard-macros.ts`'s `buildMacroKeymap`
+  turns the list into a `keymap()` where each key inserts its text at the
+  cursor (`tr.insertText`), installed in `buildEditorPlugins` **before**
+  the ribbon keymap so a macro key wins over a same-key command. The
+  reconfigure subscriber in `index.ts` rebuilds the plugin stack when
+  `keyboardMacros` changes (alongside `ribbonKeyOverrides`), so edits take
+  effect live without a reload. UI: a "Keyboard macros" section appended
+  below the shortcut list in `keybindings-editor.ts`, reusing the
+  shortcuts' visual vocabulary so it reads as the same control — section
+  title + description use the settings-row classes
+  (`.pmd-settings-row-title` / `-desc`) to match the "Keyboard shortcuts"
+  heading; the same boxed `.pmd-keybindings-list` container and
+  `.pmd-keybinding-row` rows, with the shortcut shown as a
+  `.pmd-keybinding-chip` (empty `—` + "+" until set) and the typed-text
+  field in the row's flex "label" slot. Key
+  capture reuses `ribbonKeyStringFor` + `validateKey`; the text field
+  commits on `change` (not per keystroke, to avoid a focus-stealing
+  re-render); per-row delete + an "Add macro" button below the box; an
+  empty-state row when there are none. Setting a key clears it from any
+  other macro (one key = one macro); macro-vs-command conflicts are
+  resolved at runtime by plugin order (macro wins), not dislodged.
+
 - **Home screen: number keys 5-7 for the newer action cards.** Extended
   `actionRunners` + the `onKeyDown` digit map (`home-screen.ts`) from 1-4
   to 1-7: 5 = Bulk convert, 6 = Review all, 7 = Manage flashcards. The

@@ -85,6 +85,7 @@ import { fontSizeClassPlugin } from './font-size-class-plugin.js';
 import { buildSimilarSelectionPlugin } from './similar-selection-plugin.js';
 import { findReplacePlugin } from './find-replace-plugin.js';
 import { frozenSelectionPlugin } from './frozen-selection-plugin.js';
+import { buildMacroKeymap } from './keyboard-macros.js';
 import { FindReplaceBar } from './find-replace-ui.js';
 import { tableEditing, columnResizing } from 'prosemirror-tables';
 import { buildPastePlugin } from './paste-plugin.js';
@@ -1997,6 +1998,7 @@ function applyLineHeight(_multiplier: number): void {
 // see a diff and won't reconfigure (the freshly-built view already
 // has the current bindings baked in).
 let lastRibbonOverrides = settings.get('ribbonKeyOverrides');
+let lastKeyboardMacros = settings.get('keyboardMacros');
 
 // Apply read-mode visual state and editing lockdown whenever the
 // setting changes (and once now to handle the persisted value).
@@ -2043,8 +2045,12 @@ settings.subscribe((s) => {
   refreshWordCount();
   refreshFontSizeDisplay();
   refreshCursorColorDisplay();
-  if (s.ribbonKeyOverrides !== lastRibbonOverrides) {
+  if (
+    s.ribbonKeyOverrides !== lastRibbonOverrides ||
+    s.keyboardMacros !== lastKeyboardMacros
+  ) {
     lastRibbonOverrides = s.ribbonKeyOverrides;
+    lastKeyboardMacros = s.keyboardMacros;
     if (view) {
       view.updateState(
         view.state.reconfigure({ plugins: buildEditorPlugins() }),
@@ -3128,6 +3134,11 @@ export function buildEditorPlugins(): Plugin[] {
     // toggles (F11 / Mod-F11). User overrides come from settings; the
     // `ribbonKeyOverrides` subscriber below reconfigures the state
     // when they change so new bindings take effect without a reload.
+    // User keyboard macros run BEFORE the ribbon keymap so a macro key
+    // wins over a command bound to the same key (the macro is the user's
+    // explicit, more-specific intent). Reconfigured by the
+    // `keyboardMacros` subscriber below when the list changes.
+    keymap(buildMacroKeymap(settings.get('keyboardMacros'))),
     keymap(
       buildRibbonKeymap(settings.get('ribbonKeyOverrides'), ribbonContext),
     ),

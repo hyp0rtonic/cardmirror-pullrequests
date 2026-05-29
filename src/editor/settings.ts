@@ -147,6 +147,17 @@ const DEFAULT_DISPLAY_COLORS: DisplayColors = {
 
 export const DISPLAY_COLOR_KEYS: (keyof DisplayColors)[] = ['analytic', 'undertag'];
 
+/** A user-defined keyboard macro: pressing `key` types `text` at the
+ *  cursor. `id` is a stable local handle for the editor UI. */
+export interface KeyboardMacro {
+  id: string;
+  /** ProseMirror-keymap key string, e.g. `Mod-Shift-q` (same format as
+   *  `ribbonKeyOverrides`). Empty = not yet bound. */
+  key: string;
+  /** Literal text inserted at the cursor when the key fires. */
+  text: string;
+}
+
 /** Schema for all editor settings. Add new fields here with sensible defaults. */
 export interface Settings {
   /** Width of the navigation pane in pixels. */
@@ -646,6 +657,8 @@ export interface Settings {
    * map fall back to `DEFAULT_RIBBON_KEYS`.
    */
   ribbonKeyOverrides: Partial<Record<RibbonCommandId, string | string[]>>;
+  /** User-defined "press a key → type this text" macros. */
+  keyboardMacros: KeyboardMacro[];
   /** Display name attached to new comments authored locally. */
   commentAuthor: string;
   /** Initials attached to new comments authored locally (Word shows
@@ -866,6 +879,7 @@ const DEFAULTS: Settings = {
   condenseWarningCustomResumeMarker: '',
   shrinkCustomProtections: [],
   ribbonKeyOverrides: {},
+  keyboardMacros: [],
   commentAuthor: 'You',
   commentAuthorInitials: '',
   commentsVisible: false,
@@ -1789,6 +1803,7 @@ function sanitize(s: Settings): Settings {
         : DEFAULTS.condenseWarningCustomResumeMarker,
     shrinkCustomProtections: sanitizeShrinkProtections(s.shrinkCustomProtections),
     ribbonKeyOverrides: sanitizeRibbonKeyOverrides(s.ribbonKeyOverrides),
+    keyboardMacros: sanitizeKeyboardMacros(s.keyboardMacros),
     commentAuthor:
       typeof s.commentAuthor === 'string' && s.commentAuthor.length > 0
         ? s.commentAuthor
@@ -2134,6 +2149,23 @@ function sanitizeRibbonKeyOverrides(
     }
   }
   return out as Partial<Record<RibbonCommandId, string | string[]>>;
+}
+
+/** Keep only well-formed `{ id, key, text }` macro entries. */
+function sanitizeKeyboardMacros(raw: unknown): KeyboardMacro[] {
+  if (!Array.isArray(raw)) return [];
+  const out: KeyboardMacro[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const m = r as Partial<KeyboardMacro>;
+    if (typeof m.id !== 'string') continue;
+    out.push({
+      id: m.id,
+      key: typeof m.key === 'string' ? m.key : '',
+      text: typeof m.text === 'string' ? m.text : '',
+    });
+  }
+  return out;
 }
 
 function sanitizeLineHeight(raw: unknown, fallback: number): number {

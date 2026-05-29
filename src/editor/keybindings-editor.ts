@@ -33,7 +33,7 @@ import {
   type RibbonCommandId,
 } from './ribbon-commands.js';
 import { RIBBON_GROUPS } from './ribbon-groups.js';
-import { settings } from './settings.js';
+import { settings, type KeyboardMacro } from './settings.js';
 import { setIcon } from './icons';
 
 function getOverrides(): Partial<Record<RibbonCommandId, string | string[]>> {
@@ -77,6 +77,33 @@ function clearOverride(id: RibbonCommandId): void {
   const next = { ...getOverrides() };
   delete next[id];
   settings.set('ribbonKeyOverrides', next);
+}
+
+// ── Keyboard macros ──────────────────────────────────────────────────
+function getMacros(): KeyboardMacro[] {
+  return settings.get('keyboardMacros');
+}
+function updateMacro(id: string, patch: Partial<KeyboardMacro>): void {
+  settings.set(
+    'keyboardMacros',
+    getMacros().map((m) => (m.id === id ? { ...m, ...patch } : m)),
+  );
+}
+function removeMacro(id: string): void {
+  settings.set('keyboardMacros', getMacros().filter((m) => m.id !== id));
+}
+/** Set a macro's key, clearing that key from any other macro so one key
+ *  only ever fires one macro (mirrors the one-key-one-command rule for
+ *  shortcuts above). */
+function setMacroKey(id: string, key: string): void {
+  settings.set(
+    'keyboardMacros',
+    getMacros().map((m) => {
+      if (m.id === id) return { ...m, key };
+      if (m.key === key) return { ...m, key: '' };
+      return m;
+    }),
+  );
 }
 
 /**
@@ -329,6 +356,179 @@ export function buildKeybindingsEditor(): HTMLElement {
     return row;
   }
 
+  // Mirrors `startCapture` (the shortcut version): hide the row's "+",
+  // show the "Press a key…" pill, capture the next key, bind it.
+  function startMacroKeyCapture(id: string, row: HTMLElement): void {
+    if (activeCapture) exitCapture();
+    const addBtn = row.querySelector<HTMLButtonElement>('.pmd-keybinding-add');
+    const capturePill = row.querySelector<HTMLElement>('.pmd-keybinding-capture');
+    if (!addBtn || !capturePill) return;
+    addBtn.style.display = 'none';
+    capturePill.style.display = '';
+    capturePill.textContent = 'Press a key… (Esc cancels)';
+    row.classList.add('pmd-keybinding-row-capturing');
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        exitCapture();
+        return;
+      }
+      if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      const key = ribbonKeyStringFor(e);
+      const err = validateKey(key, e);
+      if (err) {
+        flashConflict(row, err);
+        return;
+      }
+      setMacroKey(id, key); // → settings change → render() → exitCapture
+      exitCapture();
+    };
+    document.addEventListener('keydown', onKey, true);
+    activeCapture = {
+      row,
+      cleanup: () => {
+        document.removeEventListener('keydown', onKey, true);
+        addBtn.style.display = '';
+        capturePill.style.display = 'none';
+        row.classList.remove('pmd-keybinding-row-capturing');
+      },
+    };
+  }
+
+  /** A macro row, using the same row + binding-chip vocabulary as a
+   *  shortcut row: the typed-text field plays the "label" slot, the
+   *  shortcut shows as a key chip on the right (empty `—` + "+" until
+   *  set). */
+  function renderMacroRow(m: KeyboardMacro): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'pmd-keybinding-row pmd-macro-row';
+
+    const text = document.createElement('input');
+    text.type = 'text';
+    text.className = 'pmd-macro-text';
+    text.placeholder = 'Text to type…';
+    text.value = m.text;
+    // Commit on change (blur / Enter), not per keystroke — a per-input
+    // settings write would re-render and steal focus mid-typing.
+    text.addEventListener('change', () => updateMacro(m.id, { text: text.value }));
+    text.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        text.blur();
+      }
+    });
+    row.appendChild(text);
+
+    const chips = document.createElement('span');
+    chips.className = 'pmd-keybinding-chips';
+    if (!m.key) {
+      const empty = document.createElement('span');
+      empty.className = 'pmd-keybinding-empty';
+      empty.textContent = '—';
+      chips.appendChild(empty);
+    } else {
+      const chip = document.createElement('span');
+      chip.className = 'pmd-keybinding-chip';
+      const txt = document.createElement('span');
+      txt.textContent = formatKeyForDisplay(m.key);
+      chip.appendChild(txt);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'pmd-keybinding-chip-remove';
+      setIcon(remove, 'close');
+      remove.title = 'Remove this binding';
+      remove.addEventListener('click', () => updateMacro(m.id, { key: '' }));
+      chip.appendChild(remove);
+      chips.appendChild(chip);
+    }
+    row.appendChild(chips);
+
+    // "+" to capture — only when unbound (a macro has a single key; to
+    // change it, remove the chip first, like clearing then re-adding).
+    if (!m.key) {
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'pmd-keybinding-add';
+      addBtn.textContent = '+';
+      addBtn.title = 'Set the shortcut';
+      addBtn.addEventListener('click', () => startMacroKeyCapture(m.id, row));
+      row.appendChild(addBtn);
+
+      const capturePill = document.createElement('span');
+      capturePill.className = 'pmd-keybinding-capture';
+      capturePill.style.display = 'none';
+      row.appendChild(capturePill);
+    }
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'pmd-keybinding-reset pmd-macro-delete';
+    del.title = 'Remove macro';
+    del.setAttribute('aria-label', 'Remove macro');
+    setIcon(del, 'close');
+    del.addEventListener('click', () => removeMacro(m.id));
+    row.appendChild(del);
+
+    const note = document.createElement('span');
+    note.className = 'pmd-keybinding-note';
+    row.appendChild(note);
+
+    return row;
+  }
+
+  function renderMacrosSection(): HTMLElement {
+    const section = document.createElement('section');
+    section.className = 'pmd-keybindings-macros';
+    // Title + description use the same classes as a settings row, so they
+    // match the "Keyboard shortcuts" heading + its description above.
+    const headBlock = document.createElement('div');
+    headBlock.className = 'pmd-settings-row-text';
+    const head = document.createElement('span');
+    head.className = 'pmd-settings-row-title';
+    head.textContent = 'Keyboard macros';
+    headBlock.appendChild(head);
+    const desc = document.createElement('span');
+    desc.className = 'pmd-settings-row-desc';
+    desc.textContent =
+      'Bind a shortcut to type a snippet of text at the cursor. A macro key takes precedence over any command on the same key.';
+    headBlock.appendChild(desc);
+    section.appendChild(headBlock);
+
+    // Same boxed list container as the shortcuts above.
+    const macroList = document.createElement('div');
+    macroList.className = 'pmd-keybindings-list pmd-macro-list';
+    const macros = getMacros();
+    if (macros.length === 0) {
+      const emptyRow = document.createElement('div');
+      emptyRow.className = 'pmd-keybinding-row';
+      const span = document.createElement('span');
+      span.className = 'pmd-keybinding-empty';
+      span.textContent = 'No macros yet — add one below.';
+      emptyRow.appendChild(span);
+      macroList.appendChild(emptyRow);
+    } else {
+      for (const m of macros) macroList.appendChild(renderMacroRow(m));
+    }
+    section.appendChild(macroList);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'pmd-macro-add';
+    addBtn.textContent = '+ Add macro';
+    addBtn.addEventListener('click', () => {
+      settings.set('keyboardMacros', [
+        ...getMacros(),
+        { id: crypto.randomUUID(), key: '', text: '' },
+      ]);
+    });
+    section.appendChild(addBtn);
+    return section;
+  }
+
   function render(): void {
     exitCapture();
     // Preserve scroll position so rebinds don't snap the user
@@ -388,6 +588,9 @@ export function buildKeybindingsEditor(): HTMLElement {
     footer.appendChild(restoreAll);
     wrap.appendChild(footer);
 
+    // Keyboard macros — their own section below all the shortcuts.
+    wrap.appendChild(renderMacrosSection());
+
     // Re-apply the live filter so the just-rebuilt rows reflect
     // the current search query (rebuild ran from a settings
     // change while a filter was active).
@@ -402,9 +605,11 @@ export function buildKeybindingsEditor(): HTMLElement {
   // Re-render on any override change (writes from chip × / + / ↺ /
   // capture all flow through settings.set, which fires this subscriber).
   let lastOverrides = getOverrides();
+  let lastMacros = getMacros();
   const unsubscribe = settings.subscribe((s) => {
-    if (s.ribbonKeyOverrides !== lastOverrides) {
+    if (s.ribbonKeyOverrides !== lastOverrides || s.keyboardMacros !== lastMacros) {
       lastOverrides = s.ribbonKeyOverrides;
+      lastMacros = s.keyboardMacros;
       render();
     }
   });
