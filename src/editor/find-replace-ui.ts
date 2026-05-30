@@ -372,6 +372,10 @@ export class FindReplaceBar {
   open(opts: FindBarOpenOptions): void {
     this.mode = opts.mode;
     this.sortMode = opts.sortMode;
+    // Whether the bar was closed before this call. Used below to seed
+    // the input only on a fresh open — re-triggering while already open
+    // (e.g. Ctrl-F → Ctrl-H to switch modes) must keep what's typed.
+    const wasClosed = this.root.hidden;
     this.root.hidden = false;
     this.replaceRow.hidden = opts.mode === 'find';
     this.sortLabel.textContent =
@@ -402,15 +406,19 @@ export class FindReplaceBar {
     }
     this.capturedScope = scopeCandidate;
 
-    // Seed the input only with the remembered last query (when
-    // that setting is on). Selection-seeding is intentionally NOT
-    // done — a user opening Ctrl-F with text selected typically
-    // wants to scope the search to that selection (see the scope
-    // toggle below), not pre-fill the find input with the
-    // selection's text.
-    if (view && this.findInput.value === '' && settings.get('findRememberLastQuery')) {
-      const remembered = settings.get('findLastQuery');
-      if (remembered) this.findInput.value = remembered;
+    // Seed the input on a fresh open: with the remembered last query
+    // when that setting is on, otherwise empty. Set it unconditionally
+    // (not only when currently empty) — the bar keeps the DOM input's
+    // value across open/close, so when the setting is off we must
+    // actively clear the lingering query, otherwise the bar behaves as
+    // if "remember last query" were always on. Selection-seeding is
+    // intentionally NOT done — a user opening Ctrl-F with text selected
+    // typically wants to scope the search to that selection (see the
+    // scope toggle below), not pre-fill the find input with it.
+    if (wasClosed) {
+      this.findInput.value = settings.get('findRememberLastQuery')
+        ? settings.get('findLastQuery')
+        : '';
     }
 
     // Auto-enable the scope toggle whenever the user opened the

@@ -28,6 +28,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **"Find: remember the last search query" now actually turns off.** The
+  find bar kept the text you'd typed even after closing, so the last
+  query reappeared on every open no matter how the setting was set. It
+  now opens with the remembered query only when the setting is on, and
+  with a clean slate when it's off.
+
 - **The Analytic / Undertag color pickers now actually work, and the
   Appearance and Accessibility copies are linked.** The Appearance
   "Style colors" picker had no visible effect — the Accessibility

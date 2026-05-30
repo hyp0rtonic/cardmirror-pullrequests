@@ -7,6 +7,20 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **`findRememberLastQuery` is honored again.** The find bar
+  (`find-replace-ui.ts`) reuses one DOM input across open/close and
+  never cleared it, so once a query was typed it lingered in the
+  element. `open()` only pre-filled "when the input is empty", which was
+  never true after the first use — so the remembered query stayed
+  visible regardless of the setting (and `close()`'s gated persist was
+  irrelevant). Fix: capture `wasClosed = this.root.hidden` before
+  un-hiding, and on a fresh open set the input value deterministically —
+  `settings.get('findLastQuery')` when `findRememberLastQuery` is on,
+  `''` when off — instead of conditionally pre-filling only an
+  already-empty field. Guarding on `wasClosed` means re-triggering while
+  the bar is open (Ctrl-F → Ctrl-H mode switch) still preserves what's
+  typed.
+
 - **"Cycle Theme" ribbon command (`cycleTheme`).** A bindable command
   that rotates the `theme` setting light → dark → system → light. Added
   through the standard registry path: the `RibbonCommandId` union,
