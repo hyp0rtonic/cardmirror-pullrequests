@@ -24,6 +24,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install desktop dependencies
+        # apps/desktop is intentionally NOT in the workspaces array
+        # (electron-builder's internal install step prunes hoisted
+        # dev-deps mid-build under npm workspaces — same workaround
+        # as in release.yml). The root typecheck reaches into
+        # apps/desktop/src via the tests/desktop test files'
+        # imports, so electron's types must be present here too.
+        run: npm --prefix apps/desktop ci
+
       - name: Typecheck
         run: npm run typecheck
 
