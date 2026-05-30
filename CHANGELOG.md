@@ -7,6 +7,21 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Fixed
+
+- **Paste no longer drops an undeletable "intermediate line" below a
+  tag/cite.** Sources that wrap content in layout tables — Google Docs
+  published views, news-site article bodies, marketing emails, .docx
+  page-frame copies — used to leave their wrapping single-cell `<table>`
+  intact on paste. Visible as either an empty, undeletable gap (Backspace
+  / Delete would expand to swallow the whole card instead of removing it),
+  or as text that looked inset from a real card body with a small extra
+  vertical gap above it (the table cell's own padding / borders). Single-
+  cell layout tables — and any table whose every row holds exactly one
+  cell — now unwrap on paste, lifting their paragraphs out into normal
+  body text. Real data tables (any row with two or more cells) pass
+  through unchanged.
+
 ## 0.1.0-alpha.5 — 2026-05-29
 
 ### Added

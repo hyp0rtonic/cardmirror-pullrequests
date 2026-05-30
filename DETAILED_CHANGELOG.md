@@ -7,6 +7,35 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Paste-time unwrap of single-cell layout tables.** `paste-plugin.ts`'s
+  `transformPasted` hook now runs a new `unwrapSingleCellTables` pass
+  ahead of `freshHeadingIds`. Pasting from sources that use `<table>`
+  as a layout primitive (Google Docs published views, news-site article
+  bodies, marketing emails, .docx page-frame copies) used to leave the
+  wrapping `table` node intact in the parsed clipboard slice — and
+  because both `table` and `table_cell` are `isolating: true` in our
+  schema (`src/schema/nodes.ts:528, 573`), the surrounding `card_body`
+  could neither join across the boundary nor be deleted around it.
+  Visible failure modes: (a) an empty 1×1 table between a card's cite
+  and its first body paragraph rendered as an apparently-empty line
+  that Backspace would refuse to remove, expanding to swallow the
+  whole card on retry; (b) a 1×1 with content rendered text inset
+  from a real card body, with a small extra vertical gap above,
+  because of the cell's default padding + the table's block-level
+  margin. New rule: any `table` whose every row contains exactly one
+  cell unwraps to the concatenation of its cells' paragraphs. Multi-
+  cell-per-row tables (real data tables) pass through unchanged.
+  Empty 1×1 tables fall out as the degenerate case (no paragraphs to
+  lift). At the slice root we emit generic `paragraph` nodes so PM's
+  contextual fitting and our own `tryPasteAsCardBodies` adapt them to
+  the cursor's body slot; when the unwrap happens inside a `card` /
+  `analytic_unit` already present in the slice (whole-card paste case),
+  we emit `card_body` directly so the parent's content rule is
+  satisfied without depending on downstream fitting. F2 plain-paste
+  is unaffected because that path bypasses the HTML parser and
+  builds the slice from `text/plain` via `buildPlainTextSlice`,
+  which can only produce `paragraph` and `text` nodes.
+
 ## 0.1.0-alpha.5 — 2026-05-29
 
 - **Find ordering: document-order-from-cursor, not proximity.**

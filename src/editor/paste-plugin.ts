@@ -204,8 +204,12 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
       // so id-less pasted pockets/hats/blocks/tags would be inert. Runs
       // inside PM's `parseFromClipboard`, before `handlePaste` sees the
       // slice, so the split / card-body paths below also get fresh ids.
+      //
+      // Layout-table unwrap runs in the same hook so head-detect /
+      // card-body fitting downstream see content that's already been
+      // lifted out of any single-cell wrapping table.
       transformPasted(slice) {
-        return freshHeadingIds(slice);
+        return freshHeadingIds(unwrapSingleCellTables(slice));
       },
       handlePaste(view, event, slice) {
         // Clipboard image paste — screenshots, copy-image from a
@@ -281,6 +285,94 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
       },
     },
   });
+}
+
+/**
+ * Strip single-cell layout tables from a clipboard slice. Source
+ * HTML routinely wraps blocks in `<table>` as a layout primitive
+ * (Google Docs published views, news-site article bodies, marketing
+ * emails, .docx page-frame copies). PM's default clipboard parser
+ * preserves those tables, leaving text trapped inside a `table_cell`
+ * — which `isolating: true` walls off from Backspace/Delete and
+ * which renders inset because of cell padding. The empty-1×1
+ * degenerate of the same shape is the "intermediate undeletable
+ * line" users see between a tag/cite and freshly-pasted body text.
+ *
+ * "Single-cell" = every row has exactly one cell. Multi-cell-per-row
+ * tables (real data tables) pass through unchanged. Cells with
+ * only-empty paragraphs lift to nothing, so empty 1×1 tables drop
+ * out of the slice entirely.
+ *
+ * Runs inside `transformPasted`, before head-detect / card-body
+ * fitting see the slice. Emits generic `paragraph` nodes at the
+ * slice root (PM's contextual fit + `tryPasteAsCardBodies` adapt
+ * them to a card_body slot); when the table sits inside a `card`
+ * or `analytic_unit` in the slice itself (whole-card paste case),
+ * emits `card_body` to satisfy the parent's content rule directly.
+ *
+ * Exported for tests.
+ */
+export function unwrapSingleCellTables(slice: Slice): Slice {
+  const transformed = transformFragmentUnwrap(slice.content, null);
+  if (transformed === slice.content) return slice;
+  return new Slice(transformed, slice.openStart, slice.openEnd);
+}
+
+function transformFragmentUnwrap(
+  fragment: Fragment,
+  parentName: string | null,
+): Fragment {
+  let changed = false;
+  const out: PMNode[] = [];
+  fragment.forEach((child) => {
+    if (child.type.name === 'table' && isSingleCellTable(child)) {
+      changed = true;
+      out.push(...liftSingleCellTable(child, parentName));
+      return;
+    }
+    if (!child.isLeaf && child.content.size > 0) {
+      const inner = transformFragmentUnwrap(child.content, child.type.name);
+      if (inner !== child.content) {
+        changed = true;
+        out.push(child.copy(inner));
+        return;
+      }
+    }
+    out.push(child);
+  });
+  return changed ? Fragment.fromArray(out) : fragment;
+}
+
+function isSingleCellTable(table: PMNode): boolean {
+  if (table.childCount === 0) return false;
+  for (let i = 0; i < table.childCount; i++) {
+    const row = table.child(i);
+    if (row.type.name !== 'table_row') return false;
+    if (row.childCount !== 1) return false;
+  }
+  return true;
+}
+
+function liftSingleCellTable(
+  table: PMNode,
+  parentName: string | null,
+): PMNode[] {
+  const wrapTypeName =
+    parentName === 'card' || parentName === 'analytic_unit'
+      ? 'card_body'
+      : 'paragraph';
+  const wrapType = schema.nodes[wrapTypeName];
+  if (!wrapType) return [];
+  const out: PMNode[] = [];
+  table.forEach((row) => {
+    row.forEach((cell) => {
+      cell.forEach((para) => {
+        if (para.content.size === 0) return;
+        out.push(wrapType.create(null, para.content));
+      });
+    });
+  });
+  return out;
 }
 
 /**
