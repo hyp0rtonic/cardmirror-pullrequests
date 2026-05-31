@@ -7,6 +7,8 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+## 0.1.0-alpha.7 — 2026-05-30
+
 - **"Delete Current Heading" bindable command (`deleteCurrentHeading`).**
   Sibling to `selectCurrentHeading` / `copyCurrentHeading` — same
   cursor-only enclosing-structure bounds (`enclosingStructureRange` via
