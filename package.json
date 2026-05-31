@@ -22,6 +22,7 @@
     "test:bench": "vitest bench --run",
     "typecheck": "tsc --noEmit",
     "round-trip": "tsx bin/round-trip.ts",
+    "gen:new-template": "tsx scripts/gen-new-template.ts",
     "desktop:install": "npm --prefix apps/desktop install",
     "desktop:dev": "npm --prefix apps/desktop run dev",
     "desktop:build": "npm --prefix apps/desktop run build",

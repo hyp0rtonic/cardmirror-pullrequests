@@ -7,6 +7,24 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Windows "New → CardMirror Document" context-menu entry (drafted,
+  UNVERIFIED on Windows).** Scaffolding for a right-click "New" submenu
+  item via the classic ShellNew registry mechanism — no shell-extension
+  DLL, just a registry value + a template file. `scripts/gen-new-template.ts`
+  (run via `npm run gen:new-template`) serializes a minimal blank doc (a
+  single empty paragraph) to `apps/desktop/resources/new-template.cmir`
+  through the real `serializeNative`, so it's always a valid current-
+  format `.cmir`; the file is committed and shipped via electron-builder
+  `extraResources` to `$INSTDIR\resources\new-template.cmir`.
+  `apps/desktop/build/installer.nsh` (auto-included by electron-builder)
+  writes `SHCTX\Software\Classes\.cmir\ShellNew\FileName` to that path on
+  install and removes it on uninstall; SHCTX follows the per-user /
+  per-machine install scope, matching where the existing `.cmir`
+  `fileAssociations` registration lives (which also supplies the menu
+  label "CardMirror Document"). Not yet tested on a real Windows machine
+  — left as a ready-to-verify draft; kept out of the user-facing
+  changelog until confirmed working.
+
 - **In-file object search matches a tag by its card's cite.** Diving
   into a file (`extractFile` in `file-search.ts`) produced a `tag`
   `FileObject` whose only searchable text was the tag's own words, and

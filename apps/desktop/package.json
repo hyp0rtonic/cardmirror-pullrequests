@@ -38,6 +38,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/new-template.cmir",
+        "to": "new-template.cmir"
       }
     ],
     "fileAssociations": [
