@@ -7,6 +7,42 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Version / "About this install" in the command palette.** A synthetic
+  settings result in `searchSettingsSource` (`quick-card-search-ui.ts`),
+  prepended when the query prefix-matches "version" / "about" / "about
+  this install" / "release". Its name shows `CardMirror <appVersion>`
+  (`appVersion` newly exported from `install-info.ts`), and it carries
+  `settingsTarget: { category: 'general', anchor: 'about-this-install' }`.
+  `SettingsTarget` gains an `anchor` field; `SettingsModal.open` handles
+  it via a new `revealAnchor` that scrolls + flashes the `[data-anchor]`
+  section (the About block, now tagged `data-anchor="about-this-install"`)
+  — reusing the existing settings-search deep-link piping.
+
+- **Settings open + change performance on large docs.** Several
+  settings-subscriber paths did O(doc) work on every change (and at open):
+  - `buildColorOverridesEditor` (`settings-ui.ts`) was the dominant cost:
+    each of ~37 color rows ran `getComputedStyle` — via `currentValue`
+    (`getComputedStyle(documentElement)`) and `parseToRgbaParts`, which
+    **appended + removed a probe `<span>` to `<body>` per call** — on
+    every settings change, forcing a full-document style recalc each time
+    (read/write thrash × 37). Now: one persistent off-screen probe reused
+    across calls (no per-call append/remove), and each row subscribes only
+    to ITS OWN token (`displayColors[dcKey]` or `customColorOverrides[name]`)
+    so editing one color refreshes one row, not all 37.
+  - The global apply subscriber (`index.ts`) called `applyReadMode` on
+    every change, which dispatches a transaction that makes the read-mode
+    plugin re-walk the doc to rebuild hiding decorations — now guarded on
+    `readMode` / `hideEmphasisBordersInReadMode` actually changing.
+  - The nav/outline panel (`nav-panel.ts`) rebuilt the whole outline (one
+    node per heading) on every settings change — now only when `navMaxLevel`
+    or `showCitePreview` changes.
+  - The apply subscriber's `refreshWordCount()` walked the whole doc on
+    every change; now `refreshWordCount({ selectionOnly: true })` reuses
+    the cached whole-doc count (the doc is unchanged on a settings toggle).
+  - The Keyboard tab's ~150-row keybindings list is built on the next
+    frame (`requestAnimationFrame`) rather than blocking the dialog open
+    (it's not the default tab, and its panel starts hidden).
+
 - **Word-style paragraph navigation: cleaner collapse / cross-block
   targets** (`word-selection-keymap.ts`).
   - `verticalCommandPair`'s Down (`to-end`) move with a non-empty

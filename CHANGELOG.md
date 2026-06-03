@@ -60,6 +60,11 @@ see `DETAILED_CHANGELOG.md`.
   way other toggle buttons do. Underline only lights for the named
   underline style, not the direct underline tags and analytics use.
 
+- **Find the app version from the command bar.** Searching "version" or
+  "about this install" in the command bar shows the running version, and
+  pressing Enter jumps straight to the About this install section of
+  Settings.
+
 ### Changed
 
 - **Paragraph navigation lands on cleaner spots.** With a selection,
@@ -83,6 +88,18 @@ see `DETAILED_CHANGELOG.md`.
   time — a newly created or re-grounded annotation now uses the position
   you already selected, and the rest are left where they are. On big docs
   this takes note / AI-comment creation from sluggish to instant.
+
+- **Opening Settings and changing a setting are fast again on large
+  documents.** Both could take seconds on a big doc. The main offender was
+  the Accessibility color panel, which forced a full-document style recalc
+  for every one of its ~37 color rows on every settings change (and at
+  open); it now reuses a single probe and refreshes only the row whose
+  color actually changed — so editing one color touches one row, not all
+  of them. A few settings were also re-applied on every change even when
+  unrelated (read mode re-walking the doc, the outline panel rebuilding,
+  a redundant word-count walk); those now run only when their own input
+  changes. The keyboard-shortcuts list also builds a frame after the
+  dialog opens rather than blocking it.
 
 ## 0.1.0-alpha.8 — 2026-06-01
 

@@ -197,11 +197,26 @@ export class NavigationPanel {
     applyNavWidthCss(settings.get('navWidth'));
     this.installResizeHandle();
 
-    // Re-render when relevant settings change.
+    // Re-render only when a setting the outline ACTUALLY depends on
+    // changes — the level filter (`navMaxLevel`) or the cite preview
+    // (`showCitePreview`). Re-rendering on every settings change rebuilt
+    // the whole outline (one DOM node per heading/card — O(doc)) on a
+    // large doc every time any unrelated setting was toggled, which was a
+    // big chunk of the per-settings-change lag. (Multi-pane level changes
+    // go through `localMaxLevel` + a direct render, not this subscriber.)
+    let lastNavMaxLevel = settings.get('navMaxLevel');
+    let lastShowCitePreview = settings.get('showCitePreview');
     this.unsubscribeSettings = settings.subscribe((s) => {
       applyNavWidthCss(s.navWidth);
       this.updateLevelButtonsActive();
-      if (this.currentDoc) this.render(this.currentDoc);
+      if (
+        this.currentDoc &&
+        (s.navMaxLevel !== lastNavMaxLevel || s.showCitePreview !== lastShowCitePreview)
+      ) {
+        lastNavMaxLevel = s.navMaxLevel;
+        lastShowCitePreview = s.showCitePreview;
+        this.render(this.currentDoc);
+      }
     });
 
     parent.appendChild(this.root);

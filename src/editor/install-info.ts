@@ -13,6 +13,10 @@
 import pkg from '../../package.json';
 import { getHost } from './host/index.js';
 
+/** The running app's version string (from `package.json`). Exported so
+ *  the command palette can surface it without re-importing the manifest. */
+export const appVersion: string = pkg.version;
+
 export interface InstallInfoEntry {
   label: string;
   /** Human-friendly main value, e.g. "0.1.0-alpha.1". */
@@ -26,7 +30,7 @@ export function getInstallInfo(): InstallInfoEntry[] {
   const hostKind = getHost().kind;
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const entries: InstallInfoEntry[] = [
-    { label: 'Version', value: pkg.version },
+    { label: 'Version', value: appVersion },
     {
       label: 'Host',
       value: hostKind === 'electron' ? 'Desktop (Electron)' : 'Web browser',

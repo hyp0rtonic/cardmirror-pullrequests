@@ -2185,6 +2185,14 @@ function applyLineHeight(_multiplier: number): void {
 // has the current bindings baked in).
 let lastRibbonOverrides = settings.get('ribbonKeyOverrides');
 let lastKeyboardMacros = settings.get('keyboardMacros');
+// Read-mode state is applied at boot (below) and on doc mount; the
+// subscriber only needs to re-apply it when it ACTUALLY changes. Tracked
+// because `applyReadMode` dispatches a transaction that makes the
+// read-mode plugin re-walk the doc to rebuild its hiding decorations —
+// O(doc), so re-running it on every unrelated settings change was the
+// doc-size-dependent settings lag.
+let lastReadMode = settings.get('readMode');
+let lastReadModeBorders = settings.get('hideEmphasisBordersInReadMode');
 
 // Apply read-mode visual state and editing lockdown whenever the
 // setting changes (and once now to handle the persisted value).
@@ -2193,7 +2201,11 @@ settings.subscribe((s) => {
   applyShowDocNameChip(s.showDocNameChip);
   applyIconSet(s.iconSet);
   applyReduceMotion(s.reduceMotion);
-  applyReadMode(s.readMode);
+  if (s.readMode !== lastReadMode || s.hideEmphasisBordersInReadMode !== lastReadModeBorders) {
+    lastReadMode = s.readMode;
+    lastReadModeBorders = s.hideEmphasisBordersInReadMode;
+    applyReadMode(s.readMode);
+  }
   applyNavPaneVisible(s.navPaneVisible);
   applyFormatNavPaneByType(s.formatNavPaneByType);
   applyZoom(s.zoomPct);
@@ -2228,7 +2240,13 @@ settings.subscribe((s) => {
   applyLineHeight(s.lineHeight);
   applyFormattingPanel(s.formattingPanelMode, s.formattingPanelPreview, s.showCharacterStyles);
   syncParagraphIntegrityBtn();
-  refreshWordCount();
+  // A settings change never edits the document, so the whole-doc word
+  // count can't have changed — reuse the cached count (re-formatting the
+  // read-time strings with the current readers) instead of re-walking the
+  // whole doc on every toggle. `selectionOnly` is the "doc unchanged,
+  // reuse the cache" path (it still counts a live selection, which is
+  // O(range) and cheap).
+  refreshWordCount({ selectionOnly: true });
   refreshFontSizeDisplay();
   refreshCursorColorDisplay();
   if (

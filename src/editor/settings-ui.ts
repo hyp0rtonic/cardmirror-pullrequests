@@ -170,10 +170,13 @@ export const CATEGORY_TABS: { id: SettingsCategory; label: string }[] = [
 ];
 
 /** A deep-link into the settings dialog: open a tab and optionally
- *  scroll to / flash a specific setting. */
+ *  scroll to / flash a specific setting, or a named non-setting section
+ *  (e.g. "About this install") via its `data-anchor`. */
 export interface SettingsTarget {
   category?: SettingsCategory;
   settingKey?: keyof Settings;
+  /** `data-anchor` value of a non-setting section to scroll to + flash. */
+  anchor?: string;
 }
 
 class SettingsModal {
@@ -231,6 +234,28 @@ class SettingsModal {
     // e.g. when reached from the search palette's `s` shortcuts.
     if (target?.category) this.setActiveCategory(target.category);
     if (target?.settingKey) this.revealSetting(target.settingKey);
+    if (target?.anchor) this.revealAnchor(target.anchor);
+  }
+
+  /** Scroll a named non-setting section (by `data-anchor`) into view and
+   *  flash it — the deep-link target for things like "About this install"
+   *  that aren't editable settings rows. */
+  private revealAnchor(anchor: string): void {
+    const el = this.dialog.querySelector<HTMLElement>(
+      `[data-anchor="${CSS.escape(anchor)}"]`,
+    );
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.classList.remove('pmd-settings-row-flash');
+      void el.offsetWidth; // restart the animation if already applied
+      el.classList.add('pmd-settings-row-flash');
+      el.addEventListener(
+        'animationend',
+        () => el.classList.remove('pmd-settings-row-flash'),
+        { once: true },
+      );
+    });
   }
 
   /** Scroll a specific setting row into view and flash it. Runs on the
@@ -676,7 +701,14 @@ class SettingsModal {
       return row;
     } else if (meta.kind === 'keybindings') {
       row.appendChild(text);
-      row.appendChild(buildKeybindingsEditor());
+      // The per-command keybindings list (~150 rows) is the single
+      // heaviest part of opening Settings, and it lives under the
+      // Keyboard tab — which isn't the default. Build it on the next
+      // frame instead of blocking the open: the dialog appears instantly
+      // and the list fills in invisibly (its panel starts hidden).
+      const slot = document.createElement('div');
+      row.appendChild(slot);
+      requestAnimationFrame(() => slot.appendChild(buildKeybindingsEditor()));
       return row;
     } else if (meta.kind === 'folder') {
       // Path display + Browse… / Clear buttons, mounted UNDER the
@@ -978,6 +1010,9 @@ function buildColorsEditor(): HTMLElement {
 function buildInstallInfoSection(): HTMLElement {
   const wrap = document.createElement('section');
   wrap.className = 'pmd-install-info-section';
+  // Deep-link target: the command palette's "version / about this install"
+  // result scrolls here (SettingsTarget.anchor).
+  wrap.dataset['anchor'] = 'about-this-install';
 
   const hr = document.createElement('hr');
   hr.className = 'pmd-install-info-divider';
@@ -2026,14 +2061,24 @@ function buildColorOverridesEditor(): HTMLElement {
    *  numeric RGB + alpha. Used to pre-fill the color picker AND
    *  the alpha slider with the token's current effective value
    *  regardless of how it's stored. */
+  // ONE reused, hidden probe for resolving color strings to rgba.
+  // Appending + removing a fresh probe to <body> on every call (×37 rows ×
+  // every settings change, plus at build) forced a full-document layout
+  // recalc each time — the dominant settings-lag source on large docs.
+  // Kept connected + laid out (`visibility:hidden`, off-screen) so
+  // `getComputedStyle(probe).color` resolves, but reused so changing only
+  // its own color dirties just this leaf element, not the whole document.
+  const probe = document.createElement('span');
+  probe.style.cssText =
+    'position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  onDetached(wrap, () => probe.remove());
+
   function parseToRgbaParts(css: string): {
     r: number; g: number; b: number; a: number;
   } {
-    const probe = document.createElement('span');
     probe.style.color = css;
-    document.body.appendChild(probe);
     const resolved = getComputedStyle(probe).color;
-    document.body.removeChild(probe);
     const m = resolved.match(
       /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?/,
     );
@@ -2182,10 +2227,24 @@ function buildColorOverridesEditor(): HTMLElement {
     row.appendChild(right);
 
     refresh();
-    // Refresh when ANY setting changes — keeps the row in sync
-    // when the user toggles a future preset, edits a different
-    // row, etc. Cheap (reads one computed style).
-    const unsub = settings.subscribe(refresh);
+    // Refresh this row only when ITS OWN token's value changes — the
+    // document-text rows track `displayColors[dcKey]`, the rest their
+    // own `customColorOverrides[name]`. (`refresh` reads a computed
+    // style, so re-running it across all ~37 rows on every settings
+    // change — or on every color edit, when only one token actually
+    // changed — was the dominant settings lag on large docs. The
+    // customizable tokens are independent base colors, so editing one
+    // never changes another's effective value.)
+    const tokenValue = (s: ReturnType<typeof settings.all>): unknown =>
+      dcKey ? s.displayColors[dcKey] : s.customColorOverrides[tok.name];
+    let lastBacking = tokenValue(settings.all());
+    const unsub = settings.subscribe((s) => {
+      const cur = tokenValue(s);
+      if (cur !== lastBacking) {
+        lastBacking = cur;
+        refresh();
+      }
+    });
     onDetached(row, () => unsub());
 
     return row;

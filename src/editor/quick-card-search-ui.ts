@@ -36,6 +36,7 @@ import { icon } from './icons';
 import { schema } from '../schema/index.js';
 import { settings, SETTING_METADATA, type SettingsCategory } from './settings.js';
 import { openSettings, CATEGORY_TABS, type SettingsTarget } from './settings-ui.js';
+import { appVersion } from './install-info.js';
 import { getHost, getElectronHost } from './host/index.js';
 import { showToast } from './toast.js';
 import { insertSpeechSlice } from './speech-doc-send.js';
@@ -356,6 +357,22 @@ function searchSettingsSource(query: string): PaletteResult[] {
       settingsTarget: { category: id },
     }),
   );
+
+  // "Version / About this install" — surfaces the running app version and,
+  // on Enter, deep-links to the About section (Settings → General). Matched
+  // the way a user looks for it: "version", "about", "about this install".
+  const q = tokens.join(' ');
+  const aboutKeys = ['version', 'about this install', 'about', 'release'];
+  if (q.length > 0 && aboutKeys.some((k) => k.startsWith(q) || q.startsWith(k))) {
+    results.unshift({
+      source: 'settings',
+      name: `CardMirror ${appVersion}`,
+      meta: 'About this install',
+      matchedName: true,
+      snippet: null,
+      settingsTarget: { category: 'general', anchor: 'about-this-install' },
+    });
+  }
 
   // Then individual settings, ranked by where the first token hits.
   // A setting matches on its label OR any alias (aliases let queries
