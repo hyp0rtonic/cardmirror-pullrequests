@@ -23,6 +23,31 @@ in each release, see `CHANGELOG.md`.
   it otherwise sat in the corner below the nav rail and was redundant
   with the per-pane buttons.
 
+- **Dropzone pill stranded over the pane footer on multi-pane boot**
+  (`index.ts`, `style.css`). The floating dropzone pill anchors to the
+  leftmost VISIBLE pane body via `positionDropzone`, but multi-pane has
+  TWO stacked bottom bars — the per-pane `.pmd-pane-footer` (word count
+  + Σ) sits on top of the still-visible full-width `#status-bar`. Three
+  things conspired: (1) the boot `requestAnimationFrame(positionDropzone)`
+  runs in single-pane context (`#app` still visible, `pmd-multi-doc` not
+  yet set) and INLINES a `bottom` measured against `#app` — clearing the
+  status bar but not the footer; (2) the later multi-doc pass early-
+  returns because panes boot `[hidden]` (no `.pmd-pane:not([hidden])
+  .pmd-pane-body` anchor exists yet), leaving that stale inline value in
+  place; (3) the `#app` `ResizeObserver` wired at boot is dead in
+  multi-doc (`#app` is `display:none`), so nothing re-ran the pass when a
+  pane un-hid on doc-load — only an unrelated reflow (cycling the theme)
+  did. Fixes: a `body.pmd-multi-doc .pmd-dropzone-root` CSS fallback that
+  clears BOTH bars (`calc(var(--status-bar-height) +
+  var(--pmd-pane-footer-height) + 0.5rem)`, the footer height now a
+  shared `:root` var so it can't drift from `.pmd-pane-footer`'s
+  `min-height`); `positionDropzone` now REMOVES its inline `left` /
+  `bottom` / `max-width` when it can't measure the anchor, so the mode-
+  aware CSS fallback applies instead of a stale single-pane value; and a
+  `ResizeObserver` + a `hidden`-attribute `MutationObserver` on
+  `.pmd-multi-row` so the pass re-runs (and inlines the exact position)
+  the moment a pane un-hides as its first doc mounts.
+
 - **Version / "About this install" in the command palette.** A synthetic
   settings result in `searchSettingsSource` (`quick-card-search-ui.ts`),
   prepended when the query prefix-matches "version" / "about" / "about

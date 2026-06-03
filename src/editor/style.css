@@ -120,6 +120,10 @@ button {
   --nav-width: 300px;
   --ribbon-height: 4rem;
   --status-bar-height: 1.8rem;
+  /* Per-pane footer (word count + Σ + open button) in multi-doc mode.
+     A shared var so the footer's min-height and anything that has to
+     clear it (the dropzone pill's fallback) can't drift apart. */
+  --pmd-pane-footer-height: 22px;
 
   /* User-interface font. Used by every UI surface — ribbon,
      dialogs, nav pane, comments column, etc. The default is the
@@ -2741,6 +2745,16 @@ html:not(.pmd-dropzone-pill-hidden) body:not(.pmd-multi-doc) #editor .ProseMirro
      A/B-tested against an animated version and preferred the
      instant feel. */
   transition: none;
+}
+/* Multi-doc fallback: the pill must clear TWO stacked bottom bars —
+   the per-pane footer (reader count + Σ button) sits ON TOP of the
+   still-visible full-width #status-bar. The single-pane fallback above
+   clears only the status bar, stranding the pill in the footer's band
+   until `positionDropzone` runs (it anchors to `.pmd-pane-body`, above
+   both bars, and inlines an exact bottom that overrides this). Add the
+   footer's height so the pre-positioning fallback already clears it. */
+body.pmd-multi-doc .pmd-dropzone-root {
+  bottom: calc(var(--status-bar-height) + var(--pmd-pane-footer-height) + 0.5rem);
 }
 .pmd-dropzone-root[data-open="true"] {
   align-items: stretch;
@@ -8277,7 +8291,7 @@ body.pmd-multi-doc #word-count-btn {
   background: var(--pmd-c-surface);
   border-top: 1px solid var(--pmd-c-border-soft);
   font-size: 0.72rem;
-  min-height: 22px;
+  min-height: var(--pmd-pane-footer-height);
 }
 .pmd-pane-wc-btn {
   flex: 0 0 auto;

@@ -103,6 +103,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Dropzone pill no longer briefly overlaps the reader count in
+  multi-pane mode.** On a fresh multi-pane boot the floating dropzone
+  pill could land on top of a pane's word-count / read-time readout
+  until something refreshed the UI (e.g. cycling the theme). It now
+  sits above the pane footer from the first paint.
+
 - **AI "Generate table from image" handles large tables.** Big tables
   used to silently fail because the model's JSON got cut off at the token
   limit. The format the model returns is now much more compact and the

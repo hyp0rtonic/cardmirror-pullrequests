@@ -5567,9 +5567,20 @@ function positionDropzone(): void {
   const target = document.body.classList.contains('pmd-multi-doc')
     ? document.querySelector<HTMLElement>('.pmd-pane:not([hidden]) .pmd-pane-body')
     : document.getElementById('app');
-  if (!target) return;
-  const r = target.getBoundingClientRect();
-  if (r.width === 0 || r.height === 0) return;
+  const r = target?.getBoundingClientRect();
+  if (!r || r.width === 0 || r.height === 0) {
+    // Can't measure the anchor yet — booting into multi-doc with every
+    // pane still `[hidden]` (no doc loaded), or a 0×0 layout pass. Drop
+    // any inline position left over from the OTHER layout so the
+    // mode-aware CSS fallback takes over instead of a stale value. (The
+    // boot pass runs in single-pane context and inlines a `bottom`
+    // measured against `#app`; without this it would strand the pill in
+    // the multi-pane footer's band until an unrelated reflow re-ran us.)
+    root.style.removeProperty('left');
+    root.style.removeProperty('bottom');
+    root.style.removeProperty('max-width');
+    return;
+  }
   root.style.left = `${Math.max(4, Math.round(r.left + 8))}px`;
   root.style.bottom = `${Math.max(4, Math.round(window.innerHeight - r.bottom + 8))}px`;
   // Cap the expanded shelf so its right edge keeps the same 8px margin
@@ -5587,9 +5598,27 @@ void loadLearnStore();
 if (BOOT_MULTI_DOC_WORKSPACE) {
   void import('./multi-pane-shell.js').then(async (m) => {
     m.mountMultiPaneShell();
-    // The dropzone pill now anchors to the leftmost pane; reposition
-    // once the shell's panes are in the DOM.
+    // The dropzone pill anchors to the leftmost VISIBLE pane body, but
+    // panes boot `[hidden]` until a doc loads — so the anchor doesn't
+    // exist yet and a single reposition pass would early-return. The
+    // `#app` ResizeObserver wired at boot is also dead here (`#app` is
+    // `display:none` in multi-doc). Watch the live pane row instead:
+    //   - ResizeObserver: layout / zoom / window changes.
+    //   - MutationObserver on `hidden`: a pane un-hiding as its first
+    //     doc mounts changes which pane is the anchor without resizing
+    //     the row, so ResizeObserver alone misses it.
     requestAnimationFrame(positionDropzone);
+    const row = document.querySelector<HTMLElement>('.pmd-multi-row');
+    if (row) {
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => positionDropzone()).observe(row);
+      }
+      new MutationObserver(() => positionDropzone()).observe(row, {
+        attributes: true,
+        attributeFilter: ['hidden'],
+        subtree: true,
+      });
+    }
     // Home screen is available in multi-pane too (reachable via the
     // Home button). Its actions route through the shell's slot
     // picker rather than loading in-place. Not auto-shown on
