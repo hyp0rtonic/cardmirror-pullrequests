@@ -1,169 +1,62 @@
 # CardMirror
 
-A ProseMirror-based text editor for competitive debate, designed to
-interoperate with **Advanced Verbatim** — the project owner's forked build
-of [Verbatim](https://github.com/ashtarcommunications/verbatim), the de facto
-Microsoft Word add-in used by US policy/LD/PF debaters.
+A standalone editor for competitive debate evidence. It reads and writes
+the same Microsoft Word `.docx` files that **[Verbatim](https://github.com/ashtarcommunications/verbatim)**
+produces — the Word add-in most US policy, LD, and PF teams use — so a
+CardMirror user on a Verbatim team is a full participant in the file
+ecosystem, without needing Word installed.
 
-## Objectives
+The project owner runs a forked build, **Advanced Verbatim**; CardMirror
+targets fidelity with both.
 
-1. **Edit Verbatim/Advanced-Verbatim documents** in a ProseMirror-based
-   editor that ships as both a desktop app (primary, offline-first) and a
-   web app (collaboration + accessibility for users without full
-   desktop machines).
-2. **Round-trip with full fidelity to Verbatim's semantics.** The
-   fungibility goal: a user of our editor on a Verbatim-using team is a
-   fully equal participant in the file ecosystem. Documents shipped from
-   our editor are visually and semantically indistinguishable from
-   Verbatim-produced docs to anyone receiving them. Aggressive cleanup of
-   non-Verbatim cruft on import is fine; losing anything Verbatim or
-   Advanced Verbatim treats as semantic is not.
-3. **Replicate a useful subset of Verbatim's functionality** — and where
-   possible, supersede it. Many of the user's existing companion tools
-   (Block Search, Fast Debate Paste, AI cites/quals) exist to work around
-   Word's limitations and naturally become editor features here.
+## Goals
 
-## Repo layout
+1. **Edit Verbatim documents** in a fast native editor, shipped as a
+   desktop app (the tournament-day driver) and a web app (collaboration
+   and access from machines that can't install software).
+2. **Round-trip with full fidelity.** Documents leaving CardMirror are
+   visually and semantically indistinguishable from Verbatim's own
+   output. Aggressively dropping non-Verbatim cruft on import is fine;
+   losing anything Verbatim treats as meaningful is not.
+3. **Replace the Verbatim toolchain, then go past it.** Many companion
+   tools debaters rely on (Block Search, Fast Debate Paste, AI cite
+   formatting) exist to work around Word's limits. In a purpose-built
+   editor they become native features.
 
-- `PROJECT.md` (this file) — project index and high-level orientation.
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — editor design: schema
-  shape, three-layer rendering model, multi-doc workspace, read
-  mode, send-to-speech, search, transclusion, editing-behavior
-  rules, integration boundaries.
-- [`CHANGELOG.md`](./CHANGELOG.md) — user-facing release notes,
-  written for editor users.
-- [`DETAILED_CHANGELOG.md`](./DETAILED_CHANGELOG.md) — same
-  releases with implementation context, rationale, and edge-case
-  notes for contributors.
+## Repository map
 
-Round-trip fidelity is verified against real `.docx` files via the
-test suite. Point `CARDMIRROR_DOCS_DIR` at a folder of fixtures to
-run the round-trip / mark-fidelity / structural-validity tests
-(README → "Testing round-trip against your own .docx files").
+| Path | What it is |
+|------|------------|
+| `PROJECT.md` | This file — orientation and index. |
+| `ARCHITECTURE.md` | The design: schema, round-trip contract, rendering model, editing rules, and the feature roadmap. |
+| `README.md` | User-facing install and usage; build-from-source. |
+| `CHANGELOG.md` | Release notes for users. |
+| `DETAILED_CHANGELOG.md` | The same releases with implementation notes for contributors. |
+| `src/` | The shared editor core — schema, importer/exporter, plugins, commands. |
+| `apps/desktop/` | The Electron desktop shell. |
+| `tests/`, `benchmarks/` | Round-trip and performance suites (point `CARDMIRROR_DOCS_DIR` at your own `.docx` fixtures). |
 
-## Reading order for a new contributor
+New contributor: read this file, then `ARCHITECTURE.md`.
 
-1. This file for orientation.
-2. `ARCHITECTURE.md` for the design.
+## Status
 
-## Headline design decisions
+CardMirror is an alpha. The schema, importer, exporter, editor, and
+multi-doc workspace are built and used daily; the round-trip is the
+project's dominant correctness criterion and is tested against real
+`.docx` files.
 
-These are the load-bearing choices. Full reasoning lives in the
-referenced files.
+**Shipped:** docx round-trip · the full Pocket/Hat/Block/Tag schema ·
+the F-key formatting commands · cards, analytics, tables, and images ·
+read mode · send-to-speech · drag-and-drop reordering · the three-slot
+multi-doc workspace · command-palette file search and find/replace ·
+spaced-repetition flashcards · AI cite/alt-text/table/comment features ·
+autosave and crash recovery · desktop auto-update.
 
-- **Typed-tree schema with cards as real nodes** (not emergent from
-  paragraph styles). Pocket > Hat > Block > Tag/Card is a real tree.
-  Card-as-object operations (select, move, query, drag) fall out for
-  free. — `ARCHITECTURE.md` §1.
-- **Top-level is a sequence, Pocket is optional.** Real `.docx` files
-  contain multiple "files" separated by empty Heading1s; some single
-  "files" omit Heading1 entirely. The schema embraces this. —
-  `ARCHITECTURE.md` §4.
-- **Loose paragraphs are first-class.** Unstyled body text lives as a
-  plain `paragraph` block at any position — no special "scratchpad"
-  wrapping needed. Schema is permissive enough that messy regions
-  (bridge text, "Patch Notes" notes, etc.) just look like sequences of
-  headings and paragraphs. — `ARCHITECTURE.md` §4.
-- **Three-layer rendering**: schema (structure) ↔ display config (per-user
-  preferences, never touch docs) ↔ direct formatting (normal editing op,
-  ships with the doc). Decouples "how I want to see Tags" from "how Tags
-  render for everyone." — `ARCHITECTURE.md` §5.
-- **Web + desktop with shared core.** Desktop is the tournament-day
-  surface; web is for collaboration and accessibility. — `ARCHITECTURE.md`
-  §6.
-- **Multi-doc workspace is foundational, not retrofitted.** Required by
-  send-to-speech, search results, drag-between-panes, transclusion.
-  The three-slot workspace shell (compact + wide-scroll layouts, per-
-  slot stacks, drag-copy between panes) is shipped. —
-  `ARCHITECTURE.md` §7.
-- **Editor UI surfaces** — pageless web-view as default, Word-style
-  navigation panel for outline manipulation, faithful render fixtures
-  for Pocket/Emphasis boxes. — `ARCHITECTURE.md` §8.
-- **Read mode as a first-class peer to edit mode.** The reading surface
-  at the podium matters as much as the editing surface; ironclad against
-  accidental input. In multi-doc mode read mode is per-pane state, so
-  one slot can be a read surface while others stay editable. —
-  `ARCHITECTURE.md` §9.
-- **Send-to-speech is the most architecturally demanding feature** and
-  drives the workspace + read-mode + cross-doc-coordinator foundation.
-  The backtick / Alt-backtick chord, NewSpeech, mark-as-speech, and a
-  uid-keyed resolver that bridges into Electron main for cross-window
-  routing are shipped. — `ARCHITECTURE.md` §10.
-- **Round-trip is the dominant correctness criterion.** Schema, importer,
-  and exporter are one tightly-coupled project. The Stylepox normalizer
-  is genuinely separable (and the user already maintains a working
-  version). — `ARCHITECTURE.md` §2-3.
-- **Learn lives in a per-user layer outside the document.** Flashcards
-  and Ask-AI threads never enter the file body or its comment XML —
-  debaters share `.docx` freely, so private study material must
-  not travel with the file. Cards re-associate via a hidden, round-trip-
-  safe document id; identity is split so file-copies share one schedule
-  while each file keeps its own grounding. — `ARCHITECTURE.md` §19.
+**Planned** (rationale in `ARCHITECTURE.md`): the Verbatim cleanup
+ribbon family (AutoNumberTags, ReformatAllCites, ConvertToDefaultStyles,
+…) · a persistent corpus-wide search index · transclusion · real-time
+collaboration · numbered/bulleted lists · per-type display-spacing.
 
-## Open questions deliberately deferred
-
-- Choice of desktop framework (Tauri vs Electron). Decide when desktop
-  edition design firms up.
-- File storage model for the web edition (File System Access API vs
-  cloud-backed). Decide when web edition design firms up.
-- Pilcrow round-trip strategy. Slot exists; can stub until a real doc
-  with pilcrows shows up.
-- Real-time collab (transclusion option 1) infrastructure. Defer to
-  v2+; v1 ships option 3 (refresh on demand).
-
-### Queued OOXML features
-
-- **Numbered / bulleted lists** — `<w:numPr>` + `numbering.xml`. Held
-  for now; common in real docs but a meaningful schema addition
-  (new `bullet_list` / `ordered_list` / `list_item` nodes).
-- **Per-type display-spacing setting** — paragraph spacing already
-  round-trips through the schema's `spacing` attr; what's still
-  pending is a settings-UI panel to override the visible rhythm per
-  paragraph type (Pocket vs Hat vs Tag vs card_body, etc.). The
-  stored OOXML values are data, the per-type setting is
-  presentation. CSS hooks already exist in `style.css`; pattern-
-  match the existing `--pmd-line-height` plumbing.
-
-### AI features
-
-The `aiFeaturesEnabled` setting gates a master toggle for every AI
-call, plus `anthropicApiKey` (sent direct from the browser to
-Anthropic — there's no server middleman) and `commentAuthor` for
-attribution.
-
-**Shipped today:**
-
-- `aiAskAboutSelection` — Mod-Shift-Q on a selection POSTs the
-  surrounding tag / analytic / cite-paragraph context plus the
-  user's question, replies land as a `kind: 'ai'` comment in a
-  fresh thread. `@AI` mentions inside an existing thread re-invoke
-  the model with the thread + range as context.
-- `aiCreateCite` — Mod-Shift-X on a selection formats it into a
-  Verbatim-style citation, with `cite_mark` applied to the
-  extracted tokens. Shows a purple "Thinking…" pill while in
-  flight.
-- **AI image features** — right-click any image and choose
-  "Generate alt text from image" (writes a `[ALT TEXT: …]`
-  paragraph below the image, using the user's omission-bracket
-  style) or "Generate table from image" (extracts a real PM
-  `table` node with bold/italic marks and merge attrs).
-
-AI comments are visually distinguished (purple badge in the side
-column). They round-trip via docx as regular comments; the `kind`
-field is lost on export (Word has no concept).
-
-### Explicit non-goals
-
-The following OOXML features are out of scope; importer drops them,
+**Out of scope:** section/page layout, footnotes, revision-ID metadata,
+non-heading bookmarks, localization. The importer drops these; the
 exporter never emits them.
-
-- **Section properties** — `<w:sectPr>` (margins, page size, columns).
-  We don't model paginated layout.
-- **Revision IDs** — `<w:rsid*>` on runs and paragraphs. Word-internal
-  metadata, no semantic value.
-- **Bookmarks beyond headings** — `<w:bookmarkStart>` / `<w:bookmarkEnd>`
-  that don't carry our `pmd-heading-*` naming convention. We use
-  bookmarks only as our stable heading-ID transport.
-- **Footnotes / endnotes** — `<w:footnoteReference>` + `footnotes.xml`.
-  Debate docs rarely use them; the cost of modeling footnote nodes
-  outweighs the value.

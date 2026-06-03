@@ -5,50 +5,29 @@
 # CardMirror
 
 CardMirror is a debate-evidence editor for high school and college
-policy, Lincoln–Douglas, and public forum. If you're used to
-**[Verbatim](https://github.com/ashtarcommunications/verbatim)** —
-the Microsoft Word add-in most US debate teams use — CardMirror is
-a from-scratch standalone replacement for the editor side of that
-stack. Same Pocket / Hat / Block / Tag structure, same F-key
-chords (F4 / F5 / F6 / F7 / F8 / F9 / F10 / F11), same
-send-to-speech workflow, same Word-compatible `.docx` round-trip —
-without needing Word installed at all.
+policy, Lincoln–Douglas, and public forum. It's a standalone
+replacement for the editor side of
+**[Verbatim](https://github.com/ashtarcommunications/verbatim)**, the
+Microsoft Word add-in most US debate teams use: same Pocket / Hat /
+Block / Tag structure, same F-key shortcuts, same send-to-speech
+workflow, same Word-compatible `.docx` files — but with no Word, no
+macros, and no add-in. That keeps it fast on the multi-megabyte
+evidence files debaters work in, and makes the same editor first-class
+on Windows, macOS, and Linux.
 
-CardMirror is a native editor — no Word, no macros, no add-in
-surface. That keeps it fast on the multi-megabyte evidence files
-Verbatim users live in, and it makes the same editor first-class
-on Windows, macOS, and Linux (Word for macOS is meaningfully
-rougher than Word for Windows, and there's no Word for Linux at
-all — sidestepping Word sidesteps both gaps). The deeper
-architectural payoff is search: because every doc is a structured
-tree of cards, cites, and headings rather than a flat stream of
-styled paragraphs, a future release will let you search your
-entire evidence library by author, tag, or structural position
-across every open doc — folded into the editor instead of run
-through a separate tool like [Block Search](https://debate-decoded.ghost.io/blocksearch-making-large-files-usable/).
-
-You can run CardMirror as a **desktop app** on Windows, macOS, or
-Linux — the recommended path for tournament-day work — or as a
-**web preview** in any modern browser, useful for trying things
-out or working from a Chromebook / school machine where you can't
-install desktop software.
+Run it as a **desktop app** for tournament-day work, or as a **web
+preview** in any browser for trying it out or working from a Chromebook
+or locked-down school machine.
 
 **▶ Try the live web preview: <https://ant981228.github.io/cardmirror/>**
 
-> **🚧 Status: alpha preview.** CardMirror is in active development.
-> Expect rough edges, missing features, and occasional breakage.
-> Keep a Verbatim copy of anything that matters until the editor
-> proves itself on your workflow — not recommended for actual
-> tournament-day use yet.
+> **🚧 Alpha preview.** Expect rough edges, missing features, and the
+> occasional bug. Keep a Verbatim copy of anything important — not
+> recommended for tournament-day use yet.
 >
-> **Desktop builds are unsigned.** Alpha builds aren't code-signed.
-> On Windows the SmartScreen filter shows a "Windows protected your
-> PC" dialog the first time you launch — click *More info* → *Run
-> anyway*. On macOS Gatekeeper refuses to open the app on first
-> launch ("can't be opened because Apple cannot check it for
-> malicious software"); right-click the app in Finder, choose
-> *Open*, then *Open* again in the confirmation dialog. Each is a
-> one-time prompt per machine.
+> **Desktop builds are unsigned**, so Windows and macOS warn you the
+> first time you launch. The one-time workaround for each is in the
+> install steps below.
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for release notes;
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full design;
@@ -116,23 +95,15 @@ Two options for any distro:
 
 ### Updates
 
-**Help → Check for Updates…** triggers a manual check that
-resolves to one of three dialogs: "You're on the latest version",
-"Update available" (with a button to open the GitHub release page
-so you can read what's in it; the actual download proceeds in the
-background and a "restart now?" dialog fires when it finishes), or
-"Couldn't check: \<reason\>" with the Releases URL as a fallback.
+**Help → Check for Updates…** checks manually: it tells you you're
+current, or offers an available update (downloaded in the background,
+with a "restart now?" prompt when it's ready).
 
-**Auto-check on launch is off by default**. Opt in via Settings →
+Auto-check on launch is off by default. Turn it on in Settings →
 General → "About this install" → **Check for updates on launch**.
-When enabled, the first window of each app session does a silent
-check at boot; if an update is found, the same "Update available"
-dialog pops. Errors and "you're current" outcomes are silent on
-the auto-launch path — no notifications when you're offline or
-already up to date.
 
-Linux users who installed via AUR can also update through `yay
--Syu`; both update paths work, pick whichever feels more natural.
+Linux users who installed via the AUR can update with `yay -Syu`
+instead.
 
 ## (Optional) Set up AI features
 
