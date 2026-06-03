@@ -73,6 +73,7 @@ import { openLearnManage } from './learn-manage-ui.js';
 import { openBulkConvert } from './bulk-convert-ui.js';
 import { homeScreen, type HomeScreenCallbacks } from './home-screen.js';
 import { recordRecent, removeRecent, type RecentFile } from './recents-store.js';
+import { isAutosaveOnForPath, setAutosaveForPath } from './autosave-prefs-store.js';
 import {
   settings,
   condenseWarningCloseFor,
@@ -1010,7 +1011,10 @@ const ribbonContext: RibbonContext = {
       multiDocToggleAutosave();
       return;
     }
-    settings.set('autosaveEnabled', !settings.get('autosaveEnabled'));
+    const next = !settings.get('autosaveEnabled');
+    settings.set('autosaveEnabled', next);
+    // Remember the choice per-file so it survives close + reopen.
+    setAutosaveForPath(activeFile().handle, next);
   },
   newSpeechDocument: () => {
     if (multiDocNewSpeechDocument) {
@@ -4083,6 +4087,8 @@ async function routeOpenedFile(opened: OpenedFile): Promise<void> {
     currentDocFilename = opened.name;
     setCurrentDocHandle(opened.handle ?? null);
     currentDocFormat = format;
+    // Restore this file's remembered autosave toggle (off if unknown).
+    settings.set('autosaveEnabled', isAutosaveOnForPath(opened.handle));
     currentDocUid = newSessionDocUid();
     adoptDocId(docId, opened.name, opened.handle ?? null, format);
     markCurrentDocClean();
@@ -4135,6 +4141,8 @@ async function loadFileInPlace(file: {
   currentDocFilename = file.filename;
   setCurrentDocHandle(file.handle);
   currentDocFormat = file.format;
+  // Restore this file's remembered autosave toggle (off if unknown).
+  settings.set('autosaveEnabled', isAutosaveOnForPath(file.handle));
   currentDocUid = newSessionDocUid();
   adoptDocId(docId, file.filename, file.handle, file.format);
   markCurrentDocClean();

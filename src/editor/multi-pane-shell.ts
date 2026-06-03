@@ -55,6 +55,7 @@ import { EditorDragSurface } from './drag-editor-surface.js';
 import { dragController, rewriteHeadingIds } from './drag-controller.js';
 import { countReadAloudWords, formatReadTime, formatNumber } from './word-count.js';
 import { openWordCount } from './word-count-ui.js';
+import { isAutosaveOnForPath, setAutosaveForPath } from './autosave-prefs-store.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { getSpeechDocResolver } from './speech-doc-registry.js';
 import { sendToSpeech as runSendToSpeech } from './speech-doc-send.js';
@@ -1495,6 +1496,8 @@ class MultiPaneShell {
     const rec = this.focusedSlot?.visible;
     if (!rec) return;
     rec.autosaveEnabled = !rec.autosaveEnabled;
+    // Remember the choice per-file so it survives close + reopen.
+    setAutosaveForPath(rec.handle, rec.autosaveEnabled);
     if (!rec.autosaveEnabled && rec.autosaveTimer !== null) {
       window.clearTimeout(rec.autosaveTimer);
       rec.autosaveTimer = null;
@@ -2310,9 +2313,9 @@ function buildDocRecord(
     // it per-pane via the ribbon command after opening.
     readMode: false,
     // Autosave is per-pane in multi-doc — same intent as read mode.
-    // Off by default; the user opts in per-doc via the ribbon
-    // toggle once the doc has been saved as .cmir.
-    autosaveEnabled: false,
+    // Off by default, but a file the user previously turned autosave
+    // ON for restores that choice across close + reopen (keyed by path).
+    autosaveEnabled: isAutosaveOnForPath(opts.handle),
     autosaveTimer: null,
     docId: opts.docId ?? null,
     // Fresh doc: clean. Flipped on first doc-changing transaction;

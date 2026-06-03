@@ -88,6 +88,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **Autosave remembers its setting per document.** Turning autosave on
+  for a saved doc now sticks: close and reopen that file (in either
+  single-pane or multi-pane mode) and autosave comes back on, instead of
+  resetting to off every time. The choice is remembered per file, so
+  other docs are unaffected.
+
 - **Paragraph navigation lands on cleaner spots.** With a selection,
   Ctrl/Alt+Down now collapses to the **start of the next paragraph**
   (just past the break) instead of stopping at the end of the selected

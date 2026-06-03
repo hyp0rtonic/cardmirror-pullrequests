@@ -39,6 +39,9 @@ const STORAGE_KEY = 'pmd-settings';
  *  doc, not a global preference. */
 const TRANSIENT_SETTING_KEYS = new Set<string>([
   'readMode',
+  // `autosaveEnabled` stays transient as a SETTING (per-window, never
+  // in `pmd-settings`), but the choice is remembered PER FILE in
+  // `autosave-prefs-store.ts` so reopening a doc restores its toggle.
   'autosaveEnabled',
   // Nav-pane visibility — the user might want the outline open in
   // one window (a doc they're navigating heavily) and hidden in

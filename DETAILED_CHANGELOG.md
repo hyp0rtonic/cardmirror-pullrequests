@@ -7,6 +7,25 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Autosave toggle persists per document across close + reopen**
+  (`autosave-prefs-store.ts` new, `index.ts`, `multi-pane-shell.ts`,
+  `settings.ts`). `autosaveEnabled` stays a transient per-window setting
+  (still in `TRANSIENT_SETTING_KEYS`, never written to `pmd-settings`),
+  but the choice is now mirrored PER FILE PATH in a tiny localStorage
+  store (`pmd-autosave-paths`, a set of ON paths; absence = off).
+  - Single-pane: the `toggleAutosave` ctx handler writes
+    `setAutosaveForPath(activeFile().handle, next)`; both open paths
+    (`routeOpenedFile`, `loadFileInPlace`) restore via
+    `settings.set('autosaveEnabled', isAutosaveOnForPath(handle))` right
+    after setting the handle/format.
+  - Multi-pane: `DocRecord` init reads `isAutosaveOnForPath(opts.handle)`
+    instead of hard `false`; `toggleFocusedAutosave` persists the flip.
+  - Only Electron string-path docs key into the store; web
+    `FileSystemFileHandle`s and unsaved docs no-op (stay default-off).
+    Save-As to a new path doesn't retro-persist (the in-session flag is
+    untouched; the new path remembers once toggled) — a minor edge, not
+    the close/reopen case this targets.
+
 - **Cross-window diagnostic instrumentation (TEMPORARY, macOS bug
   hunt)** (`apps/desktop/src/main.ts`, `preload.ts`,
   `src/editor/host/electron-host.ts`, `src/editor/index.ts`). Logging
