@@ -87,6 +87,7 @@ import {
 } from './settings.js';
 import { openSaveAs } from './save-as-ui.js';
 import { highlightColorLabel, shadingColorLabel } from './color-palette.js';
+import { applySpellcheckToView } from './editor-spellcheck.js';
 import { commentsPlugin, commentsKey, loadThreads, getCommentsState, gcOrphanThreads, newCommentId } from './comments-plugin.js';
 import { scheduleIdle, cancelIdle, type IdleHandle } from './idle-scheduler.js';
 import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX, NOTE_PREFIX } from './comments-ui.js';
@@ -2276,12 +2277,12 @@ settings.subscribe((s) => {
       );
     }
   }
-  // Editor spellcheck toggle — push the new value directly onto
-  // `view.dom`. PM's `attributes` prop only re-applies on state
-  // updates, but settings changes shouldn't require a state update
-  // to take effect.
+  // Editor spellcheck toggle. Setting the attribute isn't enough on
+  // Chromium — it only re-scans an editing host on focus — so the
+  // helper bounces focus to force the change to take effect without a
+  // reload (see editor-spellcheck.ts).
   if (view) {
-    view.dom.setAttribute('spellcheck', s.editorSpellcheck ? 'true' : 'false');
+    applySpellcheckToView(view, s.editorSpellcheck);
   }
   // Nav-rail drag, zoom, display-size changes — anything that can
   // move the editor's available width — re-sync the card-intrinsic

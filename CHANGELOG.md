@@ -20,6 +20,12 @@ see `DETAILED_CHANGELOG.md`.
   intact, instead of occasionally closing every window and reopening
   none.
 
+- **Editor spellcheck actually turns on now.** Switching on Editor
+  spellcheck took effect for real — the browser only starts checking an
+  editor once it's refocused, so flipping the setting (from the Settings
+  dialog, with the editor unfocused) appeared to do nothing. It now
+  engages as soon as you return to the document.
+
 ### Changed
 
 - **macOS no longer pretends to auto-update.** CardMirror can detect a

@@ -32,6 +32,7 @@ import { Node as PMNode } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull, parseNative, serializeNative, NATIVE_FILE_EXTENSION } from '../index.js';
 import { settings } from './settings.js';
+import { applySpellcheckToView } from './editor-spellcheck.js';
 import { getHost, getElectronHost, isSameOpenHandle, type OpenedFile } from './host/index.js';
 import { getCommentsState, loadThreads, type Thread } from './comments-plugin.js';
 import { learnStore, type ShowInContextRequest } from './learn-store-host.js';
@@ -1052,11 +1053,12 @@ class MultiPaneShell {
       // Editor spellcheck toggle — apply to every record's view in
       // every slot's stack, including hidden stack members (their
       // editorEl is detached but the attribute still sticks for
-      // when they swap into view).
-      const spellcheck = s.editorSpellcheck ? 'true' : 'false';
+      // when they swap into view). The helper also forces Chromium to
+      // re-scan (it only re-evaluates a host on focus); the focused
+      // pane updates immediately, the rest on their next focus.
       for (const id of SLOT_IDS) {
         for (const rec of this.slots[id].stack) {
-          rec.view.dom.setAttribute('spellcheck', spellcheck);
+          applySpellcheckToView(rec.view, s.editorSpellcheck);
         }
       }
       // Read-mode is per-pane in multi-doc — flipped via the

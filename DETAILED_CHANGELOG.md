@@ -7,6 +7,24 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Editor spellcheck toggle takes effect without a reload** (new
+  `src/editor/editor-spellcheck.ts`, `src/editor/index.ts`,
+  `src/editor/multi-pane-shell.ts`). The toggle already set
+  `spellcheck="true"` on the editable (and PM doesn't revert it — its
+  MutationObserver ignores attribute mutations on `view.dom`, and the
+  decoration diff only writes on change), but Chromium only
+  (re)evaluates an editing host's spellcheck state when the host gains
+  focus. Since the toggle lives in the Settings dialog, the editor is
+  blurred when the value flips, so a bare `setAttribute` looked like a
+  no-op. The new `applySpellcheckToView` helper sets the attribute and,
+  when enabling, forces a re-scan by bouncing focus — immediately if the
+  view is focused, else once on its next focus (a one-shot listener,
+  de-duped via a flag on the editable). PM restores its selection on
+  `focus()`, so the cursor is preserved. Engine-level behavior, so this
+  was broken on every platform, not just macOS; wired into both the
+  single-pane subscriber and the multi-pane shell (focused pane updates
+  now, others on their next focus).
+
 - **Suppress the auto-update-in-progress messaging on macOS**
   (`apps/desktop/src/main.ts`, `src/editor/settings-ui.ts`). Unsigned
   macOS builds can't self-install via Squirrel.Mac, so the auto-updater
