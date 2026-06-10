@@ -28,6 +28,8 @@ import {
   extractUndertag,
   fixFormattingGaps,
   buildRibbonKeymap,
+  ribbonKeyStringFor,
+  ribbonCommandForKey,
   DEFAULT_RIBBON_KEYS,
   RIBBON_COMMAND_IDS,
   RIBBON_COMMAND_LABELS,
@@ -762,6 +764,32 @@ describe('buildRibbonKeymap', () => {
     const km = buildRibbonKeymap();
     expect(km['F9']).toBeTypeOf('function');
     expect(km['Mod-u']).toBeTypeOf('function');
+  });
+});
+
+describe('global hotkey fallback (focus outside the editor)', () => {
+  const kbd = (init: Partial<KeyboardEvent>) => init as KeyboardEvent;
+
+  it('folds shifted letters: a real Shift keydown produces an uppercase key', () => {
+    // Bindings are registered lowercase; e.key for Ctrl+Shift+S is 'S'.
+    const s = ribbonKeyStringFor(kbd({ key: 'S', code: 'KeyS', ctrlKey: true, shiftKey: true }));
+    expect(s).toBe('Mod-Shift-s');
+    expect(ribbonCommandForKey(s)).not.toBeNull();
+  });
+
+  it('folds CapsLock letters on unshifted chords', () => {
+    const s = ribbonKeyStringFor(kbd({ key: 'S', code: 'KeyS', ctrlKey: true }));
+    expect(s).toBe('Mod-s');
+    expect(ribbonCommandForKey(s)).toBe(ribbonCommandForKey('Mod-s'));
+  });
+
+  it('matches saved overrides captured uppercase before the fold', () => {
+    expect(ribbonCommandForKey('Mod-Shift-y', { setPocket: 'Mod-Shift-Y' })).toBe('setPocket');
+  });
+
+  it('leaves F-keys and multi-char names untouched', () => {
+    expect(ribbonKeyStringFor(kbd({ key: 'F7', code: 'F7' }))).toBe('F7');
+    expect(ribbonCommandForKey('F7')).toBe('setTag');
   });
 });
 

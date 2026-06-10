@@ -22,6 +22,12 @@ see `DETAILED_CHANGELOG.md`.
   result snippets, and replacements now land exactly on the matched
   text.
 
+- **Letter shortcuts now work when focus is outside the editor.**
+  Shortcuts like Ctrl+Shift+S did nothing while focus sat on the
+  ribbon, nav panel, or other chrome — and with CapsLock on, even
+  plain Ctrl+S died everywhere. Letter shortcuts now match regardless
+  of Shift or CapsLock casing, wherever focus is.
+
 ### Added
 
 - **Voice control (alpha, desktop only).** Press **Ctrl-Shift-V** to start a

@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Global hotkey fallback case-folding fixed**
+  (`src/editor/ribbon-commands.ts` `ribbonKeyStringFor` /
+  `ribbonCommandForKey`). The window-level keydown fallback (the path
+  that fires when focus is on the ribbon/nav/chrome rather than the
+  editor) built its lookup string from `e.key` verbatim — but a real
+  Shift or CapsLock keydown produces an uppercase letter ('S'), while
+  bindings are registered lowercase ('Mod-Shift-s'), so every letter
+  chord missed and the browser default fired instead. Inside the
+  editor prosemirror-keymap normalizes case, which is why the same
+  shortcuts worked there. `ribbonKeyStringFor` now folds
+  single-character keys to lowercase, and `ribbonCommandForKey` folds
+  both sides of the comparison — necessary because the keybindings
+  editor captured overrides through the unfolded path, so a user's
+  saved `Mod-Shift-Y` must keep matching after the fix.
+
 - **Find/Replace offset corruption after inline images fixed**
   (`src/editor/find-replace-plugin.ts` `findMatches`,
   `src/editor/find-replace-ui.ts` `buildSnippet`). Match positions were

@@ -4896,10 +4896,8 @@ export function ribbonKeyStringFor(e: KeyboardEvent): string {
   if (e.shiftKey) parts.push('Shift');
   // Normalize digits via `e.code` so `Mod-Shift-1` matches even
   // though Shift+1 produces `e.key === '!'` on US layouts (and
-  // layout-specific shifted chars elsewhere). For non-digits keep
-  // `e.key` — letters get the same character regardless of Shift
-  // (uppercased), and PM-style keymap matching already accounts
-  // for shifted symbol keys like `=` / `+`.
+  // layout-specific shifted chars elsewhere). PM-style keymap
+  // matching already accounts for shifted symbol keys like `=`/`+`.
   if (/^Digit[0-9]$/.test(e.code)) {
     parts.push(e.code.slice(5));
   } else if (e.code === 'Space' || e.key === ' ') {
@@ -4908,25 +4906,47 @@ export function ribbonKeyStringFor(e: KeyboardEvent): string {
     // binding. Normalize to PM's "Space" name so the global key
     // handler matches space bindings even when the editor is unfocused.
     parts.push('Space');
+  } else if (e.key.length === 1) {
+    // Single characters are matched case-insensitively, like
+    // prosemirror-keymap does inside the editor: bindings are
+    // registered lowercase ('Mod-Shift-s'), but a real Shift (or
+    // CapsLock) keydown produces e.key === 'S' — without folding,
+    // every shifted/caps-locked letter chord missed whenever focus
+    // was outside the editor. Identity for digits and symbols.
+    parts.push(e.key.toLowerCase());
   } else {
     parts.push(e.key);
   }
   return parts.join('-');
 }
 
+/** Case-fold a key string's final segment when it's a single
+ *  character — 'Mod-Shift-S' ≡ 'Mod-Shift-s'. Saved user overrides
+ *  captured before ribbonKeyStringFor folded letters are stored
+ *  uppercase, so lookups must fold both sides. */
+function foldKeyString(key: string): string {
+  const i = key.lastIndexOf('-');
+  const tail = i < 0 ? key : key.slice(i + 1);
+  if (tail.length !== 1) return key;
+  return i < 0 ? key.toLowerCase() : key.slice(0, i) + '-' + tail.toLowerCase();
+}
+
 /**
  * Look up a ribbon command ID by its current key binding. Returns
  * null if no command is bound to this key. Used by the global
  * F-key capture handler in `index.ts` to dispatch ribbon commands
- * when the editor isn't the focused element.
+ * when the editor isn't the focused element. Single-character keys
+ * match case-insensitively (mirrors prosemirror-keymap, which tries
+ * the Shift-base variant inside the editor).
  */
 export function ribbonCommandForKey(
   keyString: string,
   overrides: Partial<Record<RibbonCommandId, string | string[]>> = {},
 ): RibbonCommandId | null {
+  const folded = foldKeyString(keyString);
   for (const id of RIBBON_COMMAND_IDS) {
     const spec = overrides[id] ?? DEFAULT_RIBBON_KEYS[id];
-    if (keysArray(spec).includes(keyString)) return id;
+    if (keysArray(spec).some((k) => foldKeyString(k) === folded)) return id;
   }
   return null;
 }
