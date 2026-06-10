@@ -7,6 +7,24 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **NavigationPanel leak on doc close fixed** (`src/editor/nav-panel.ts`,
+  `src/editor/multi-pane-shell.ts`). The multi-pane shell creates one
+  NavigationPanel per open doc; closing a doc destroyed the EditorView
+  and detached the drag surface but never the panel. The panel's
+  constructor-time `settings.subscribe` and attach-time
+  `dragController.subscribe`/`registerSurface` closures therefore kept
+  the panel reachable for the whole session — pinning `currentDoc` (a
+  full ProseMirror doc snapshot, MBs for a real file) and the rendered
+  `liEntries` map, and the leaked drag subscriber kept running
+  hover/auto-expand hit-testing on every drag move event. New
+  `NavigationPanel.destroy()` releases all three subscriptions, removes
+  the document-level drag listeners (covers closing mid-drag), cancels
+  the auto-expand/auto-restore timers, clears the entry map, nulls
+  doc/view, and removes the root element; both shell close paths call
+  it beside `view.destroy()`. A `destroyed` flag turns any late
+  debounced `update()` into a no-op so a straggler can't re-pin the
+  snapshot the destroy just released.
+
 - **Global hotkey fallback case-folding fixed**
   (`src/editor/ribbon-commands.ts` `ribbonKeyStringFor` /
   `ribbonCommandForKey`). The window-level keydown fallback (the path

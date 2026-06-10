@@ -760,6 +760,7 @@ class Slot {
     syncDocPathClaim(closing.handle, null);
     closing.view.destroy();
     closing.dragSurface.detach();
+    closing.navPanel.destroy();
     this.stack.splice(idx, 1);
     if (this.stack.length === 0) {
       this.visibleIndex = -1;
@@ -948,6 +949,7 @@ class Slot {
     syncDocPathClaim(rec.handle, null);
     rec.view.destroy();
     rec.dragSurface.detach();
+    rec.navPanel.destroy();
     this.stack.splice(idx, 1);
     if (idx < this.visibleIndex) this.visibleIndex--;
     this.refreshChip();

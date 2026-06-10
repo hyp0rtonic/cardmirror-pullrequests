@@ -28,6 +28,12 @@ see `DETAILED_CHANGELOG.md`.
   plain Ctrl+S died everywhere. Letter shortcuts now match regardless
   of Shift or CapsLock casing, wherever focus is.
 
+- **Closing a document now releases its memory.** Each closed pane
+  quietly kept its outline panel — and with it a full snapshot of the
+  document — alive until the app closed, and the orphaned panel kept
+  doing work during drags. Long sessions that open and close many
+  files (a tournament day) no longer accumulate that weight.
+
 ### Added
 
 - **Voice control (alpha, desktop only).** Press **Ctrl-Shift-V** to start a

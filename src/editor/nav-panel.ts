@@ -68,6 +68,7 @@ export class NavigationPanel {
   private unsubscribeSettings: (() => void) | null = null;
   private unsubscribeDrag: (() => void) | null = null;
   private unregisterSurface: (() => void) | null = null;
+  private destroyed = false;
 
   // ---- Selection state (multi-select) ----
   private selectedIds: Set<string> = new Set();
@@ -316,6 +317,39 @@ export class NavigationPanel {
     });
   }
 
+  /**
+   * Tear down subscriptions, timers, and doc/view references. Multi-pane
+   * closes panes routinely (tournament sessions open and close many
+   * files); without this, the settings/drag closures kept every closed
+   * pane's panel — and the full doc snapshot in `currentDoc` — alive
+   * for the whole session, each leaked panel still doing O(headings)
+   * work on every drag event.
+   */
+  destroy(): void {
+    this.destroyed = true;
+    this.unsubscribeSettings?.();
+    this.unsubscribeSettings = null;
+    this.unsubscribeDrag?.();
+    this.unsubscribeDrag = null;
+    this.unregisterSurface?.();
+    this.unregisterSurface = null;
+    // Closed mid-drag: the document-level drag listeners are otherwise
+    // only removed when the drag ends.
+    if (this.dragHandlersAttached) {
+      document.removeEventListener('pointermove', this.boundOnDragMove);
+      document.removeEventListener('pointerup', this.boundOnDragUp);
+      document.removeEventListener('keydown', this.boundOnDragKey);
+      document.removeEventListener('keyup', this.boundOnDragKeyUp);
+      this.dragHandlersAttached = false;
+    }
+    this.cancelAutoExpand();
+    this.cancelAllPendingRestore();
+    this.liEntries.clear();
+    this.currentDoc = null;
+    this.view = null;
+    this.root.remove();
+  }
+
   /** Surface implementation handed to the drag controller. */
   /** Cached scroll-gate element — used by hit-test to verify the
    *  cursor is in THIS nav's section, not just somewhere in the
@@ -430,6 +464,7 @@ export class NavigationPanel {
 
   /** Re-render given a new doc. Cheap to call on every transaction. */
   update(doc: PMNode): void {
+    if (this.destroyed) return; // a late debounced call must not re-pin the doc
     this.currentDoc = doc;
     this.render(doc);
   }
