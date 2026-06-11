@@ -61,9 +61,14 @@ export function mountMobileShell(): void {
   installPinchZoom();
   installEdgeSwipe(openDrawer);
 
-  // ☰ in the app bar drives the drawer.
+  // ☰ in the app bar: phone toggles the overlay drawer; tablet
+  // collapses / restores the persistent rail.
   appBar.querySelector<HTMLButtonElement>('.pmd-mappbar-drawer')!
     .addEventListener('click', () => {
+      if (document.body.classList.contains('pmd-mobile-tablet')) {
+        document.body.classList.toggle('pmd-mobile-rail-collapsed');
+        return;
+      }
       if (document.body.classList.contains('pmd-mobile-drawer-open')) closeDrawer();
       else openDrawer();
     });
@@ -157,6 +162,9 @@ function buildDrawer(): {
 
   const openDrawer = (): void => {
     document.body.classList.add('pmd-mobile-drawer-open');
+    // "Send to…" (and anything else that needs the outline) must be
+    // able to surface a collapsed tablet rail.
+    document.body.classList.remove('pmd-mobile-rail-collapsed');
   };
   const closeDrawer = (): void => {
     document.body.classList.remove('pmd-mobile-drawer-open');

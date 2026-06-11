@@ -6113,6 +6113,14 @@ async function journalAllForModeSwitch(): Promise<ModeSwitchDoc[]> {
  *  discard it. Drafts left undecided when the sidebar closes
  *  remain in the journal store for the next launch. */
 async function runStartupRecovery(): Promise<void> {
+  // No recovery offers on mobile — the sidebar is a desktop surface
+  // (it would fight the mobile chrome), and the view-first shell is
+  // the wrong place to adjudicate drafts. Journals stay put and
+  // surface on the next desktop-layout launch.
+  if (BOOT_MOBILE) {
+    console.log('[cardmirror] mobile: skipping startup recovery (journals deferred to desktop)');
+    return;
+  }
   const host = getHost();
   if (!host.journalsSupported) return;
   let entries: JournalEntry[];

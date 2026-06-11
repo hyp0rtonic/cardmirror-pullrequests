@@ -26,7 +26,10 @@ in each release, see `CHANGELOG.md`.
   a toggle), hides the desktop chrome via CSS, and re-points the
   single-doc layout variables at its own app bar / mode bar / status
   strip. The home screen shows documents only (no Quick Cards or
-  flashcard sections), and the dropzone pill is not mounted.
+  flashcard sections), the dropzone pill is not mounted, and
+  `runStartupRecovery` is skipped outright — the recovery sidebar is
+  a desktop surface, so journals stay put and surface on the next
+  desktop-layout launch.
 
   View-first mechanics: `mobilePlugin` (first in
   `buildEditorPlugins`, no-op outside the shell) supplies
@@ -46,7 +49,8 @@ in each release, see `CHANGELOG.md`.
   (same NavigationPanel instance — caret sync, level filters, and
   click-to-jump unchanged), slides in via left-edge swipe or ☰, and
   on tablet density (≥768px, `pmd-mobile-tablet`) pins as a
-  persistent 260px rail. The drawer clips overflow and outline
+  persistent 260px rail that the same ☰ collapses and restores
+  (anything that needs the outline — "Send to…" — un-collapses it). The drawer clips overflow and outline
   labels wrap up to three lines before ellipsis. Pinch on `#app`
   drives the SAME content zoom as the desktop status bar (`zoomPct`
   → `--editor-zoom`, CSS `zoom`): live preview writes the variable

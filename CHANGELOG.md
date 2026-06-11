@@ -19,13 +19,16 @@ see `DETAILED_CHANGELOG.md`.
   speech doc straight off the phone. Pinch zooms the document (the
   chrome stays put; a Reset button in the display sheet returns to
   100%), the outline slides in from the left edge with entries
-  wrapping up to three lines (tablets keep it pinned as a sidebar),
+  wrapping up to three lines (tablets pin it as a sidebar the ☰
+  button collapses and restores),
   and the menu covers Open, Export a copy, word count, and Home —
   which on mobile shows documents only, no Quick Cards or flashcard
   sections. A Settings page sized for touch carries the relevant
   settings — appearance, text sizes, readers, AI key — and "Use
   desktop layout" (or the new "Layout on this device" setting)
-  switches back to the full UI any time. Editing stays desktop-only:
+  switches back to the full UI any time. Crash-recovery offers
+  don't pop up in the mobile layout — unsaved drafts wait for your
+  next desktop-layout visit. Editing stays desktop-only:
   the mobile view never opens the on-screen keyboard, and there is no
   drag-from-the-document or dropzone on mobile — on touch, a drag is
   indistinguishable from a scroll. Rearranging is its own mode
