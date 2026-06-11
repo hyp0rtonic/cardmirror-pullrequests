@@ -209,6 +209,29 @@ describe('placement on formatted cards (failure repro)', () => {
     expect(bodyTexts(next.doc)[0]).toBe('In much of the resistance literature today.');
   });
 
+  it('a CASE-ONLY fix places via the fallback (case folds for search, not for the diff)', () => {
+    // Live miss 2026-06-10: find "appropriation Of its\nfoundationalist"
+    // fixing "Of"→"of". Case-folding the find→replace diff erased the
+    // edit (empty middle → discarded as no-op). The diff is now
+    // case-sensitive while the search stays case-insensitive.
+    const doc = makeDoc(
+      para('an appropriation Of its'),
+      para('foundationalist claims here'),
+    );
+    // Model wrote a space where the doc has the block boundary, so the
+    // verbatim path misses and the fix must survive the fallback.
+    const { next, applied, skipped } = repair(doc, [
+      {
+        find: 'appropriation Of its foundationalist',
+        replace: 'appropriation of its foundationalist',
+      },
+    ]);
+    expect(applied).toBe(1);
+    expect(skipped).toBe(0);
+    expect(bodyTexts(next.doc)[0]).toBe('an appropriation of its');
+    expect(bodyTexts(next.doc)[1]).toBe('foundationalist claims here'); // blocks intact
+  });
+
   it('context with a dropped word places via trimmed retry', () => {
     // Live case 2026-06-10: the doc reads "of THE re sis tance
     // literature"; the model dropped "the" from its find. Trimming the

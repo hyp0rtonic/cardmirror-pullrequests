@@ -212,7 +212,7 @@ export interface LocatedFix {
  *  dropped. The pilcrow glyph is deliberately NOT folded: it is
  *  meaningful condensed-card content, and a folded match spanning one
  *  would silently delete it. */
-function foldWithMap(s: string): { norm: string; map: number[] } {
+function foldWithMap(s: string, lower = true): { norm: string; map: number[] } {
   let norm = '';
   const map: number[] = [];
   for (let i = 0; i < s.length; i++) {
@@ -229,10 +229,11 @@ function foldWithMap(s: string): { norm: string; map: number[] } {
     else if (ch === 'ﬄ') out = 'ffl';
     else if (ch === '\u00AD' || ch === '\u200B' || ch === '\u200C' || ch === '\u200D' || ch === '\uFEFF') out = '';
     else out = ch;
-    // Case-fold too: the model misquotes capitalization in context
-    // ("in much of…" for a doc that reads "In much of…"). Safe because
-    // the agreeing context is never edited — the doc keeps its case.
-    out = out.toLowerCase();
+    // Case-fold too (searching only): the model misquotes
+    // capitalization in context ("in much of…" for a doc reading "In
+    // much of…"). The find→replace DIFF is computed case-SENSITIVELY
+    // (lower=false) so intentional case fixes survive as a middle.
+    if (lower) out = out.toLowerCase();
     norm += out;
     for (let k = 0; k < out.length; k++) map.push(i);
   }
@@ -266,14 +267,26 @@ function locateNormalized(
   if (idx < 0) return null;
   const flatEnd = hay.map[idx + nf.norm.length - 1]! + 1;
 
-  // Agreeing prefix/suffix between folded find and folded replace.
+  // Agreeing prefix/suffix between find and replace. Compared
+  // CASE-SENSITIVELY (the comparison is model-internal, so the model's
+  // context-case misquotes agree with themselves) — otherwise a fix
+  // whose whole point is a case change ("Of" → "of") folds to an empty
+  // middle and gets discarded as a no-op (live miss 2026-06-10).
+  // Case-preserving folds share indices with the case-folded ones
+  // unless a locale oddity changes length under lowercasing — then
+  // fall back to the case-folded comparison.
+  const nfc = foldWithMap(fix.find, false);
+  const nrc = foldWithMap(fix.replace, false);
+  const useCased = nfc.norm.length === nf.norm.length && nrc.norm.length === nr.norm.length;
+  const fNorm = useCased ? nfc.norm : nf.norm;
+  const rNorm = useCased ? nrc.norm : nr.norm;
   let p = 0;
-  while (p < nf.norm.length && p < nr.norm.length && nf.norm[p] === nr.norm[p]) p++;
+  while (p < fNorm.length && p < rNorm.length && fNorm[p] === rNorm[p]) p++;
   let s = 0;
   while (
-    s < nf.norm.length - p &&
-    s < nr.norm.length - p &&
-    nf.norm[nf.norm.length - 1 - s] === nr.norm[nr.norm.length - 1 - s]
+    s < fNorm.length - p &&
+    s < rNorm.length - p &&
+    fNorm[fNorm.length - 1 - s] === rNorm[rNorm.length - 1 - s]
   ) s++;
   // Don't split a multi-char fold (ligature) at either boundary -- back
   // the boundary off until it sits between whole raw characters.

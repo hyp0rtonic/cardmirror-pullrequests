@@ -97,6 +97,10 @@ in each release, see `CHANGELOG.md`.
   shorter pair retried through the folded locator; the reading-order
   cursor keeps a less-unique needle honest. This also rescues "--"
   echoed for an em-dash when the corrupted word is trimmable context.
+  Case folding applies to the SEARCH only: the find→replace diff is
+  computed case-sensitively (the comparison is model-internal), so a
+  fix whose whole point is a case change ("Of" → "of", live miss) is a
+  real edit middle rather than folding away to a discarded no-op.
   Remaining pinned gap: a find that omits an inline pilcrow. (2) The
   reply cap rises
   4096→16K with stop_reason checked — a truncated fix list previously
