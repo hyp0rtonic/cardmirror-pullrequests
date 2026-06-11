@@ -97,6 +97,7 @@ import { CommentsColumn, addCommentToSelection, FC_PREFIX, AI_PREFIX, NOTE_PREFI
 import { runAiCreateCite } from './ai/cite-creator.js';
 import { runTranslate } from './translate.js';
 import { runRepairText } from './ai/repair-text.js';
+import { runRepairFormatting } from './ai/repair-formatting.js';
 import {
   readModePlugin,
   PMD_READ_MODE_TOGGLE,
@@ -981,6 +982,10 @@ const ribbonContext: RibbonContext = {
   repairText: () => {
     if (!view) return;
     runRepairText(view);
+  },
+  repairFormatting: () => {
+    if (!view) return;
+    runRepairFormatting(view);
   },
   createFlashcard: () => {
     if (!view) return;

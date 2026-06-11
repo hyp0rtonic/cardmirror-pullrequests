@@ -329,7 +329,7 @@ function createWindow(initialDoc?: InitialDocPayload): BrowserWindow {
     // legacy signature and (event{level,message,...}) in the new one.
     const fromEvent = (args[0] as { message?: unknown })?.message;
     const msg = typeof fromEvent === 'string' ? fromEvent : args[2];
-    if (typeof msg === 'string' && /^\[(repair|cardmirror)\]/.test(msg)) {
+    if (typeof msg === 'string' && /^\[(repair(-fmt)?|cardmirror)\]/.test(msg)) {
       console.log(`[renderer] ${msg}`);
     }
   });

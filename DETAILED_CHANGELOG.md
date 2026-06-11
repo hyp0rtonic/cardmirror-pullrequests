@@ -7,7 +7,41 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
-- **Repair Text placement: normalization-tolerant fallback locator;
+- **Repair Formatting (AI)** (new `src/editor/ai/repair-formatting.ts`;
+  ribbon `repairFormatting`, Mod-Alt-R; wired in `index.ts` /
+  `ribbon-groups.ts`). Normalizes imported body text to Verbatim's
+  four-layer scheme (underline ⊇ emphasis; highlight ⊇ shading; bold /
+  italic only as a deliberate extra layer or reproduced source
+  formatting). Architecture deliberately differs from Repair Text's
+  find/replace diffs: the model NEVER re-emits the card. The editor
+  computes the card's distinct formatting SIGNATURES (the exact mark
+  set per run, plus `du` for direct underline, `small` for
+  below-base-size text, `cite` for cite-style debris) and sends the
+  plain text plus a signature table with run counts and sample
+  excerpts; the model returns a constant-size JSON mapping — signature
+  → canonical target — plus optional verbatim-fragment exceptions for
+  idiosyncratic spans (e.g. a book title keeping italics against the
+  blanket italics→emphasis rule). `applyFormatPlan` rewrites each
+  mapped run (scheme marks wholesale-replaced; identity mappings
+  skipped so the transaction stays minimal), then applies exceptions
+  over every occurrence of each fragment. Guarantees by construction:
+  text untouchable (the model has no channel to change it), font sizes
+  never modified (they encode shrink state and, in the size-recovery
+  pattern, the only surviving underline evidence), highlight/shading
+  colors carried over from the original runs. One request per card —
+  card-scoped judgments like "is ALL underlining bold?" (which decides
+  bold-underline → underline vs emphasis, per the Doc-Style-Cleaner
+  heuristic) stay card-scoped; doc-level loose paragraphs pool as one
+  group. Base size = largest size with ≥10% char share (largest, not
+  modal: shrunk connective text is usually the majority in
+  size-encoded cards). All requests resolve before a SINGLE
+  transaction applies every card (formatting-only edits keep positions
+  stable), so the whole repair is one undo step; repaired ranges flash
+  like Repair Text. [repair-fmt]-tagged console diagnostics log the
+  signature table sent, the full plan and exceptions returned,
+  unmapped signatures, dropped/invalid entries, and per-card rewrite
+  counts — same refinement loop as [repair]; the main-process console
+  forwarder now matches the [repair-fmt] tag too.
   output cap raised; failure paths logged**
   (`src/editor/ai/repair-text.ts`, console forwarding in
   `apps/desktop/src/main.ts`). Live diagnosis on a real imported card

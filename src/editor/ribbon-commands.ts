@@ -3562,6 +3562,7 @@ export type RibbonCommandId =
   | 'aiCreateCite'
   | 'translate'
   | 'repairText'
+  | 'repairFormatting'
   | 'createFlashcard'
   | 'manageFlashcards'
   | 'wordCountSelection'
@@ -3706,6 +3707,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'aiCreateCite',
   'translate',
   'repairText',
+  'repairFormatting',
   'createFlashcard',
   'manageFlashcards',
   'wordCountSelection',
@@ -3826,6 +3828,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   aiCreateCite: 'Format Cite From Selection',
   translate: 'Translate Selection (to Clipboard)',
   repairText: 'Repair OCR/PDF Text',
+  repairFormatting: 'Repair Formatting (AI)',
   createFlashcard: 'Create Flashcard From Selection',
   manageFlashcards: 'Manage Flashcards',
   wordCountSelection: 'Word Count Selection',
@@ -3989,6 +3992,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   aiCreateCite: 'Mod-Shift-x',
   translate: 'Mod-Shift-t',
   repairText: 'Mod-Shift-r',
+  repairFormatting: 'Mod-Alt-r',
   createFlashcard: '',
   manageFlashcards: '',
   wordCountSelection: '',
@@ -4172,6 +4176,8 @@ export interface RibbonContext {
   translate: () => void;
   /** Repair OCR / PDF text errors in the selection in place. */
   repairText: () => void;
+  /** Repair body-text formatting (underline/emphasis/highlight scheme). */
+  repairFormatting: () => void;
   createFlashcard: () => void;
   manageFlashcards: () => void;
   /** File-level commands. These work regardless of whether the editor
@@ -4293,6 +4299,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   aiCreateCite: () => {},
   translate: () => {},
   repairText: () => {},
+  repairFormatting: () => {},
   createFlashcard: () => {},
   manageFlashcards: () => {},
   newDocument: () => {},
@@ -4485,6 +4492,13 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
         if (state.selection.empty) return false;
         if (!dispatch) return true;
         ctx.repairText();
+        return true;
+      };
+    case 'repairFormatting':
+      return (state, dispatch) => {
+        if (state.selection.empty) return false;
+        if (!dispatch) return true;
+        ctx.repairFormatting();
         return true;
       };
     case 'createFlashcard':

@@ -82,6 +82,26 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Repair Formatting (AI).** Select body text and press **Mod-Alt-R**
+  to normalize it to Verbatim's four-layer scheme — underline as the
+  broad pass, emphasis to make some of it stand out, highlighting for
+  what's read aloud, shading to set off some of the highlighting. It
+  repairs the classic breakdowns of imported cards: bold or italics
+  standing in for emphasis, direct underlining instead of the named
+  style, bold-underline used for ALL the underlining (no emphasis pass
+  — converted to plain underline, not emphasis), and cards whose
+  underlining was destroyed by an unsupported style, recoverable only
+  from font size (full-size text was the underlined text). Bold and
+  italics survive when they're a deliberate extra layer alongside real
+  emphasis or reproduce the source's own formatting (book titles,
+  foreign terms). The model never touches your text — it only returns
+  a mapping from each formatting pattern found to what that pattern
+  should be (plus targeted overrides for idiosyncratic fragments), and
+  the editor applies it. Works one card at a time, only on body
+  paragraphs (never tags, cites, or headings), highlight and shading
+  colors preserved, font sizes untouched, one undo step. Requires AI
+  features.
+
 - **Voice control (alpha, desktop only).** Press **Ctrl-Shift-V** to start a
   hands-free editing session — recognition runs entirely on your machine
   (no network, ever). Speak commands like `pen highlight` · `take <words
