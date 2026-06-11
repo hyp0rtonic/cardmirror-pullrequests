@@ -64,32 +64,42 @@ export async function openCutLaunchSheet(view: EditorView): Promise<void> {
     if (e.key === 'Escape') close();
   };
 
-  // ── Read-time ──
-  let readTimeSec = settings.get('cardCutterReadTimeSec');
+  // ── Read length (optional cap; efficient by default) ──
+  // null = no cap (cut as efficiently as possible). A time chip caps
+  // the read via the secondary de-highlight; it never pads up to it.
+  let readTimeSec: number | null = null;
   const rtSection = document.createElement('div');
   rtSection.className = 'pmd-cardcutter-section';
   rtSection.appendChild(label('Read length'));
   const rtRow = document.createElement('div');
   rtRow.className = 'pmd-cardcutter-chips';
   const wpm = firstReaderWpm();
+  const press = (active: HTMLButtonElement): void =>
+    rtRow.querySelectorAll('.pmd-cardcutter-chip').forEach((c) =>
+      c.setAttribute('aria-pressed', String(c === active)),
+    );
+  const noCap = document.createElement('button');
+  noCap.type = 'button';
+  noCap.className = 'pmd-cardcutter-chip';
+  noCap.textContent = 'Efficient (no limit)';
+  noCap.setAttribute('aria-pressed', 'true');
+  noCap.addEventListener('click', () => {
+    readTimeSec = null;
+    press(noCap);
+  });
+  rtRow.appendChild(noCap);
   const chipFor = (sec: number): HTMLButtonElement => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'pmd-cardcutter-chip';
-    b.textContent = `${sec}s · ~${Math.round((sec * wpm) / 60)}w`;
-    b.setAttribute('aria-pressed', String(sec === readTimeSec));
+    b.textContent = `≤ ${sec}s · ~${Math.round((sec * wpm) / 60)}w`;
     b.addEventListener('click', () => {
       readTimeSec = sec;
-      rtRow.querySelectorAll('.pmd-cardcutter-chip').forEach((c) =>
-        c.setAttribute('aria-pressed', String(c === b)),
-      );
+      press(b);
     });
     return b;
   };
-  const presets = READ_TIME_PRESETS.includes(readTimeSec)
-    ? READ_TIME_PRESETS
-    : [...READ_TIME_PRESETS, readTimeSec].sort((a, b) => a - b);
-  for (const sec of presets) rtRow.appendChild(chipFor(sec));
+  for (const sec of READ_TIME_PRESETS) rtRow.appendChild(chipFor(sec));
   rtSection.appendChild(rtRow);
   dialog.appendChild(rtSection);
 
@@ -151,6 +161,7 @@ export async function openCutLaunchSheet(view: EditorView): Promise<void> {
   go.type = 'button';
   go.className = 'pmd-text-prompt-ok';
   go.textContent = highlightOnly ? 'Highlight' : 'Cut';
+  go.dataset['label'] = go.textContent;
   go.addEventListener('click', () => {
     void onGo();
   });
@@ -171,16 +182,20 @@ export async function openCutLaunchSheet(view: EditorView): Promise<void> {
     if (!highlightOnly && askMe) {
       go.disabled = true;
       go.textContent = 'Thinking…';
-      const proposals = await proposeFocusedCuts(view, readTimeSec, mode);
+      const base = readTimeSec ?? settings.get('cardCutterReadTimeSec');
+      const proposals = await proposeFocusedCuts(view, base, mode);
       go.disabled = false;
-      go.textContent = 'Cut';
+      go.textContent = go.dataset['label'] ?? 'Cut';
       if (proposals && proposals.length >= 2) {
         renderProposalStep(proposals);
         return;
       }
     }
     close();
-    await cutFocusedCard(view, { role: INTENT_ROLE[intent], readTimeSec });
+    await cutFocusedCard(view, {
+      role: INTENT_ROLE[intent],
+      ...(readTimeSec ? { readTimeSec } : {}),
+    });
   }
 
   /** Second step: the engine's candidate cuts as a radio group. */

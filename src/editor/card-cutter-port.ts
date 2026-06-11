@@ -44,7 +44,8 @@ interface PlainCard {
   paras: string[];
 }
 interface CutOptions {
-  targetWords: number;
+  /** Optional de-highlight cap; the primary cut is budget-free. */
+  targetWords?: number;
   emphasisStyle: 'voice' | 'independent' | 'minimal';
   role: 'shell' | 'block' | 'at' | 'ext' | 'impact';
   underlineGenerosity?: 'lean' | 'standard' | 'generous';
@@ -290,8 +291,10 @@ export function applyCutToCard(
 
 export interface CutInvocation {
   role: CutOptions['role'];
-  /** Read-time seconds; words derived from the reader WPM. */
-  readTimeSec: number;
+  /** Optional read-time CAP in seconds. The cut is always made
+   *  efficiently first; when set, a secondary de-highlight trims it
+   *  toward this length (never pads up to it). Omit = no cap. */
+  readTimeSec?: number;
 }
 
 export async function cutFocusedCard(view: EditorView, inv: CutInvocation): Promise<void> {
@@ -320,7 +323,11 @@ export async function cutFocusedCard(view: EditorView, inv: CutInvocation): Prom
     return;
   }
   const opts: CutOptions = {
-    targetWords: Math.max(15, Math.round((inv.readTimeSec * readerWpm()) / 60)),
+    // Efficient by default; a read-time cap becomes the secondary
+    // de-highlight target. No cap → undefined → pure efficient cut.
+    ...(inv.readTimeSec
+      ? { targetWords: Math.max(15, Math.round((inv.readTimeSec * readerWpm()) / 60)) }
+      : {}),
     emphasisStyle: settings.get('cardCutterEmphasisStyle'),
     role: inv.role,
     model: resolveAiModel(),
