@@ -65,6 +65,7 @@ export class EditorDragSurface implements DragSurface {
   private boundOnGlobalMove = (e: MouseEvent) => this.onGlobalMove(e);
   private boundOnHostMove = (e: PointerEvent) => this.onHostPointerMove(e);
   private boundOnHostDown = (e: PointerEvent) => this.onHostPointerDown(e);
+  private boundOnHostMouseDown = (e: MouseEvent) => this.onHostMouseDown(e);
   private boundOnDocMove = (e: PointerEvent) => this.onDocPointerMoveDuringDrag(e);
   private boundOnDocUp = (e: PointerEvent) => this.onDocPointerUpDuringDrag(e);
 
@@ -158,10 +159,17 @@ export class EditorDragSurface implements DragSurface {
     hostEl.addEventListener('pointermove', this.boundOnHostMove);
     // Capture phase: a pickup-drag pointerdown must be intercepted
     // BEFORE ProseMirror's own handler on the inner editable, or PM
-    // sets a (Shift/Alt-modified) text selection under the click. The
-    // handler only swallows the event when it's actually starting a
-    // drag; ordinary clicks fall through.
+    // sets a (Shift/Alt-modified) text selection under the click.
+    // While the chord is held, EVERY left click is swallowed (not
+    // just container hits): Blink's macOS editing behavior treats
+    // Option+Shift+click as word-granularity selection on mousedown,
+    // and `user-select: none` does not apply inside contenteditable —
+    // the container-only swallow shipped previously left every other
+    // chord-click selecting words on Mac. The mousedown interceptor
+    // is the belt to pointerdown's braces: selection runs off the
+    // mouse-event stream.
     hostEl.addEventListener('pointerdown', this.boundOnHostDown, true);
+    hostEl.addEventListener('mousedown', this.boundOnHostMouseDown, true);
     this.setupHeadingObservers();
   }
 
@@ -186,6 +194,7 @@ export class EditorDragSurface implements DragSurface {
     if (this.host) {
       this.host.removeEventListener('pointermove', this.boundOnHostMove);
       this.host.removeEventListener('pointerdown', this.boundOnHostDown, true);
+      this.host.removeEventListener('mousedown', this.boundOnHostMouseDown, true);
       this.host.classList.remove('pmd-editor-pickup-mode');
       this.host.classList.remove('pmd-editor-dragging-mode');
     }
@@ -576,20 +585,33 @@ export class EditorDragSurface implements DragSurface {
     this.showHighlight(container.from, container.to);
   }
 
+  /** While the pickup chord is held, no left mousedown may reach the
+   *  editable: Blink-on-macOS performs word-granularity selection for
+   *  Option+Shift+click at the mouse-event layer, beneath both PM and
+   *  the pointerdown interceptor. */
+  private onHostMouseDown(e: MouseEvent): void {
+    if (e.button !== 0) return;
+    if (!this.pickupModifierHeld) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
   private onHostPointerDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     if (!this.pickupModifierHeld) return;
-    if (dragController.isActive()) return;
-    if (!this.hovered || !this.view) return;
 
-    // We're starting a pickup-drag: fully swallow this pointerdown so
-    // ProseMirror (running on the inner editable) never sees it and
-    // can't place a text selection. Capture phase + stopImmediate is
-    // what makes that reliable — bubble-phase stopPropagation runs too
-    // late, after PM's target-phase handler.
+    // Chord held → the click belongs to pickup-drag, never to text
+    // selection. Swallow unconditionally (container hit or not) so
+    // neither ProseMirror nor the browser's native editing behavior
+    // ever sees it. Capture phase + stopImmediate is what makes that
+    // reliable — bubble-phase stopPropagation runs too late, after
+    // PM's target-phase handler.
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+
+    if (dragController.isActive()) return;
+    if (!this.hovered || !this.view) return;
 
     const item: DragItem = {
       from: this.hovered.from,

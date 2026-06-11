@@ -16,6 +16,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Holding the drag chord and clicking no longer selects words on
+  macOS.** The previous release's fix only suppressed clicks that
+  landed on a draggable card or heading; everywhere else the
+  Option+Shift-modified click fell through to the Mac's native
+  select-a-word behavior, which `user-select` can't block inside an
+  editable. While the chord is held, clicks in the editor now never
+  reach the text layer at all — they either start a pickup or do
+  nothing.
+
 - **Pane word counts update live after Send to Speech in multi-pane.**
   Two stacked causes. The send path's "show the new headings
   immediately" hook cancelled the pending refresh without doing the
