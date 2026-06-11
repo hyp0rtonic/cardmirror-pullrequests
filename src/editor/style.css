@@ -9834,10 +9834,24 @@ body.pmd-mobile-drawer-open .pmd-mobile-scrim {
   pointer-events: auto;
 }
 /* The relocated nav panel fills the drawer; the desktop fixed-
-   sidebar geometry and the hide-toggle no longer apply. */
+   sidebar geometry and the hide-toggle no longer apply. The chain
+   matters: the drawer holds the #nav-panel WRAPPER div, not the
+   aside directly — every link must be height-bounded or the aside
+   grows to content height, the drawer clips it, and the list never
+   becomes a scroll container (no wheel scroll, scrollTop writes
+   ignored). */
+body.pmd-mobile .pmd-mobile-drawer #nav-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  min-height: 0;
+}
 body.pmd-mobile .pmd-mobile-drawer .pmd-nav-panel {
   position: static;
   width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   border-right: none;
 }
 body.pmd-mobile.pmd-nav-hidden .pmd-mobile-drawer .pmd-nav-panel {
