@@ -37,11 +37,13 @@ function typeOver(
   from: number,
   to: number,
   text: string,
-): { handled: boolean; doc: PMNode } {
+): { handled: boolean; doc: PMNode; state: EditorState } {
   let state = EditorState.create({ doc, plugins: [typeOverBoundaryPlugin] });
   state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, from, to)));
   const view = {
-    state,
+    get state() {
+      return state;
+    },
     dispatch(tr: import('prosemirror-state').Transaction) {
       state = state.apply(tr);
     },
@@ -53,7 +55,7 @@ function typeOver(
     to,
     text,
   );
-  return { handled, doc: state.doc };
+  return { handled, doc: state.doc, state };
 }
 
 /** Block-type/text pairs for the whole doc. */
@@ -117,5 +119,22 @@ describe('typeOverBoundaryPlugin', () => {
     const p2Start = doc.firstChild!.nodeSize + 1;
     const { handled } = typeOver(doc, p2Start, p2Start, 'X');
     expect(handled).toBe(false);
+  });
+
+  it('collapses to a cursor after the typed text — continued typing appends', () => {
+    // Live regression: without the explicit collapse, the mapped
+    // selection stayed a range tail-at-block-start, so every following
+    // keystroke re-entered the handler and overwrote in place.
+    const doc = makeDoc(para('first paragraph'), para('second paragraph'));
+    const p2Start = doc.firstChild!.nodeSize + 1;
+    const first = typeOver(doc, 1, p2Start, 'X');
+    expect(first.handled).toBe(true);
+    const sel = first.state.selection;
+    expect(sel.empty).toBe(true);
+    expect(sel.from).toBe(2); // right after the typed 'X'
+    // Second keystroke at the collapsed cursor: the plugin stands
+    // aside and normal insertion appends.
+    const second = typeOver(first.doc, sel.from, sel.to, 'Y');
+    expect(second.handled).toBe(false);
   });
 });
