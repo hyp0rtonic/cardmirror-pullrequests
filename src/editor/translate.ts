@@ -95,6 +95,10 @@ export interface TranslateOutcome {
   /** Upper-case attribution for the "TRANSLATION BY …" marker — the
    *  model name for Anthropic, else the service name. */
   markerName: string;
+  /** True when the backend cut the output short (Anthropic
+   *  `stop_reason: 'max_tokens'`) — the text is INCOMPLETE and the
+   *  caller must say so, not silently hand over a cut-off translation. */
+  truncated?: boolean;
 }
 
 /** Map an Anthropic model id to a short upper-case label for the marker
@@ -143,8 +147,10 @@ export async function translateText(text: string): Promise<TranslateOutcome> {
   const sourceSetting = (settings.get('translationSourceLang') || 'auto').toLowerCase();
 
   if (provider === 'anthropic') {
+    const reply = await translateAnthropic(text, target);
     return {
-      text: await translateAnthropic(text, target),
+      text: reply.text,
+      truncated: reply.truncated,
       provider: 'Anthropic',
       markerName: modelMarkerName(resolveAiModel()),
     };
@@ -191,16 +197,30 @@ Important guidelines:
 - Return only the translated text without explanations`;
 }
 
-async function translateAnthropic(text: string, target: string): Promise<string> {
+/** Output ceiling for Anthropic translations. A translation is roughly
+ *  input-sized, and the client's 1024-token default silently cut off
+ *  anything past a few paragraphs. 16K tokens (~40K+ characters) covers
+ *  any realistic selection while staying within non-streaming HTTP
+ *  comfort; output tokens only bill as generated, so the headroom is
+ *  free on short translations. */
+const ANTHROPIC_TRANSLATE_MAX_TOKENS = 16000;
+
+async function translateAnthropic(
+  text: string,
+  target: string,
+): Promise<{ text: string; truncated: boolean }> {
   if (!anthropicReady()) {
     throw new Error('Anthropic translation needs AI features — enable them under Comments & AI.');
   }
   const reply = await callAnthropic({
     apiKey: settings.get('anthropicApiKey').trim(),
     system: anthropicTranslatorPrompt(languageName(target)),
+    maxTokens: ANTHROPIC_TRANSLATE_MAX_TOKENS,
     messages: [{ role: 'user', content: text }],
   });
-  return reply.text.trim();
+  // 'max_tokens' means the model was cut off mid-translation — the text
+  // is incomplete even though the request "succeeded".
+  return { text: reply.text.trim(), truncated: reply.stopReason === 'max_tokens' };
 }
 
 /** MyMemory per-request `q` cap (chars). Stay under it and rejoin. */
@@ -331,12 +351,22 @@ export function runTranslate(view: EditorView): void {
   showToast(`Translating to ${target}…`);
   void (async () => {
     try {
-      const { text: translated, provider, markerName } = await translateText(text);
-      const output = settings.get('prependTranslationMarker')
+      const { text: translated, provider, markerName, truncated } = await translateText(text);
+      let output = settings.get('prependTranslationMarker')
         ? `${buildTranslationMarker(markerName)}\n${translated}`
         : translated;
+      if (truncated) {
+        // The marker rides IN the clipboard text so an incomplete
+        // translation can't be pasted without notice, toast or no toast.
+        output += '\n[TRANSLATION INCOMPLETE — OUTPUT LENGTH LIMIT REACHED]';
+      }
       await copyToClipboard(output);
-      showToast(`Translated to ${target} (${provider}) — copied to clipboard.`);
+      showToast(
+        truncated
+          ? `Translation hit the output length limit and was CUT OFF — the copied text is incomplete. Translate a smaller selection.`
+          : `Translated to ${target} (${provider}) — copied to clipboard.`,
+        truncated ? { durationMs: 4000 } : undefined,
+      );
     } catch (e) {
       if (e instanceof AnthropicError) showToast(`Translate: ${e.message}`);
       else showToast(`Translate: ${e instanceof Error ? e.message : String(e)}`);

@@ -9,6 +9,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Anthropic translations no longer cut off silently on long
+  selections.** The AI translation path capped its output at roughly
+  750 words and quietly copied whatever fit — a long card came back
+  missing its tail with no warning. The ceiling is now ~40,000
+  characters (far beyond any realistic selection), and if a translation
+  ever does hit it, the toast says so and the copied text ends with a
+  visible `[TRANSLATION INCOMPLETE — OUTPUT LENGTH LIMIT REACHED]`
+  marker instead of pretending to be complete.
+
 - **Saving no longer adds italics to undertag text.** Exported files
   mark undertag runs italic so they display correctly in Word; reopening
   such a file turned that display hint into real italic formatting on

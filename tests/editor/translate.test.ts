@@ -1,12 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   chunkText,
   TRANSLATION_LANGUAGES,
   languageName,
   buildTranslationMarker,
   TRANSLATION_MARKER_NAMES,
+  translateText,
 } from '../../src/editor/translate.js';
 import { compileShrinkProtections } from '../../src/editor/ribbon-commands.js';
+import { settings } from '../../src/editor/settings.js';
 
 describe('chunkText (MyMemory request splitting)', () => {
   it('returns the text whole when under the limit', () => {
@@ -62,5 +64,46 @@ describe('translation marker', () => {
       });
       expect(matched, `unprotected: ${marker}`).toBe(true);
     }
+  });
+});
+
+describe('anthropic translation limits', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    settings.set('aiFeaturesEnabled', false);
+    settings.set('anthropicApiKey', '');
+    settings.set('translationProvider', 'auto');
+  });
+
+  function stubAnthropic(stopReason: string) {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: 'text', text: 'Hola mundo' }],
+          stop_reason: stopReason,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    settings.set('aiFeaturesEnabled', true);
+    settings.set('anthropicApiKey', 'sk-test');
+    settings.set('translationProvider', 'anthropic');
+    return fetchMock;
+  }
+
+  it('requests a translation-sized output ceiling, not the 1024 chat default', async () => {
+    const fetchMock = stubAnthropic('end_turn');
+    const out = await translateText('Hello world');
+    expect(out.text).toBe('Hola mundo');
+    expect(out.truncated).toBeFalsy();
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(body.max_tokens).toBeGreaterThanOrEqual(16000);
+  });
+
+  it('flags a max_tokens stop as truncated instead of passing it off as complete', async () => {
+    stubAnthropic('max_tokens');
+    const out = await translateText('Hello world');
+    expect(out.truncated).toBe(true);
   });
 });

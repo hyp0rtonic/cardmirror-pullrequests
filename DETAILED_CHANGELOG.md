@@ -7,6 +7,23 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Anthropic translation output ceiling raised; truncation surfaced**
+  (`src/editor/translate.ts`). `translateAnthropic` inherited the
+  client's `DEFAULT_MAX_TOKENS = 1024` — sized for chat replies, not
+  translations, whose output is roughly input-sized. Anything past a
+  few paragraphs came back with `stop_reason: 'max_tokens'`, which the
+  translator ignored: the cut-off text was copied to the clipboard as
+  if complete. Now: the translation call requests a 16K-token ceiling
+  (output tokens only bill as generated, so the headroom is free on
+  short selections; 16K stays within non-streaming HTTP comfort), and
+  `stop_reason === 'max_tokens'` threads through `TranslateOutcome.
+  truncated` — the toast warns, and the clipboard text itself gains a
+  trailing `[TRANSLATION INCOMPLETE — OUTPUT LENGTH LIMIT REACHED]`
+  line so the incomplete result can't be pasted without notice. Other
+  AI features keep the 1024 chat default. The MyMemory/Google paths
+  are unchanged (MyMemory chunks at its per-request cap and errors
+  loudly on quota; neither silently truncates).
+
 - **Cite-debris cleanup: shadow ranges skip the Layer-3 trim;
   classification ignores whitespace-only cite runs**
   (`src/editor/ribbon-commands.ts` `getOperatingRangesForFormatting` +
