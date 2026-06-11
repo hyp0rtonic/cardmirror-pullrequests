@@ -10109,3 +10109,57 @@ html.pmd-home-active .pmd-mobile-scrim {
 body.pmd-mobile-phone .pmd-home-screen {
   padding: 1rem;
 }
+
+/* ── Mobile shell fixes (desktop test feedback, 2026-06-11) ── */
+
+/* Long outline entries must never poke out of the drawer — the
+   drawer clips, and labels wrap up to three lines before ellipsis
+   (desktop keeps its single-line nowrap). */
+.pmd-mobile-drawer {
+  overflow: hidden;
+}
+body.pmd-mobile .pmd-nav-label {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-clamp: 3;
+  overflow: hidden;
+}
+/* Native vertical panning scrolls the outline; a touch drag has to
+   move sideways first to read as a row drag. (Long-press pickup is
+   the P3 design — this keeps scroll usable meanwhile.) */
+body.pmd-mobile .pmd-nav-list {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+/* Home screen on mobile: documents only — no Quick Cards, no
+   flashcards (both are desktop workflows). */
+body.pmd-mobile .pmd-home-qc-section,
+body.pmd-mobile .pmd-home-learn-section {
+  display: none;
+}
+
+/* No dropzone pill on mobile (no editor-surface drags at all). The
+   mount is skipped in code; this covers anything that re-shows it. */
+body.pmd-mobile .pmd-dropzone-root,
+body.pmd-mobile .pmd-dropzone-runway-spacer {
+  display: none;
+}
+
+/* Aa sheet: label + Reset on one line above the slider. */
+.pmd-msheet-rowhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pmd-msheet-reset {
+  min-height: 1.9rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 6px;
+  background: none;
+  color: var(--pmd-c-accent);
+  cursor: pointer;
+}

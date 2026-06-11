@@ -26,6 +26,12 @@ export interface MobileLayoutEnv {
  *  desktop UI, and its toggle is one tap away either way. */
 export const MOBILE_AUTO_MAX_WIDTH = 1024;
 
+/** Below this width `auto` picks mobile regardless of pointer type —
+ *  a phone-class viewport can't fit the desktop chrome no matter what
+ *  is pointing at it (and DevTools-style narrow windows should land
+ *  in the mobile layout without needing touch emulation). */
+export const MOBILE_AUTO_ANY_POINTER_WIDTH = 768;
+
 export function resolveMobileLayout(
   setting: MobileLayoutSetting,
   env: MobileLayoutEnv,
@@ -33,6 +39,7 @@ export function resolveMobileLayout(
   if (env.hostKind !== 'browser') return false;
   if (setting === 'desktop') return false;
   if (setting === 'mobile') return true;
+  if (env.viewportWidth < MOBILE_AUTO_ANY_POINTER_WIDTH) return true;
   return env.coarsePointer && env.viewportWidth < MOBILE_AUTO_MAX_WIDTH;
 }
 

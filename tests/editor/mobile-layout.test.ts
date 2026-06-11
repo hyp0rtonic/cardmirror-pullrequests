@@ -9,6 +9,7 @@ import {
   resolveMobileLayout,
   mobileDensity,
   MOBILE_AUTO_MAX_WIDTH,
+  MOBILE_AUTO_ANY_POINTER_WIDTH,
 } from '../../src/editor/mobile-layout.js';
 
 const phone = { hostKind: 'browser', coarsePointer: true, viewportWidth: 390 };
@@ -20,13 +21,31 @@ describe('resolveMobileLayout', () => {
     expect(resolveMobileLayout('auto', phone)).toBe(true);
   });
 
-  it('auto keeps desktop on fine pointers and on wide touch screens', () => {
+  it('auto keeps desktop on wide fine-pointer screens and wide touch screens', () => {
     expect(resolveMobileLayout('auto', laptop)).toBe(false);
     expect(resolveMobileLayout('auto', tabletLandscape)).toBe(false);
-    // Boundary: exactly the cutoff width stays desktop.
+    // Boundary: exactly the coarse-pointer cutoff width stays desktop.
     expect(
       resolveMobileLayout('auto', { ...phone, viewportWidth: MOBILE_AUTO_MAX_WIDTH }),
     ).toBe(false);
+  });
+
+  it('auto picks mobile on phone-class widths regardless of pointer', () => {
+    // A narrowed desktop browser window (fine pointer, no touch
+    // emulation) still gets the mobile layout below 768px.
+    expect(
+      resolveMobileLayout('auto', { ...laptop, viewportWidth: 600 }),
+    ).toBe(true);
+    expect(
+      resolveMobileLayout('auto', {
+        ...laptop,
+        viewportWidth: MOBILE_AUTO_ANY_POINTER_WIDTH,
+      }),
+    ).toBe(false);
+    // Coarse pointer widens the window to 1024.
+    expect(
+      resolveMobileLayout('auto', { ...phone, viewportWidth: 900 }),
+    ).toBe(true);
   });
 
   it('explicit mobile / desktop override the heuristics', () => {

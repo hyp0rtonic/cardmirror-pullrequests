@@ -61,6 +61,29 @@ in each release, see `CHANGELOG.md`.
   segments. Move mode (tap-pick + move commands + outline drop) and
   Repair mode are P3/P4 per the spec.
 
+  Desktop-test feedback round (same release): `auto` now also picks
+  mobile on ANY sub-768px browser window regardless of pointer type
+  (the coarse-pointer rule alone made a narrowed desktop window —
+  the natural way to try the layout — stay desktop, which read as
+  detection being broken; coarse pointers keep the 1024px bound),
+  with a `[cardmirror] mobile:` boot line logging the inputs and
+  decision on the web edition. NO editor-surface drag on mobile at
+  all — on touch a grab is indistinguishable from a scroll — so the
+  dropzone pill isn't mounted there; structural movement is the
+  coming Move-mode buttons plus drags WITHIN the nav pane (whose
+  list now scrolls via native vertical panning, `touch-action:
+  pan-y` — a row drag has to start sideways until P3's long-press
+  pickup). The drawer clips overflow and outline labels wrap up to
+  three lines before ellipsis (a doc with very long tags could
+  previously paint outside the closed drawer). The Aa sheet's text
+  size slider gains a Reset-to-100% button. The mobile home screen
+  drops the Quick Cards and flashcard sections (desktop workflows).
+  The layout setting is `searchHidden` — a new `SettingMeta` flag
+  the command palette's settings search respects (it also now
+  applies the `electronOnly`/`webOnly` host filters the dialog
+  uses, so web-only rows can't surface in the desktop app's
+  palette).
+
 - **Mode-switch (three-pane ↔ windows) restores exactly the open
   set** (`src/editor/index.ts`, new `src/editor/mode-switch.ts`,
   `multi-pane-shell.ts`, `apps/desktop/src/main.ts`, preload +

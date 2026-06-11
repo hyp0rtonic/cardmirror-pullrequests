@@ -404,7 +404,11 @@ function searchSettingsSource(query: string): PaletteResult[] {
     return tokens.length === 0 || tokens.every((t) => hay.includes(t));
   };
   const items = SETTING_METADATA.filter(
-    (m) => (!m.electronOnly || hostKind === 'electron') && matchSetting(m),
+    (m) =>
+      !m.searchHidden &&
+      (!m.electronOnly || hostKind === 'electron') &&
+      (!m.webOnly || hostKind === 'browser') &&
+      matchSetting(m),
   );
   const t0 = tokens[0];
   const rank = (label: string): number => {

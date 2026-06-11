@@ -237,19 +237,34 @@ function buildDisplaySheet(): HTMLElement {
 
   const zoomRow = document.createElement('div');
   zoomRow.className = 'pmd-msheet-row';
+  const zoomHead = document.createElement('div');
+  zoomHead.className = 'pmd-msheet-rowhead';
   const zoomLabel = document.createElement('span');
   const slider = document.createElement('input');
   slider.type = 'range';
   slider.min = String(ZOOM_MIN);
   slider.max = String(ZOOM_MAX);
   slider.step = '5';
-  slider.value = String(settings.get('zoomPct'));
-  zoomLabel.textContent = `Text size — ${slider.value}%`;
+  const syncZoom = (): void => {
+    slider.value = String(settings.get('zoomPct'));
+    zoomLabel.textContent = `Text size — ${slider.value}%`;
+  };
+  syncZoom();
   slider.addEventListener('input', () => {
     settings.set('zoomPct', Number(slider.value));
-    zoomLabel.textContent = `Text size — ${slider.value}%`;
+    syncZoom();
   });
-  zoomRow.appendChild(zoomLabel);
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'pmd-msheet-reset';
+  reset.textContent = 'Reset';
+  reset.addEventListener('click', () => {
+    settings.set('zoomPct', 100);
+    syncZoom();
+  });
+  zoomHead.appendChild(zoomLabel);
+  zoomHead.appendChild(reset);
+  zoomRow.appendChild(zoomHead);
   zoomRow.appendChild(slider);
   sheet.appendChild(zoomRow);
 

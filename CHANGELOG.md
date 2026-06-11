@@ -10,21 +10,27 @@ see `DETAILED_CHANGELOG.md`.
 ### Added
 
 - **A mobile layout for the web edition (first cut).** Opening
-  CardMirror in a phone or tablet browser now gets a view-first
-  layout built for small touch screens: a slim top bar (outline
+  CardMirror in a phone or tablet browser — or any browser window
+  narrower than 768px (touch screens up to 1024px) — now gets a
+  view-first layout built for small screens: a slim top bar (outline
   drawer, undo/redo, display options, menu), the document full-bleed
   below it, and a Read button that turns on read mode — where a tap
   on the text drops or removes a reading marker, so you can read a
   speech doc straight off the phone. Pinch zooms the document (the
-  chrome stays put), the outline slides in from the left edge
-  (tablets keep it pinned as a sidebar), and the menu covers Open,
-  Export a copy, word count, and Home. A Settings page sized for
-  touch carries the relevant settings — appearance, text sizes,
-  readers, AI key — and "Use desktop layout" (or the new "Layout on
-  this device" setting) switches back to the full UI any time.
-  Editing stays desktop-only for now: the mobile view never opens
-  the on-screen keyboard. Moving cards and the AI repairs from the
-  phone are planned next.
+  chrome stays put; a Reset button in the display sheet returns to
+  100%), the outline slides in from the left edge with entries
+  wrapping up to three lines (tablets keep it pinned as a sidebar),
+  and the menu covers Open, Export a copy, word count, and Home —
+  which on mobile shows documents only, no Quick Cards or flashcard
+  sections. A Settings page sized for touch carries the relevant
+  settings — appearance, text sizes, readers, AI key — and "Use
+  desktop layout" (or the new "Layout on this device" setting)
+  switches back to the full UI any time. Editing stays desktop-only
+  for now: the mobile view never opens the on-screen keyboard, and
+  there is no drag-from-the-document or dropzone on mobile — on
+  touch, a drag is indistinguishable from a scroll. Moving cards
+  (via buttons and the outline) and the AI repairs from the phone
+  are planned next.
 
 ### Changed
 

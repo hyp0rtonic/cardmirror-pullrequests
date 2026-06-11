@@ -1100,6 +1100,11 @@ export interface SettingMeta {
    *  settings can never leak onto phones by omission. The desktop
    *  dialog ignores this flag. */
   mobile?: boolean;
+  /** When true, the command palette's settings search never lists
+   *  this row — for niche bootstrapping settings (e.g. the mobile
+   *  layout choice) that would be noise next to real commands. The
+   *  settings dialog still shows it. */
+  searchHidden?: boolean;
   /** Extra search terms for the command palette. The label often
    *  uses one name for a thing the user might search by another
    *  ("Theme" vs "dark mode", "Line spacing" vs "line height"); these
@@ -1180,12 +1185,12 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'mobileLayout',
     label: 'Layout on this device',
     description:
-      'Which layout the web edition uses here. Auto picks the view-first mobile layout on touch screens narrower than 1024px and the desktop layout everywhere else; Mobile / Desktop force one. Changing this reloads the page.',
+      'Which layout the web edition uses here. Auto picks the view-first mobile layout on windows narrower than 768px, and up to 1024px on touch screens; Mobile / Desktop force one. Changing this reloads the page.',
     kind: 'mobileLayout',
     category: 'general',
     webOnly: true,
     mobile: true,
-    aliases: ['mobile layout', 'desktop layout', 'phone', 'tablet', 'touch'],
+    searchHidden: true,
   },
   {
     key: 'showOnboardingStarter',

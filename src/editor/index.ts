@@ -5682,13 +5682,19 @@ function countSummary(doc: PMNode): string {
 // multi-pane branch off for this session WITHOUT writing the synced
 // `multiDocWorkspace` setting — toggling back to desktop restores the
 // workspace untouched.
-const BOOT_MOBILE = resolveMobileLayout(settings.get('mobileLayout'), {
+const BOOT_MOBILE_ENV = {
   hostKind: getHost().kind,
   coarsePointer:
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(pointer: coarse)').matches,
   viewportWidth: window.innerWidth,
-});
+};
+const BOOT_MOBILE = resolveMobileLayout(settings.get('mobileLayout'), BOOT_MOBILE_ENV);
+if (BOOT_MOBILE_ENV.hostKind === 'browser') {
+  console.log(
+    `[cardmirror] mobile: setting=${settings.get('mobileLayout')} width=${BOOT_MOBILE_ENV.viewportWidth} coarse=${BOOT_MOBILE_ENV.coarsePointer} → ${BOOT_MOBILE ? 'mobile' : 'desktop'} layout`,
+  );
+}
 if (BOOT_MOBILE) setMobileShellActive(true);
 const BOOT_MULTI_DOC_WORKSPACE = !BOOT_MOBILE && settings.get('multiDocWorkspace');
 // Multi-window mode = single-doc + a host that can spawn windows
@@ -5716,10 +5722,15 @@ prewarmQuickCardFiles();
 // element's rect, so it follows nav-width changes, the status bar, and
 // (multi-pane) the leftmost pane.
 const dropzoneController = new DropzoneController();
-dropzoneController.mount({
-  parent: document.body,
-  getFocusedView: () => getActiveView(),
-});
+// No dropzone on mobile: there is no grab-and-drag from the editor
+// surface there at all (a drag is indistinguishable from a scroll on
+// touch) — structural moves are Move-mode buttons + nav-pane drags.
+if (!BOOT_MOBILE) {
+  dropzoneController.mount({
+    parent: document.body,
+    getFocusedView: () => getActiveView(),
+  });
+}
 
 // Fast Debate Paste integration — subscribe to `external:insert-text`
 // IPC dispatched by the main-process bridge so its `POST /insert`
