@@ -81,7 +81,20 @@ interface CardCutterApi {
     llm: LlmCaller,
     model?: string,
   ): Promise<CutProposal[] | null>;
+  highlightDown(
+    card: PlainCard,
+    map: MarkMap,
+    targetWords: number,
+    llm: LlmCaller,
+    model?: string,
+  ): Promise<{ keptRuns: number[]; map: MarkMap; raw: string }>;
   detectTerminalImpact(tag: string): boolean;
+}
+
+interface MarkMap {
+  u: Uint8Array[];
+  em: Uint8Array[];
+  hl: Uint8Array[];
 }
 
 declare global {
@@ -394,4 +407,90 @@ export async function proposeFocusedCuts(
 export async function ensureEngine(): Promise<boolean> {
   if (engine) return true;
   return tryLoadCardCutterEngine();
+}
+
+// ─── Highlight Down ───────────────────────────────────────────────
+
+/** Build the engine's MarkMap from a focused card's existing marks. */
+function buildMarkMap(focused: FocusedCard): MarkMap {
+  const map: MarkMap = {
+    u: focused.card.paras.map((p) => new Uint8Array(p.length)),
+    em: focused.card.paras.map((p) => new Uint8Array(p.length)),
+    hl: focused.card.paras.map((p) => new Uint8Array(p.length)),
+  };
+  for (const s of focused.existing) {
+    const arr = map[s.layer][s.p];
+    if (!arr) continue;
+    for (let i = s.start; i < s.end && i < arr.length; i++) arr[i] = 1;
+  }
+  return map;
+}
+
+/** Remove highlight ONLY from the chars the reduction dropped (where
+ *  the card was highlighted but the reduced map no longer is) — the
+ *  surviving runs keep their original color/marks untouched. */
+function applyHlReduction(
+  view: EditorView,
+  focused: FocusedCard,
+  original: MarkMap,
+  reduced: MarkMap,
+): void {
+  const tr = view.state.tr;
+  const hlType = schema.marks['highlight'];
+  if (!hlType) return;
+  for (let p = 0; p < focused.paraStarts.length; p++) {
+    const base = focused.paraStarts[p]!;
+    const orig = original.hl[p]!;
+    const red = reduced.hl[p]!;
+    let i = 0;
+    while (i < orig.length) {
+      if (orig[i] && !red[i]) {
+        const start = i;
+        while (i < orig.length && orig[i] && !red[i]) i++;
+        tr.removeMark(base + start, base + i, hlType);
+      } else i++;
+    }
+  }
+  if (tr.steps.length > 0) view.dispatch(tr.scrollIntoView());
+}
+
+export async function highlightDownFocusedCard(
+  view: EditorView,
+  readTimeSec: number,
+): Promise<void> {
+  if (!(await ensureEngine())) {
+    showToast('Card-cutter engine not loaded.');
+    return;
+  }
+  if (!settings.get('anthropicApiKey').trim()) {
+    showToast('Set an Anthropic API key in Settings to use the card cutter.');
+    return;
+  }
+  const focused = focusedPlainCard(view);
+  if (!focused) {
+    showToast('Put the cursor in a card first.');
+    return;
+  }
+  const { hasHighlight } = cardState(focused);
+  if (!hasHighlight) {
+    showToast('This card has no highlights to shorten.');
+    return;
+  }
+  const targetWords = Math.max(10, Math.round((readTimeSec * readerWpm()) / 60));
+  const original = buildMarkMap(focused);
+  showToast('Shortening the read…');
+  try {
+    const result = await engine!.highlightDown(
+      focused.card,
+      original,
+      targetWords,
+      makeLlm(),
+      resolveAiModel(),
+    );
+    applyHlReduction(view, focused, original, result.map);
+    showToast(`Read shortened (~${readTimeSec}s) — ↶ to undo`);
+  } catch (err) {
+    console.error('[cardcutter] highlight-down failed:', err);
+    showToast(`Highlight down failed: ${(err as Error).message}`);
+  }
 }

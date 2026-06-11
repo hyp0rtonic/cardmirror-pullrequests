@@ -17,6 +17,7 @@ import {
   cutFocusedCard,
   focusedCardStatus,
   proposeFocusedCuts,
+  highlightDownFocusedCard,
   ensureEngine,
   type CutProposal,
 } from './card-cutter-port.js';
@@ -41,7 +42,8 @@ export async function openCutLaunchSheet(view: EditorView): Promise<void> {
     return;
   }
   if (status.hasHighlight) {
-    showToast('This card is already highlighted.');
+    // Already cut → offer to shorten the read instead.
+    openHighlightDownSheet(view);
     return;
   }
   const highlightOnly = status.hasUnderline; // underlined → highlight only
@@ -237,6 +239,80 @@ export async function openCutLaunchSheet(view: EditorView): Promise<void> {
       void cutFocusedCard(view, { role: chosen.role, readTimeSec: chosen.readTimeSec });
     };
   }
+}
+
+/** Highlight Down — shorten an already-cut card's read to a target
+ *  length. Removes highlights only (underline/emphasis untouched). */
+function openHighlightDownSheet(view: EditorView): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'pmd-route-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'pmd-route-dialog pmd-cardcutter-dialog';
+
+  const header = document.createElement('div');
+  header.className = 'pmd-route-header';
+  header.textContent = 'Shorten the read';
+  dialog.appendChild(header);
+
+  const close = (): void => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') close();
+  };
+
+  const section = document.createElement('div');
+  section.className = 'pmd-cardcutter-section';
+  section.appendChild(label('Trim the highlighted read to about…'));
+  const row = document.createElement('div');
+  row.className = 'pmd-cardcutter-chips';
+  const wpm = firstReaderWpm();
+  let chosen = READ_TIME_PRESETS[1] ?? 12;
+  const press = (active: HTMLButtonElement): void =>
+    row.querySelectorAll('.pmd-cardcutter-chip').forEach((c) =>
+      c.setAttribute('aria-pressed', String(c === active)),
+    );
+  for (const sec of READ_TIME_PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pmd-cardcutter-chip';
+    b.textContent = `${sec}s · ~${Math.round((sec * wpm) / 60)}w`;
+    b.setAttribute('aria-pressed', String(sec === chosen));
+    b.addEventListener('click', () => {
+      chosen = sec;
+      press(b);
+    });
+    row.appendChild(b);
+  }
+  section.appendChild(row);
+  dialog.appendChild(section);
+
+  const buttons = document.createElement('div');
+  buttons.className = 'pmd-text-prompt-buttons';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'pmd-route-cancel';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', close);
+  buttons.appendChild(cancel);
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.className = 'pmd-text-prompt-ok';
+  go.textContent = 'Shorten';
+  go.addEventListener('click', () => {
+    close();
+    void highlightDownFocusedCard(view, chosen);
+  });
+  buttons.appendChild(go);
+  dialog.appendChild(buttons);
+
+  overlay.appendChild(dialog);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(overlay);
 }
 
 function label(text: string): HTMLElement {
