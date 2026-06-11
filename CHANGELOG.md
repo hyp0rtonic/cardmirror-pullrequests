@@ -35,11 +35,17 @@ see `DETAILED_CHANGELOG.md`.
   instead: tap **Move**, tap any card or heading to pick it up
   (dashed outline), and an action strip offers one-step **Up** /
   **Down** (sections hop whole sibling sections; cards step over
-  neighbors and in/out of sections), **Send to…** (pick a
-  destination straight from the outline), **Copy**, and **Delete** —
-  every move is one undo step. In the outline itself, press and hold
-  a row for a moment to pick it up and drag it (a plain swipe still
-  scrolls).
+  neighbors and in/out of sections), **Send to…**, **Copy**, and
+  **Delete** — every move is one undo step. Send to… picks the
+  destination straight from the outline: tap a row and choose
+  **Place above** or **Place below** — the moved section always
+  lands beside the destination, never inside it. In the outline
+  itself, press and hold a row for a moment to pick it up and drag
+  it (a plain swipe still scrolls). The AI repairs work from the
+  phone too: tap **Repair**, tap a card or heading to set the scope,
+  and run Repair Text or Repair Formatting on exactly that unit —
+  same fixes, flashes, and single undo step as on desktop (with a
+  pointer to Settings if no API key is set up on the device).
 
 ### Changed
 

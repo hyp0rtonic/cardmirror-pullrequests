@@ -164,17 +164,14 @@ export function moveInsertPos(doc: PMNode, unit: UnitRange, dir: -1 | 1): number
   return next.pos + next.size;
 }
 
-/** Where "Send to <entry>" inserts: level-4 targets (tag/analytic)
- *  append AFTER the wrapping card; heading targets insert right after
- *  the heading line (the section's first child). */
-export function sendToEntryInsertPos(doc: PMNode, entry: HeadingEntry): number | null {
-  if (entry.type === 'tag' || entry.type === 'analytic') {
-    const unit = unitRangeAtPos(doc, entry.pos + 1);
-    return unit ? unit.to : null;
-  }
-  const node = doc.nodeAt(entry.pos);
-  if (!node) return null;
-  return entry.pos + node.nodeSize;
+/** The whole structural unit a nav entry denotes — the wrapping card
+ *  for tag/analytic entries, the heading line + subtree for
+ *  pocket/hat/block entries. "Send to…" places the moved unit ABOVE
+ *  or BELOW this range, never inside it: inserting after a same-level
+ *  heading's line would strand the target's own content under the
+ *  moved unit. */
+export function entryUnitRange(doc: PMNode, entry: HeadingEntry): UnitRange | null {
+  return unitRangeAtPos(doc, entry.pos + 1);
 }
 
 function unitToDragItem(doc: PMNode, unit: UnitRange): DragItem {

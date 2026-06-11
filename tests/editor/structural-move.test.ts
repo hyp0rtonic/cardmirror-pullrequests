@@ -14,7 +14,7 @@ import { schema, newHeadingId } from '../../src/schema/index.js';
 import {
   unitRangeAtPos,
   moveInsertPos,
-  sendToEntryInsertPos,
+  entryUnitRange,
   executeUnitMove,
 } from '../../src/editor/structural-move.js';
 import { collectHeadings } from '../../src/editor/headings.js';
@@ -142,14 +142,25 @@ describe('moveInsertPos', () => {
   });
 });
 
-describe('sendToEntryInsertPos', () => {
-  it('heading target → right after the heading line; tag target → after the card', () => {
+describe('entryUnitRange', () => {
+  it('heading target → its whole subtree; tag target → its wrapping card', () => {
+    // "Send to…" places ABOVE or BELOW this range, never inside —
+    // inserting after a same-level heading's line would strand the
+    // target's own content under the moved unit.
     const doc = makeDoc(heading('block', 'B1'), card('T1'), card('T2'));
     const entries = collectHeadings(doc);
     const block = entries.find((e) => e.type === 'block')!;
-    expect(sendToEntryInsertPos(doc, block)).toBe(block.pos + doc.child(0)!.nodeSize);
+    expect(entryUnitRange(doc, block)).toMatchObject({
+      from: 0,
+      to: doc.content.size,
+      level: 3,
+    });
     const t1 = entries.find((e) => e.text === 'T1')!;
-    expect(sendToEntryInsertPos(doc, t1)).toBe(childPos(doc, 2));
+    expect(entryUnitRange(doc, t1)).toMatchObject({
+      from: childPos(doc, 1),
+      to: childPos(doc, 2),
+      level: 4,
+    });
   });
 });
 

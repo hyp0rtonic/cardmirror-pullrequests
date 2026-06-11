@@ -8,14 +8,15 @@
  * (`posAtCoords` under the hood of `handleClick`'s `pos`), not via a
  * caret — there is no caret.
  *
- * Two tap behaviors, by mode:
+ * Tap behaviors, by mode:
  * - Read mode on: a tap toggles the reading-position marker at the
  *   tapped word (the touch equivalent of the Space/Enter binding —
  *   a non-editable view gets no key events at all).
- * - Move mode on: a tap selects the smallest structural unit (card /
- *   analytic_unit / heading subtree) under the finger, visualized by
- *   a node decoration, and notifies the shell so its action sheet
- *   can offer Up / Down / Send to… / Copy / Delete.
+ * - Move / Repair mode on: a tap selects the smallest structural
+ *   unit (card / analytic_unit / heading subtree) under the finger,
+ *   visualized by a node decoration, and notifies the shell — Move's
+ *   sheet offers Up / Down / Send to… / Copy / Delete; Repair's
+ *   offers the AI text / formatting repairs scoped to the unit.
  *
  * Lives in its own module (not mobile-shell.ts) so `buildEditorPlugins`
  * can include it statically without importing the shell, which itself
@@ -44,21 +45,20 @@ export function isMobileShellActive(): boolean {
   return mobileShellActive;
 }
 
-/** Move mode — toggled by the shell's mode bar. */
-let moveModeOn = false;
+/** Tap-select mode — `'move'` and `'repair'` share the same
+ *  tap-to-select-unit machinery; the shell decides what the
+ *  selection drives. Toggled by the shell's mode bar. */
+export type MobileTapMode = 'none' | 'move' | 'repair';
+let tapMode: MobileTapMode = 'none';
 let unitTapHandler: ((unit: UnitRange | null) => void) | null = null;
 
-export function setMobileMoveMode(view: EditorView, on: boolean): void {
-  moveModeOn = on;
-  if (!on) setMobileUnitSelection(view, null);
-}
-
-export function isMobileMoveMode(): boolean {
-  return moveModeOn;
+export function setMobileTapMode(view: EditorView, mode: MobileTapMode): void {
+  tapMode = mode;
+  if (mode === 'none') setMobileUnitSelection(view, null);
 }
 
 /** The shell registers one handler; called with the unit under every
- *  Move-mode tap (null = tapped outside any unit). */
+ *  tap-select-mode tap (null = tapped outside any unit). */
 export function onMobileUnitTapped(cb: (unit: UnitRange | null) => void): void {
   unitTapHandler = cb;
 }
@@ -157,12 +157,12 @@ export const mobilePlugin: Plugin<MobileShellState> = new Plugin<MobileShellStat
         if (dx * dx + dy * dy > 100 || Date.now() - start.t > 500) return false;
         const hit = view.posAtCoords({ left: e.clientX, top: e.clientY });
         if (!hit) return false;
-        // Move mode wins over read-mode markers (the shell never
-        // leaves both on; precedence keeps a race harmless).
-        if (moveModeOn) {
+        // Tap-select modes win over read-mode markers (the shell
+        // never leaves both on; precedence keeps a race harmless).
+        if (tapMode !== 'none') {
           const unit = unitRangeAtPos(view.state.doc, hit.pos);
           console.log(
-            `[cardmirror] mobile: move tap pos=${hit.pos} → ${unit ? `${unit.type} "${unit.label.slice(0, 40)}"` : 'no unit'}`,
+            `[cardmirror] mobile: ${tapMode} tap pos=${hit.pos} → ${unit ? `${unit.type} "${unit.label.slice(0, 40)}"` : 'no unit'}`,
           );
           setMobileUnitSelection(view, unit);
           unitTapHandler?.(unit);

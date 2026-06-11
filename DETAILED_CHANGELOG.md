@@ -76,11 +76,26 @@ in each release, see `CHANGELOG.md`.
   the landing selection re-derives the unit so the highlight and
   sheet follow it. "Send to…" reuses the nav panel via a new
   destination-mode API (`enterDestinationMode(cb)`): the drawer
-  opens with a banner, a row tap sends the unit AFTER a card target
-  or as the first child of a heading target
-  (`sendToEntryInsertPos`), dismissing the drawer cancels. Move and
-  Read modes are mutually exclusive (read mode locks the doc and
-  owns taps).
+  opens with a banner, a row tap pops an above/below chooser
+  anchored at the row, and the unit lands BESIDE the target's whole
+  subtree (`entryUnitRange`), never inside it — inserting after a
+  same-level heading's line would strand the target's own content
+  under the moved unit. The chooser commits on release over a
+  choice, so press-slide-release works as well as two taps;
+  releasing elsewhere keeps destination mode for another pick, and
+  dismissing the drawer cancels. Move and Read modes are mutually
+  exclusive (read mode locks the doc and owns taps).
+
+  Repair mode shares Move's tap-select machinery (a `tapMode` in the
+  mobile plugin): tap a card or heading, and the repair sheet offers
+  Repair Text / Repair Formatting scoped to that unit. The buttons
+  set a text selection over the unit and fire the existing ribbon
+  commands — the repair flows read `state.selection` and can't tell
+  a tap-made scope from a keyboard-made one, so the thinking
+  tooltip, orange flashes, toasts, and single-undo-step behavior are
+  the shared implementation verbatim. With AI features off or no API
+  key on the device, the sheet explains and links to the mobile
+  Settings page instead.
 
   Outline gestures on mobile: the list owns its pointer stream
   (`touch-action: none`). A drag pans the list manually under the

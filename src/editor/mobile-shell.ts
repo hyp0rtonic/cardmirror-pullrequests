@@ -9,7 +9,7 @@
  *   app bar     ☰ title ↶ ↷ Aa ⋮
  *   #app        the existing single-doc scroller (PM view inside,
  *               never editable — see mobile-plugin.ts)
- *   mode bar    Read toggle (Move / Repair arrive in later phases)
+ *   mode bar    Read / Move / Repair mode toggles
  *   #status-bar the existing footer, restyled by mobile CSS
  *
  * The outline drawer hosts the SAME NavigationPanel instance the
@@ -24,13 +24,14 @@ import { getActiveView, getNavPanel, runRibbon } from './index.js';
 import { readModeAwareUndo, readModeAwareRedo } from './read-mode-plugin.js';
 import { mobileDensity } from './mobile-layout.js';
 import {
-  setMobileMoveMode,
+  setMobileTapMode,
   onMobileUnitTapped,
   setMobileUnitSelection,
+  type MobileTapMode,
 } from './mobile-plugin.js';
 import {
   moveInsertPos,
-  sendToEntryInsertPos,
+  entryUnitRange,
   unitRangeAtPos,
   executeUnitMove,
   type UnitRange,
@@ -57,6 +58,7 @@ export function mountMobileShell(): void {
   document.body.appendChild(drawer);
   document.body.appendChild(buildModeBar());
   document.body.appendChild(buildMoveSheet());
+  document.body.appendChild(buildRepairSheet());
   onMobileUnitTapped(handleUnitTapped);
   installPinchZoom();
   installEdgeSwipe(openDrawer);
@@ -229,8 +231,9 @@ function buildModeBar(): HTMLElement {
   syncRead();
   settings.subscribe(syncRead);
   readBtn.addEventListener('click', () => {
-    // Read and Move are mutually exclusive — both claim the tap.
-    if (!settings.get('readMode') && moveMode) setMoveMode(false);
+    // Read and the tap-select modes are mutually exclusive — both
+    // claim the tap.
+    if (!settings.get('readMode') && tapMode !== 'none') setTapMode('none');
     runRibbon('toggleReadMode');
   });
   bar.appendChild(readBtn);
@@ -240,46 +243,65 @@ function buildModeBar(): HTMLElement {
   moveBtn.className = 'pmd-mobile-mode-btn pmd-mobile-mode-move';
   moveBtn.textContent = '✥ Move';
   moveBtn.title = 'Move mode — tap a card or heading to pick it up';
-  moveBtn.addEventListener('click', () => setMoveMode(!moveMode));
+  moveBtn.addEventListener('click', () => setTapMode(tapMode === 'move' ? 'none' : 'move'));
   bar.appendChild(moveBtn);
 
-  // Repair mode lands in P4 (SPEC-mobile-view.md).
+  repairBtn = document.createElement('button');
+  repairBtn.type = 'button';
+  repairBtn.className = 'pmd-mobile-mode-btn pmd-mobile-mode-repair';
+  repairBtn.textContent = '✦ Repair';
+  repairBtn.title = 'AI repair — tap a card or heading to choose the scope';
+  repairBtn.addEventListener('click', () =>
+    setTapMode(tapMode === 'repair' ? 'none' : 'repair'),
+  );
+  bar.appendChild(repairBtn);
+
   return bar;
 }
 
-// ─── Move mode ─────────────────────────────────────────────────────
+// ─── Tap-select modes (Move / Repair) ──────────────────────────────
 
-let moveMode = false;
+let tapMode: MobileTapMode = 'none';
 let moveBtn: HTMLButtonElement | null = null;
+let repairBtn: HTMLButtonElement | null = null;
 let moveSheet: HTMLElement | null = null;
 let moveSheetLabel: HTMLElement | null = null;
+let repairSheet: HTMLElement | null = null;
+let repairSheetLabel: HTMLElement | null = null;
+let repairBusy = false;
 let currentUnit: UnitRange | null = null;
 let destModeActive = false;
 
-function setMoveMode(on: boolean): void {
+function setTapMode(mode: MobileTapMode): void {
   const view = getActiveView();
   if (!view) return;
-  moveMode = on;
-  moveBtn?.classList.toggle('pmd-mode-active', on);
-  setMobileMoveMode(view, on);
-  if (on) {
-    // Move needs doc edits; read mode locks them (and owns taps).
-    if (settings.get('readMode')) runRibbon('toggleReadMode');
-    showToast('Tap a card or heading to pick it up');
-  } else {
-    currentUnit = null;
-    hideMoveSheet();
-    cancelDestinationMode();
-  }
+  tapMode = mode;
+  moveBtn?.classList.toggle('pmd-mode-active', mode === 'move');
+  repairBtn?.classList.toggle('pmd-mode-active', mode === 'repair');
+  setMobileTapMode(view, mode);
+  currentUnit = null;
+  hideMoveSheet();
+  hideRepairSheet();
+  cancelDestinationMode();
+  if (mode === 'none') return;
+  // Both modes dispatch doc edits; read mode locks them (and owns taps).
+  if (settings.get('readMode')) runRibbon('toggleReadMode');
+  showToast(
+    mode === 'move'
+      ? 'Tap a card or heading to pick it up'
+      : 'Tap a card or heading to choose what to repair',
+  );
 }
 
 function handleUnitTapped(unit: UnitRange | null): void {
   currentUnit = unit;
   if (!unit) {
     hideMoveSheet();
+    hideRepairSheet();
     return;
   }
-  showMoveSheet(unit);
+  if (tapMode === 'repair') showRepairSheet(unit);
+  else showMoveSheet(unit);
 }
 
 function buildMoveSheet(): HTMLElement {
@@ -369,38 +391,214 @@ function moveStep(dir: -1 | 1): void {
 function startSendTo(): void {
   if (!currentUnit) return;
   destModeActive = true;
-  getNavPanel().enterDestinationMode((entry) => {
+  getNavPanel().enterDestinationMode((entry, anchor) => {
     const view = getActiveView();
     if (!view || !currentUnit) {
       cancelDestinationMode();
       drawerApi?.close();
       return;
     }
-    const insertPos = sendToEntryInsertPos(view.state.doc, entry);
-    if (insertPos === null) {
-      showToast("Can't drop there — pick another heading");
+    const target = entryUnitRange(view.state.doc, entry);
+    if (!target) {
+      showToast("Can't drop there — pick another row");
       return; // stay in destination mode
     }
-    if (insertPos > currentUnit.from && insertPos < currentUnit.to) {
-      showToast("Can't move a section into itself");
+    // Target inside (or identical to) the moved unit: nonsense move.
+    if (target.from >= currentUnit.from && target.from < currentUnit.to) {
+      showToast("Can't move a section next to itself");
       return;
     }
-    if (!executeUnitMove(view, currentUnit, insertPos)) {
-      showToast("Can't move there");
-      return;
-    }
-    destModeActive = false;
-    drawerApi?.close(); // also exits destination mode
-    reselectMovedUnit(view);
-    showToast('Moved — ↶ to undo');
+    showPlacementChooser(target, anchor);
   });
   drawerApi?.open();
   showToast('Tap a destination in the outline');
 }
 
+/** Above/below chooser — "Send to…" NEVER places a unit inside the
+ *  target (inserting after a same-level heading's line would strand
+ *  the target's own content under the moved unit); the tap picks the
+ *  neighbor, this picks the side. Press-slide-release onto a choice
+ *  works as well as two taps: the commit listens for pointerup over
+ *  either button at the document level. */
+let placementPop: HTMLElement | null = null;
+
+function showPlacementChooser(target: UnitRange, anchor: DOMRect | null): void {
+  hidePlacementChooser();
+  const pop = document.createElement('div');
+  pop.className = 'pmd-mobile-place-pop';
+  placementPop = pop;
+
+  const label = document.createElement('div');
+  label.className = 'pmd-mobile-place-label';
+  label.textContent = target.label.trim() || '(untitled)';
+  const mk = (text: string, insertPos: number, cls: string): HTMLButtonElement => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `pmd-mobile-place-btn ${cls}`;
+    btn.textContent = text;
+    btn.dataset['insertPos'] = String(insertPos);
+    return btn;
+  };
+  pop.appendChild(mk('▲ Place above', target.from, 'pmd-place-above'));
+  pop.appendChild(label);
+  pop.appendChild(mk('▼ Place below', target.to, 'pmd-place-below'));
+  document.body.appendChild(pop);
+
+  // Anchor beside the tapped row, clamped to the viewport.
+  if (anchor) {
+    const popH = pop.offsetHeight || 120;
+    const top = Math.max(
+      8,
+      Math.min(anchor.top + anchor.height / 2 - popH / 2, window.innerHeight - popH - 8),
+    );
+    pop.style.top = `${Math.round(top)}px`;
+    pop.style.left = `${Math.round(Math.min(anchor.right + 8, window.innerWidth - pop.offsetWidth - 8))}px`;
+  } else {
+    pop.style.top = '40%';
+    pop.style.left = '50%';
+    pop.style.transform = 'translateX(-50%)';
+  }
+
+  // Commit on release over a button (covers tap AND press-slide-
+  // release); dismiss on release anywhere else.
+  const onUp = (e: PointerEvent): void => {
+    const el = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest('.pmd-mobile-place-btn') as HTMLButtonElement | null;
+    if (el && placementPop?.contains(el)) {
+      document.removeEventListener('pointerup', onUp);
+      commitSendTo(Number(el.dataset['insertPos']));
+      return;
+    }
+    if (!placementPop?.contains(e.target as Node)) {
+      document.removeEventListener('pointerup', onUp);
+      hidePlacementChooser(); // stay in destination mode for another pick
+    }
+  };
+  // Defer past the pointerup that opened the chooser.
+  window.setTimeout(() => document.addEventListener('pointerup', onUp), 0);
+}
+
+function hidePlacementChooser(): void {
+  placementPop?.remove();
+  placementPop = null;
+}
+
+function commitSendTo(insertPos: number): void {
+  hidePlacementChooser();
+  const view = getActiveView();
+  if (!view || !currentUnit || !Number.isFinite(insertPos)) return;
+  if (!executeUnitMove(view, currentUnit, insertPos)) {
+    showToast("Can't move there");
+    return;
+  }
+  destModeActive = false;
+  drawerApi?.close(); // also exits destination mode
+  reselectMovedUnit(view);
+  showToast('Moved — ↶ to undo');
+}
+
 function cancelDestinationMode(): void {
   destModeActive = false;
   getNavPanel().exitDestinationMode();
+  hidePlacementChooser();
+}
+
+// ─── Repair sheet (AI text / formatting repair on the unit) ───────
+
+function buildRepairSheet(): HTMLElement {
+  const sheet = document.createElement('div');
+  sheet.className = 'pmd-mobile-movesheet pmd-mobile-repairsheet';
+  sheet.hidden = true;
+  repairSheet = sheet;
+  repairSheetLabel = document.createElement('div');
+  repairSheetLabel.className = 'pmd-mobile-movesheet-label';
+  sheet.appendChild(repairSheetLabel);
+  const body = document.createElement('div');
+  body.className = 'pmd-mobile-repairsheet-body';
+  sheet.appendChild(body);
+  return sheet;
+}
+
+function aiReady(): boolean {
+  return settings.get('aiFeaturesEnabled') && settings.get('anthropicApiKey').trim() !== '';
+}
+
+function showRepairSheet(unit: UnitRange): void {
+  if (!repairSheet || !repairSheetLabel) return;
+  const label = unit.label.trim() || '(untitled)';
+  const kind =
+    unit.type === 'card' || unit.type === 'analytic_unit'
+      ? 'Card'
+      : unit.type[0]!.toUpperCase() + unit.type.slice(1);
+  repairSheetLabel.textContent = `Repair scope: ${kind} — ${label}`;
+
+  const body = repairSheet.querySelector<HTMLElement>('.pmd-mobile-repairsheet-body')!;
+  body.textContent = '';
+  if (!aiReady()) {
+    const note = document.createElement('div');
+    note.className = 'pmd-mobile-movesheet-label';
+    note.textContent = 'AI repair needs AI features enabled and an Anthropic API key.';
+    body.appendChild(note);
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'pmd-mobile-movesheet-btn';
+    open.textContent = 'Open Settings';
+    open.addEventListener('click', () => {
+      void import('./mobile-settings-ui.js').then((m) => m.openMobileSettings());
+    });
+    body.appendChild(open);
+  } else {
+    const row = document.createElement('div');
+    row.className = 'pmd-mobile-movesheet-actions';
+    const action = (text: string, run: () => void): void => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pmd-mobile-movesheet-btn';
+      btn.textContent = text;
+      btn.addEventListener('click', run);
+      row.appendChild(btn);
+    };
+    action('✦ Repair text (OCR)', () => runRepairOnUnit('repairText'));
+    action('✦ Repair formatting', () => runRepairOnUnit('repairFormatting'));
+    action('✕', () => {
+      const view = getActiveView();
+      if (view) setMobileUnitSelection(view, null);
+      currentUnit = null;
+      hideRepairSheet();
+    });
+    body.appendChild(row);
+  }
+  repairSheet.hidden = false;
+}
+
+function hideRepairSheet(): void {
+  if (repairSheet) repairSheet.hidden = true;
+}
+
+/** Select the unit's text and fire the existing repair command — the
+ *  repair flows read `state.selection` and can't tell a tap-made
+ *  scope from a keyboard-made one. Tooltip, flashes, and toasts all
+ *  come from the shared implementation. */
+function runRepairOnUnit(command: 'repairText' | 'repairFormatting'): void {
+  const view = getActiveView();
+  if (!view || !currentUnit || repairBusy) return;
+  const { doc } = view.state;
+  view.dispatch(
+    view.state.tr.setSelection(
+      TextSelection.between(
+        doc.resolve(Math.min(currentUnit.from + 1, doc.content.size)),
+        doc.resolve(Math.min(currentUnit.to - 1, doc.content.size)),
+      ),
+    ),
+  );
+  runRibbon(command);
+  // Debounce accidental double-taps; the repair itself reports
+  // progress and completion through its own tooltip + toasts.
+  repairBusy = true;
+  window.setTimeout(() => {
+    repairBusy = false;
+  }, 1500);
 }
 
 function copyUnit(): void {

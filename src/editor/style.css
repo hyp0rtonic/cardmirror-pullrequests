@@ -10273,3 +10273,49 @@ body.pmd-mobile-tablet.pmd-mobile-rail-collapsed .pmd-mobile-modebar,
 body.pmd-mobile-tablet.pmd-mobile-rail-collapsed .pmd-mobile-movesheet {
   left: 0;
 }
+
+/* ── Send to… placement chooser + Repair sheet (mobile) ── */
+
+.pmd-mobile-place-pop {
+  position: fixed;
+  z-index: 340;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  background: var(--pmd-c-surface);
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px var(--pmd-c-shadow-strong);
+  font-family: var(--pmd-ui-font);
+  max-width: 70vw;
+}
+.pmd-mobile-place-label {
+  font-size: 0.8rem;
+  color: var(--pmd-c-text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0.25rem;
+}
+.pmd-mobile-place-btn {
+  min-height: 2.4rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--pmd-c-border-soft);
+  border-radius: 8px;
+  background: none;
+  color: var(--pmd-c-text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.pmd-mobile-place-btn:hover,
+.pmd-mobile-place-btn:active {
+  background: var(--pmd-c-hover);
+}
+
+.pmd-mobile-repairsheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}

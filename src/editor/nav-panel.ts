@@ -147,8 +147,11 @@ export class NavigationPanel {
     if (dragController.isActive()) e.preventDefault();
   };
   /** Destination mode ("Send to…" on mobile): row taps call this
-   *  instead of navigating. */
-  private destinationCb: ((entry: HeadingEntry) => void) | null = null;
+   *  instead of navigating. The anchor rect (the tapped row) lets
+   *  the caller position its above/below placement chooser. */
+  private destinationCb:
+    | ((entry: HeadingEntry, anchor: DOMRect | null) => void)
+    | null = null;
   /** Mobile drag-to-scroll: once movement cancels the long-press,
    *  the list pans under the pointer. Owned manually (the list has
    *  `touch-action: none` on mobile) so mouse, emulated touch, and
@@ -556,7 +559,7 @@ export class NavigationPanel {
   /** "Send to…" (mobile Move mode): while on, a tap on any row calls
    *  `cb` with that entry instead of navigating; drags don't arm.
    *  The caller owns exiting the mode (including on cancel). */
-  enterDestinationMode(cb: (entry: HeadingEntry) => void): void {
+  enterDestinationMode(cb: (entry: HeadingEntry, anchor: DOMRect | null) => void): void {
     this.destinationCb = cb;
     this.root.classList.add('pmd-nav-destination');
   }
@@ -1095,7 +1098,10 @@ export class NavigationPanel {
         if (this.destinationCb) {
           // Destination mode: the tap picks a "Send to…" target
           // instead of navigating. The callback owns mode exit.
-          this.destinationCb(this.dragStartEntry);
+          this.destinationCb(
+            this.dragStartEntry,
+            this.dragStartLi?.getBoundingClientRect() ?? null,
+          );
         } else {
           if (this.deferredClickFinalize) {
             this.selectSingle(this.deferredClickFinalize);
