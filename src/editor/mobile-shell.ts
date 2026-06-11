@@ -289,7 +289,7 @@ function setTapMode(mode: MobileTapMode): void {
   showToast(
     mode === 'move'
       ? 'Tap a card or heading to pick it up'
-      : 'Tap a card or heading to choose what to repair',
+      : 'Tap a card to choose what to repair',
   );
 }
 
@@ -298,6 +298,9 @@ function handleUnitTapped(unit: UnitRange | null): void {
   if (!unit) {
     hideMoveSheet();
     hideRepairSheet();
+    // In Repair mode a heading tap resolves to no unit on purpose —
+    // say why instead of silently doing nothing.
+    if (tapMode === 'repair') showToast('Tap a card — repairs run one card at a time');
     return;
   }
   if (tapMode === 'repair') showRepairSheet(unit);

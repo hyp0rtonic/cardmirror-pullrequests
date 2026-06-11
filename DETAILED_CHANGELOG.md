@@ -87,9 +87,11 @@ in each release, see `CHANGELOG.md`.
   exclusive (read mode locks the doc and owns taps).
 
   Repair mode shares Move's tap-select machinery (a `tapMode` in the
-  mobile plugin): tap a card or heading, and the repair sheet offers
-  Repair Text / Repair Formatting — scoped to the unit's BODY blocks
-  only (first card_body/paragraph through the last; tags and cites
+  mobile plugin), restricted to CARDS — repairs run one card at a
+  time, so heading taps resolve to no unit (with a toast saying so)
+  rather than scoping a whole section. The repair sheet offers
+  Repair Text / Repair Formatting — scoped to the card's BODY blocks
+  only (first card_body/paragraph through the last; the tag and cite
   never enter the scope) — plus Repair Cite, which selects the
   tapped card's `cite_paragraph` — or, when the card has none, the
   first non-undertag paragraph beneath the tag (imported cards often

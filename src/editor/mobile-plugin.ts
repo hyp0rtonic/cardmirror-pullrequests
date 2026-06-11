@@ -160,7 +160,10 @@ export const mobilePlugin: Plugin<MobileShellState> = new Plugin<MobileShellStat
         // Tap-select modes win over read-mode markers (the shell
         // never leaves both on; precedence keeps a race harmless).
         if (tapMode !== 'none') {
-          const unit = unitRangeAtPos(view.state.doc, hit.pos);
+          let unit = unitRangeAtPos(view.state.doc, hit.pos);
+          // Repairs run one card at a time — heading subtrees are
+          // not a selectable scope in Repair mode.
+          if (tapMode === 'repair' && unit && unit.level !== 4) unit = null;
           console.log(
             `[cardmirror] mobile: ${tapMode} tap pos=${hit.pos} → ${unit ? `${unit.type} "${unit.label.slice(0, 40)}"` : 'no unit'}`,
           );
