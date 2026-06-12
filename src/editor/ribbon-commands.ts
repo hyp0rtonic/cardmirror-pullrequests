@@ -204,6 +204,27 @@ function stripPromotionMarksOnFragment(fragment: Fragment): Fragment {
   return Fragment.fromArray(out);
 }
 
+/** Return a copy of a textblock node with every direct `font_size`
+ *  mark removed from its inline content. Returns the same node
+ *  reference when it carries no font_size mark, so callers can cheaply
+ *  detect a no-op. */
+function clearFontSizeOnNode(node: PMNode): PMNode {
+  const fontSize = schema.marks['font_size'];
+  if (!fontSize) return node;
+  let changed = false;
+  const out: PMNode[] = [];
+  node.content.forEach((inline) => {
+    if (fontSize.isInSet(inline.marks)) {
+      changed = true;
+      out.push(inline.mark(fontSize.removeFromSet(inline.marks)));
+    } else {
+      out.push(inline);
+    }
+  });
+  if (!changed) return node;
+  return node.copy(Fragment.fromArray(out));
+}
+
 /**
  * Same-type re-press helper: strip the `indent` attr off the node at
  * `depth` while preserving its type and every other attr. Returns
@@ -211,21 +232,38 @@ function stripPromotionMarksOnFragment(fragment: Fragment): Fragment {
  * Used by every heading shortcut command's already-this-type branch
  * so re-pressing the shortcut clears indentation while leaving the
  * heading style itself intact.
+ *
+ * When `clearFontSize` is set, the same gesture also strips direct
+ * `font_size` marks off the node's content — re-pressing a structural
+ * shortcut on a paragraph that's already that type resets it to the
+ * style's canonical size (tag / analytic / pocket / hat / block).
  */
 function stripIndentAtDepth(
   state: EditorState,
   dispatch: ((tr: Transaction) => void) | undefined,
   depth: number,
+  opts?: { clearFontSize?: boolean },
 ): boolean {
   const $from = state.selection.$from;
   const node = $from.node(depth);
-  if ((node.attrs['indent'] ?? 0) === 0) return true;
+  const hasIndent = (node.attrs['indent'] ?? 0) !== 0;
+  const clearFontSize = opts?.clearFontSize ?? false;
+  if (!hasIndent && !clearFontSize) return true;
   if (!dispatch) return true;
-  const tr = state.tr.setNodeMarkup(
-    $from.before(depth),
-    null,
-    { ...node.attrs, indent: 0 },
-  );
+  let tr = state.tr;
+  if (hasIndent) {
+    tr = tr.setNodeMarkup($from.before(depth), null, { ...node.attrs, indent: 0 });
+  }
+  if (clearFontSize) {
+    const fontSize = schema.marks['font_size'];
+    if (fontSize) {
+      const start = $from.before(depth) + 1;
+      tr = tr.removeMark(start, start + node.content.size, fontSize);
+    }
+  }
+  // No-op (already canonical, no indent): consume the key without
+  // dispatching an empty transaction that would burn an undo step.
+  if (!tr.docChanged) return true;
   dispatch(tr);
   return true;
 }
@@ -247,7 +285,9 @@ export function setHeading(typeName: HeadingTypeName): Command {
     if ($from.depth === 1) {
       const parent = $from.parent;
       const pname = parent.type.name;
-      if (pname === typeName) return stripIndentAtDepth(state, dispatch, 1);
+      if (pname === typeName) {
+        return stripIndentAtDepth(state, dispatch, 1, { clearFontSize: true });
+      }
       if (!DOC_LEVEL_CONVERTIBLE.has(pname)) return false;
       if (!dispatch) return true;
       // Preserve the existing id when converting between heading
@@ -323,7 +363,7 @@ export function setTag(): Command {
     }
 
     if ($from.depth === 2 && $from.parent.type.name === 'tag') {
-      return stripIndentAtDepth(state, dispatch, 2);
+      return stripIndentAtDepth(state, dispatch, 2, { clearFontSize: true });
     }
 
     if (
@@ -383,7 +423,7 @@ export function setAnalytic(): Command {
       $from.node(1).type.name === 'analytic_unit' &&
       $from.node(1).firstChild === $from.parent
     ) {
-      return stripIndentAtDepth(state, dispatch, 2);
+      return stripIndentAtDepth(state, dispatch, 2, { clearFontSize: true });
     }
 
     if (
@@ -3486,8 +3526,18 @@ function applyStructuralToSelection(
   dispatch: ((tr: Transaction) => void) | undefined,
   opts: StructuralMode,
 ): boolean {
-  const { from, to } = state.selection;
+  const from = state.selection.from;
+  let to = state.selection.to;
   if (from === to) return false;
+  // A trailing selection boundary that merely sits at the START of the
+  // next paragraph — the Ctrl-Shift-Down / Shift-Down-past-block-end shape,
+  // which lands `to` at offset 0 of the following textblock — means that
+  // paragraph has nothing actually selected in it. Pull `to` back across
+  // the block's opening boundary so we don't restyle it too.
+  const $to = state.doc.resolve(to);
+  if ($to.parentOffset === 0 && to - 1 > from) {
+    to -= 1;
+  }
 
   let firstIdx = -1;
   let lastIdx = -1;
@@ -3563,30 +3613,40 @@ function transformDocChild(
 
   if (t === 'card' || t === 'analytic_unit') {
     let hitTouched = false;
+    let preChanged = false;
     const preChildren: PMNode[] = [];
     const liftedChildren: PMNode[] = [];
     child.forEach((g, offset) => {
       const gStart = childStart + 1 + offset;
       const gEnd = gStart + g.nodeSize;
+      const inSel = gEnd > selFrom && gStart < selTo;
       // A child the command would re-create as the type it already is
       // (F7 with a selection inside a tag, Mod-F7 on analytic text,
       // F8 on an undertag) counts as UNTOUCHED: the equivalent cursor
       // gesture is a no-op, and treating it as touched dissolved the
       // container — orphaning the cite/body that followed (audit
-      // 2026-06-10 P1#4).
-      const gTouched = gEnd > selFrom && gStart < selTo && !isSameTypeTarget(g, opts);
+      // 2026-06-10 P1#4). Re-pressing the shortcut on a same-type head
+      // still clears its direct font_size marks, mirroring the cursor
+      // re-press, but leaves the container intact.
+      const sameType = isSameTypeTarget(g, opts);
+      const gTouched = inSel && !sameType;
       if (gTouched) {
         hitTouched = true;
         liftedChildren.push(asTransformed(g, opts));
       } else if (hitTouched) {
-        liftedChildren.push(liftCardChild(g));
+        liftedChildren.push(liftCardChild(inSel && sameType ? clearFontSizeOnNode(g) : g));
       } else {
-        preChildren.push(g);
+        const kept = inSel && sameType ? clearFontSizeOnNode(g) : g;
+        if (kept !== g) preChanged = true;
+        preChildren.push(kept);
       }
     });
 
     if (liftedChildren.length === 0) {
-      out.push(child);
+      // No container break. If a same-type head had its font_size
+      // cleared in place, rebuild the container with the cleaned
+      // children; otherwise pass the original through untouched.
+      out.push(preChanged ? child.copy(Fragment.fromArray(preChildren)) : child);
       return;
     }
     if (preChildren.length === 0) {

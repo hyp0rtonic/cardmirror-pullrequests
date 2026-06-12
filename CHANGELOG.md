@@ -33,7 +33,19 @@ see `DETAILED_CHANGELOG.md`.
 - **"Show dropzone shelf" moved to the Editing tab** (just above
   Translation), where it sits more naturally than under Appearance.
 
+- **Re-applying a structural style clears that paragraph's manual font
+  size.** Pressing the tag, analytic, pocket, hat, or block shortcut on a
+  paragraph that's already that type now strips any direct font-size
+  overrides, resetting it to the style's size — the same gesture already
+  cleared manual indentation.
+
 ### Fixed
+
+- **Applying a structural style to a downward selection no longer restyles
+  the paragraph below.** Selecting a paragraph with Ctrl-Shift-Down — which
+  lands the selection boundary at the very start of the next paragraph — and
+  then applying a tag, analytic, or heading style used to convert that next
+  paragraph too; it now styles only the paragraph you selected.
 
 - **Line spacing reset now updates the boxes too.** Pressing the line-
   spacing reset restored the actual spacing but left the old numbers in the

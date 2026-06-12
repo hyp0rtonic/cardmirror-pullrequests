@@ -22,6 +22,31 @@ in each release, see `CHANGELOG.md`.
   own values (line spacing groups them, but their margins differ).
   Display-only, like line spacing — not written to docx.
 
+- **Structural-style apply: selection boundary and same-type re-press**
+  (`ribbon-commands.ts`). Two refinements to applying tag/analytic/heading
+  styles:
+  - `applyStructuralToSelection` over-applied on a downward selection.
+    Ctrl-Shift-Down extends the selection to offset 0 of the *next*
+    textblock; that paragraph has nothing actually selected, but the
+    doc-child sweep counted it as touched (its `cStart < to`) and restyled
+    it. The function now pulls `to` back across the opening boundary when
+    `$to.parentOffset === 0`, so only the genuinely-selected blocks convert.
+    (The `selectionAcross` test helper had the same offset-0 shape — an
+    inner text node overwriting `to` to the block start — and was fixed to
+    `Math.max` to the block end so its multi-paragraph drags still include
+    the last block under the new rule.)
+  - Re-pressing a structural shortcut on a node that's already that type now
+    clears its direct `font_size` marks (tag, analytic, pocket, hat, block —
+    not undertag, per request). `stripIndentAtDepth` gained a `clearFontSize`
+    option used by the same-type cursor branches; it strips `font_size` over
+    the node's content alongside the existing indent reset, dispatching
+    nothing when neither changes (no empty undo step). The selection path's
+    same-type-in-container case (`transformDocChild`, kept untouched to avoid
+    dissolving the card — audit 2026-06-10 P1#4) now routes those heads
+    through a new `clearFontSizeOnNode` so an in-place re-press cleans their
+    size without breaking the container; doc-level same-type heads already
+    cleared via `asTransformed`'s promotion strip.
+
 - **Settings + AI cite-prompt editor: stacked-Escape** (`settings-ui.ts`,
   `ai/edit-prompt-modal.ts`). Both opened their own `document` Escape
   listener, so Escape from the cite-prompt editor (opened from Settings)

@@ -464,8 +464,11 @@ block:
 - With **several paragraphs selected**, the style applies to all of them
   at once.
 
-Pressing the same heading key again clears indentation while keeping the
-style — the way to reset an over-indented line.
+Pressing the same heading key again clears indentation **and any manual
+font-size override** while keeping the style — the way to reset an
+over-indented or hand-resized line back to the style's defaults. (Tags,
+analytics, pockets, hats, and blocks reset the font size; undertags clear
+only indentation.)
 
 ### Editing at card boundaries
 
