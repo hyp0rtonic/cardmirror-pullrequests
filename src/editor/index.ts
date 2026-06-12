@@ -3548,7 +3548,7 @@ function makeMobileStarterDoc(): PMNode {
 
     n['hat']!.create({ id: newHeadingId() }, schema.text('1. Open a file')),
     paraText(
-      'Tap ⋮ (top-right) to open a Verbatim or CardMirror file, or start a new one. Saving writes back the same format. CardMirror is alpha software — save often and keep a Verbatim copy of anything important.',
+      'Tap ⋮ (top-right) to open a Verbatim or CardMirror file, or start a new one. The mobile view is built for reading and light edits, not building a document from scratch — to write a new doc, switch to the desktop layout from the same ⋮ menu ("Use desktop layout"). Saving writes back the same Word format either way. CardMirror is alpha software — save often and keep a Verbatim copy of anything important.',
     ),
     blank(),
 
