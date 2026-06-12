@@ -108,6 +108,38 @@ const DEFAULT_DISPLAY_SIZES: DisplaySizes = {
 };
 
 /**
+ * Per-style paragraph spacing — the blank space BEFORE and AFTER a
+ * paragraph (its top/bottom margin), in points. A display setting like
+ * line spacing: it overrides how the editor renders, independent of the
+ * doc's own spacing. Keys are `<style>Before` / `<style>After`. Defaults
+ * match the spacing the editor shipped with (the old hard-coded margins).
+ */
+export const PARAGRAPH_SPACING_KEYS = [
+  'bodyBefore', 'bodyAfter',
+  'citeBefore', 'citeAfter',
+  'tagBefore', 'tagAfter',
+  'analyticBefore', 'analyticAfter',
+  'pocketBefore', 'pocketAfter',
+  'hatBefore', 'hatAfter',
+  'blockBefore', 'blockAfter',
+  'undertagBefore', 'undertagAfter',
+] as const;
+export type ParagraphSpacingKey = (typeof PARAGRAPH_SPACING_KEYS)[number];
+export type DisplayParagraphSpacing = Record<ParagraphSpacingKey, number>;
+
+const DEFAULT_PARAGRAPH_SPACING: DisplayParagraphSpacing = {
+  bodyBefore: 0, bodyAfter: 0,
+  citeBefore: 0, citeAfter: 0,
+  tagBefore: 9, tagAfter: 3,
+  analyticBefore: 9, analyticAfter: 3,
+  pocketBefore: 18, pocketAfter: 9,
+  hatBefore: 15, hatAfter: 6,
+  blockBefore: 12, blockAfter: 6,
+  undertagBefore: 0, undertagAfter: 0,
+};
+export { DEFAULT_PARAGRAPH_SPACING };
+
+/**
  * Per-style typography flags. Mirrors the boolean side of Verbatim's
  * Styles tab — whether each named style is bold, italic, underlined,
  * boxed, plus the box thickness. Each flag becomes a class toggle on
@@ -484,6 +516,9 @@ export interface Settings {
    * Each field becomes a CSS custom property on `#editor`.
    */
   displaySizes: DisplaySizes;
+  /** Per-style paragraph spacing (top/bottom margins) in points. A
+   *  display override applied via CSS variables, like line spacing. */
+  displayParagraphSpacing: DisplayParagraphSpacing;
   /**
    * Per-style typography flags (bold/italic/underlined/box). See
    * DisplayTypography. Each becomes a class toggle on `#editor`.
@@ -972,6 +1007,7 @@ const DEFAULTS: Settings = {
   ],
   liveSelectionWordCount: false,
   displaySizes: { ...DEFAULT_DISPLAY_SIZES },
+  displayParagraphSpacing: { ...DEFAULT_PARAGRAPH_SPACING },
   displayTypography: { ...DEFAULT_DISPLAY_TYPOGRAPHY },
   displayColors: { ...DEFAULT_DISPLAY_COLORS },
   bodyFont: 'Times New Roman',
@@ -1089,6 +1125,7 @@ export interface SettingMeta {
     | 'level'
     | 'readers'
     | 'displaySizes'
+    | 'paragraphSpacing'
     | 'displayTypography'
     | 'displayColors'
     | 'bodyFont'
@@ -1499,6 +1536,15 @@ export const SETTING_METADATA: SettingMeta[] = [
     kind: 'lineHeights',
     category: 'appearance',
     aliases: ['line height'],
+  },
+  {
+    key: 'displayParagraphSpacing',
+    label: 'Paragraph spacing',
+    description:
+      'Blank space before and after each paragraph type, in points (the paragraph’s top/bottom margin — distinct from line spacing, which is the gap between lines).',
+    kind: 'paragraphSpacing',
+    category: 'appearance',
+    aliases: ['space before', 'space after', 'paragraph margin', 'before spacing', 'after spacing'],
   },
   {
     key: 'displayColors',
@@ -2178,6 +2224,7 @@ function sanitize(s: Settings): Settings {
     readers: sanitizeReaders(s.readers),
     liveSelectionWordCount: s.liveSelectionWordCount === true,
     displaySizes: sanitizeDisplaySizes(s.displaySizes),
+    displayParagraphSpacing: sanitizeParagraphSpacing(s.displayParagraphSpacing),
     displayTypography: sanitizeDisplayTypography(s.displayTypography),
     displayColors: sanitizeDisplayColors(s.displayColors, s.customColorOverrides),
     bodyFont: sanitizeBodyFont(s.bodyFont),
@@ -2806,6 +2853,20 @@ function sanitizeDisplaySizes(raw: unknown): DisplaySizes {
     const v = Number(r[key]);
     if (Number.isFinite(v) && v >= 1 && v <= 144) {
       out[key] = Math.round(v * 2) / 2; // half-point precision
+    }
+  }
+  return out;
+}
+
+function sanitizeParagraphSpacing(raw: unknown): DisplayParagraphSpacing {
+  const out = { ...DEFAULT_PARAGRAPH_SPACING };
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Partial<Record<ParagraphSpacingKey, unknown>>;
+  for (const key of PARAGRAPH_SPACING_KEYS) {
+    const v = Number(r[key]);
+    // 0–96 pt, half-point precision (negative margins are never wanted).
+    if (Number.isFinite(v) && v >= 0 && v <= 96) {
+      out[key] = Math.round(v * 2) / 2;
     }
   }
   return out;

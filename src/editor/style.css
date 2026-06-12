@@ -1615,7 +1615,7 @@ code {
   text-align: center;
   border: 3px solid var(--pmd-c-emphasis-box);
   padding: 0.5rem 1rem;
-  margin: 1.5rem 0 0.75rem 0;
+  margin: var(--pmd-para-pocket-before, 1.5rem) 0 var(--pmd-para-pocket-after, 0.75rem) 0;
   page-break-before: always;
 }
 
@@ -1626,7 +1626,7 @@ code {
   font-weight: bold;
   text-align: center;
   text-decoration: underline double;
-  margin: 1.25rem 0 0.5rem 0;
+  margin: var(--pmd-para-hat-before, 1.25rem) 0 var(--pmd-para-hat-after, 0.5rem) 0;
 }
 
 /* Block = Heading 3, centered, single underline. */
@@ -1636,7 +1636,7 @@ code {
   font-weight: bold;
   text-align: center;
   text-decoration: underline;
-  margin: 1rem 0 0.5rem 0;
+  margin: var(--pmd-para-block-before, 1rem) 0 var(--pmd-para-block-after, 0.5rem) 0;
 }
 
 /* Tag = Heading 4, bold, larger. */
@@ -1644,7 +1644,7 @@ code {
   font-size: var(--pmd-size-tag);
   line-height: var(--pmd-line-height-tag);
   font-weight: bold;
-  margin: 0.75rem 0 0.25rem 0;
+  margin: var(--pmd-para-tag-before, 0.75rem) 0 var(--pmd-para-tag-after, 0.25rem) 0;
 }
 
 /* Analytic = same outline level as Tag, dark blue. The id-scoped
@@ -1657,18 +1657,23 @@ code {
   line-height: var(--pmd-line-height-analytic);
   font-weight: bold;
   color: var(--pmd-color-analytic);
-  margin: 0.75rem 0 0.25rem 0;
+  margin: var(--pmd-para-analytic-before, 0.75rem) 0 var(--pmd-para-analytic-after, 0.25rem) 0;
 }
 
 /* Body-level paragraphs (card body, cite paragraph, generic paragraph,
-   undertag) — no extra vertical spacing. Headings provide their own
-   before/after margins so the overall flow has rhythm at the right
-   places without inflating runs of card body text. */
-.pmd-cite-para,
-.pmd-card-body,
-.pmd-undertag,
-:is(#editor, .pmd-pane-editor) p {
-  margin: 0;
+   undertag) — default to no extra vertical spacing, but each is settings-
+   driven via --pmd-para-<style>-before/after (Paragraph spacing). The
+   id-scoped selectors are needed so these beat `#editor p { margin: 0 }`-
+   strength rules (cite/undertag/card-body are all <p> elements). */
+:is(#editor, .pmd-pane-editor) p,
+:is(#editor, .pmd-pane-editor) .pmd-card-body {
+  margin: var(--pmd-para-body-before, 0) 0 var(--pmd-para-body-after, 0) 0;
+}
+:is(#editor, .pmd-pane-editor) .pmd-cite-para {
+  margin: var(--pmd-para-cite-before, 0) 0 var(--pmd-para-cite-after, 0) 0;
+}
+:is(#editor, .pmd-pane-editor) .pmd-undertag {
+  margin: var(--pmd-para-undertag-before, 0) 0 var(--pmd-para-undertag-after, 0) 0;
 }
 
 /* Cite paragraphs render their bold-13pt cite text at single line
@@ -4203,6 +4208,45 @@ html.pmd-nav-flat .pmd-nav-type-analytic:hover .pmd-nav-label {
 
 .pmd-line-heights-reset-btn:hover {
   background: var(--pmd-c-hover);
+}
+
+/* Paragraph spacing: a 3-column grid (style label, Before, After). Rows
+   use display:contents so every cell shares one grid and the columns line
+   up across rows. */
+.pmd-para-spacing-editor {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.pmd-para-spacing-rows {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.3rem 0.7rem;
+  align-items: center;
+}
+.pmd-para-spacing-row {
+  display: contents;
+}
+.pmd-para-spacing-row-label {
+  font-size: 0.85rem;
+}
+.pmd-para-spacing-colhead {
+  font-size: 0.72rem;
+  color: var(--pmd-c-text-secondary);
+  text-align: center;
+}
+.pmd-para-spacing-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.pmd-para-spacing-input {
+  width: 3.4rem;
+}
+.pmd-para-spacing-unit {
+  font-size: 0.75rem;
+  color: var(--pmd-c-text-secondary);
 }
 
 .pmd-display-sizes-editor {

@@ -7,6 +7,21 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Per-style paragraph spacing** (`settings.ts`, `settings-ui.ts`,
+  `index.ts`, `style.css`). New `displayParagraphSpacing` setting — a
+  `Record<'<style>Before' | '<style>After', number>` in points — defaulting
+  to the editor's previous hard-coded per-style margins (e.g. pocket
+  18/9 pt, tag 9/3 pt, body 0/0). `applyParagraphSpacing` pushes each to a
+  CSS variable (`--pmd-para-<style>-before` / `-after`), and the `.pmd-*`
+  margin rules now read those (with the original rem values as fallbacks,
+  so zero-config rendering is unchanged). The Appearance editor
+  (`buildParagraphSpacingEditor`, kind `paragraphSpacing`) is a 3-column
+  grid (style / Before / After) with a reset-to-defaults button. The
+  body-level CSS rule was split so cite, undertag, and body paragraphs take
+  independent spacing, and the heading levels (pocket/hat/block) get their
+  own values (line spacing groups them, but their margins differ).
+  Display-only, like line spacing — not written to docx.
+
 - **Settings + AI cite-prompt editor: stacked-Escape** (`settings-ui.ts`,
   `ai/edit-prompt-modal.ts`). Both opened their own `document` Escape
   listener, so Escape from the cite-prompt editor (opened from Settings)

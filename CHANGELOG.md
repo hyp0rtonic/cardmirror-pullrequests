@@ -9,6 +9,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Paragraph spacing controls.** Settings → Appearance → Paragraph spacing
+  (just under Line spacing) sets the blank space *before* and *after* each
+  paragraph type — Body, Cites, Tags, Analytics, Pockets, Hats, Blocks, and
+  Undertags — in points, per style, with a reset-to-defaults button. (Line
+  spacing is the gap between lines; this is the gap between paragraphs.)
+
 - **"Manage Quick Cards" is now a command.** It's searchable in the command
   bar and rebindable under Settings → Keyboard shortcuts, like the other
   Quick Cards actions.

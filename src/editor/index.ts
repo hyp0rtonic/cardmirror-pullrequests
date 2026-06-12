@@ -93,6 +93,7 @@ import {
   CUSTOM_OVERRIDE_TOKEN_NAMES,
   DISPLAY_SIZE_KEYS,
   DISPLAY_COLOR_KEYS,
+  PARAGRAPH_SPACING_KEYS,
   type DisplaySizes,
   type DisplayTypography,
   type DisplayColors,
@@ -2329,6 +2330,21 @@ function applyLineHeight(_multiplier: number): void {
   }
 }
 
+/** Push each per-style paragraph-spacing knob to its CSS variable
+ *  (`--pmd-para-<style>-before` / `-after`, in pt). The `.pmd-*` margin
+ *  rules read these, so the override flows straight to the editor and the
+ *  multi-pane shell. */
+function applyParagraphSpacing(): void {
+  const s = settings.get('displayParagraphSpacing');
+  for (const key of PARAGRAPH_SPACING_KEYS) {
+    // 'pocketBefore' → '--pmd-para-pocket-before'
+    const cssName = `--pmd-para-${key.replace(/(Before|After)$/, (m) => `-${m.toLowerCase()}`)}`;
+    const value = `${s[key]}pt`;
+    editorEl.style.setProperty(cssName, value);
+    document.documentElement.style.setProperty(cssName, value);
+  }
+}
+
 // Track the last applied ribbon-key override map so the settings
 // subscriber can detect changes by reference and reconfigure the
 // view's plugin stack only when bindings actually moved. We start
@@ -2392,6 +2408,7 @@ settings.subscribe((s) => {
   // padding-bottom, gated on the pill-hidden class), so it self-tracks.
   requestAnimationFrame(positionDropzone);
   applyLineHeight(s.lineHeight);
+  applyParagraphSpacing();
   applyFormattingPanel(s.formattingPanelMode, s.formattingPanelPreview, s.showCharacterStyles);
   syncParagraphIntegrityBtn();
   // A settings change never edits the document, so the whole-doc word
@@ -2673,6 +2690,7 @@ applyCustomColorOverrides(
 applyBodyFont(settings.get('bodyFont'));
 applyUiFont(settings.get('uiFont'));
 applyLineHeight(settings.get('lineHeight'));
+applyParagraphSpacing();
 applyFormattingPanel(
   settings.get('formattingPanelMode'),
   settings.get('formattingPanelPreview'),

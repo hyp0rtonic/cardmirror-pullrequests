@@ -21,6 +21,8 @@ import {
   type Settings,
   type ReaderConfig,
   type DisplaySizes,
+  DEFAULT_PARAGRAPH_SPACING,
+  type ParagraphSpacingKey,
   type DisplayTypography,
   type DisplayColors,
   type FormattingPanelMode,
@@ -640,6 +642,10 @@ class SettingsModal {
     } else if (meta.kind === 'lineHeights') {
       row.appendChild(text);
       row.appendChild(buildLineHeightsEditor());
+      return row;
+    } else if (meta.kind === 'paragraphSpacing') {
+      row.appendChild(text);
+      row.appendChild(buildParagraphSpacingEditor());
       return row;
     } else if (meta.kind === 'formattingPanelMode') {
       label.appendChild(buildFormattingPanelModeEditor());
@@ -1391,6 +1397,107 @@ const LINE_HEIGHT_ROWS: { key: LineHeightKey; label: string }[] = [
   { key: 'lineHeightHeading', label: 'Pocket / Hat / Block' },
   { key: 'lineHeightUndertag', label: 'Undertags' },
 ];
+
+const PARAGRAPH_SPACING_ROWS: { label: string; before: ParagraphSpacingKey; after: ParagraphSpacingKey }[] = [
+  { label: 'Body', before: 'bodyBefore', after: 'bodyAfter' },
+  { label: 'Cite paragraphs', before: 'citeBefore', after: 'citeAfter' },
+  { label: 'Tags', before: 'tagBefore', after: 'tagAfter' },
+  { label: 'Analytics', before: 'analyticBefore', after: 'analyticAfter' },
+  { label: 'Pockets', before: 'pocketBefore', after: 'pocketAfter' },
+  { label: 'Hats', before: 'hatBefore', after: 'hatAfter' },
+  { label: 'Blocks', before: 'blockBefore', after: 'blockAfter' },
+  { label: 'Undertags', before: 'undertagBefore', after: 'undertagAfter' },
+];
+
+function buildParagraphSpacingEditor(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'pmd-para-spacing-editor';
+
+  const rowsContainer = document.createElement('div');
+  rowsContainer.className = 'pmd-para-spacing-rows';
+  wrap.appendChild(rowsContainer);
+
+  function cell(key: ParagraphSpacingKey, value: number): HTMLElement {
+    const c = document.createElement('span');
+    c.className = 'pmd-para-spacing-cell';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'pmd-para-spacing-input';
+    input.min = '0';
+    input.max = '96';
+    input.step = '0.5';
+    input.value = String(value);
+    input.addEventListener('change', () => {
+      const cur = settings.get('displayParagraphSpacing');
+      const v = parseFloat(input.value);
+      if (!Number.isFinite(v) || v < 0) {
+        input.value = String(cur[key]);
+        return;
+      }
+      settings.set('displayParagraphSpacing', { ...cur, [key]: v });
+    });
+    c.appendChild(input);
+    const unit = document.createElement('span');
+    unit.className = 'pmd-para-spacing-unit';
+    unit.textContent = 'pt';
+    c.appendChild(unit);
+    return c;
+  }
+
+  function render(): void {
+    rowsContainer.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'pmd-para-spacing-row pmd-para-spacing-head';
+    head.appendChild(document.createElement('span')); // label column spacer
+    for (const t of ['Before', 'After']) {
+      const h = document.createElement('span');
+      h.className = 'pmd-para-spacing-colhead';
+      h.textContent = t;
+      head.appendChild(h);
+    }
+    rowsContainer.appendChild(head);
+
+    const spacing = settings.get('displayParagraphSpacing');
+    for (const { label, before, after } of PARAGRAPH_SPACING_ROWS) {
+      const row = document.createElement('div');
+      row.className = 'pmd-para-spacing-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'pmd-para-spacing-row-label';
+      lbl.textContent = label;
+      row.appendChild(lbl);
+      row.appendChild(cell(before, spacing[before]));
+      row.appendChild(cell(after, spacing[after]));
+      rowsContainer.appendChild(row);
+    }
+  }
+
+  const footer = document.createElement('div');
+  footer.className = 'pmd-line-heights-footer';
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.className = 'pmd-line-heights-reset-btn';
+  setIcon(resetBtn, 'reset');
+  resetBtn.title = 'Restore defaults';
+  resetBtn.setAttribute('aria-label', 'Restore paragraph spacing defaults');
+  resetBtn.addEventListener('click', () => {
+    settings.set('displayParagraphSpacing', { ...DEFAULT_PARAGRAPH_SPACING });
+    // Re-sync the inputs (the subscriber skips re-render while focus is in
+    // this editor, and the reset button holds focus).
+    render();
+  });
+  footer.appendChild(resetBtn);
+  wrap.appendChild(footer);
+
+  const unsubscribe = settings.subscribe(() => {
+    if (!(document.activeElement && wrap.contains(document.activeElement))) {
+      render();
+    }
+  });
+  render();
+  onDetached(wrap, () => unsubscribe());
+
+  return wrap;
+}
 
 function buildLineHeightsEditor(): HTMLElement {
   const wrap = document.createElement('div');
