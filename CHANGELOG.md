@@ -24,6 +24,9 @@ see `DETAILED_CHANGELOG.md`.
   typography.** Grouped with the other type controls instead of further
   down the tab.
 
+- **"Show dropzone shelf" moved to the Editing tab** (just above
+  Translation), where it sits more naturally than under Appearance.
+
 ### Fixed
 
 - **Line spacing reset now updates the boxes too.** Pressing the line-

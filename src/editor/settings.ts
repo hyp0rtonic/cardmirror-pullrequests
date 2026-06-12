@@ -1633,14 +1633,6 @@ export const SETTING_METADATA: SettingMeta[] = [
     category: 'appearance',
   },
   {
-    key: 'showDropzonePill',
-    label: 'Show dropzone shelf',
-    description:
-      "When on, the cross-window dropzone pill sits in the editor's bottom-left corner (the editor nearest the nav pane in multi-pane layouts). Turning it off hides the pill from the chrome; the shelf state and the Send to Dropzone shortcut still work — items pile up in the store and can be retrieved from any window that has the pill visible.",
-    kind: 'toggle',
-    category: 'appearance',
-  },
-  {
     key: 'formattingPanelPreview',
     label: 'Preview styles in formatting panel',
     description:
@@ -1745,6 +1737,14 @@ export const SETTING_METADATA: SettingMeta[] = [
     label: 'Create Reference uses Gray-50% text',
     description:
       'When on, the body text of a "Create Reference" excerpt is rendered in Gray-50% (#808080) instead of black. The heading line stays black either way.',
+    kind: 'toggle',
+    category: 'editing',
+  },
+  {
+    key: 'showDropzonePill',
+    label: 'Show dropzone shelf',
+    description:
+      "When on, the cross-window dropzone pill sits in the editor's bottom-left corner (the editor nearest the nav pane in multi-pane layouts). Turning it off hides the pill from the chrome; the shelf state and the Send to Dropzone shortcut still work — items pile up in the store and can be retrieved from any window that has the pill visible.",
     kind: 'toggle',
     category: 'editing',
   },
