@@ -98,6 +98,25 @@ code (`reference-docs/AUDIT-2026-06-10.md`):
   instead of the live one, and ignoring the clear-on-toggle-off setting.
   They now pass the live `ribbonContext` like the ribbon and keymap.
 
+- **Nav-drag editor auto-scroll was a no-op** (`nav-panel.ts`,
+  `maybeAutoScroll`). It called `scrollBy` on `#editor`, which isn't the
+  scroll container (the overflow is on an ancestor, `#app` single-doc), and
+  gated on a mislabeled Y-only check. It now walks up to the real scroll
+  container (`findEditorScrollGate`, mirroring `findNavScrollGate`) and
+  gates on the pointer being over the editor in both axes (so a drag within
+  the nav pane doesn't scroll the doc).
+
+- **`insertSpeechSlice` could dispatch into a destroyed view**
+  (`speech-doc-send.ts`). The `setTimeout(…, 0)` insertion read
+  `speechView.state` and dispatched with no liveness check; closing the
+  speech doc inside the defer window threw. Bails when ProseMirror has
+  nulled the view's `docView`.
+
+- **Nav and spellcheck context menus could both be open**
+  (`nav-panel.ts`, `viewport-spellcheck.ts`). They tracked open state
+  independently. Added a shared `context-menu-registry.ts`: each menu
+  registers its closer on open (closing any other) and clears it on close.
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 - **Voice control failed to start in packaged builds.** The recognizer

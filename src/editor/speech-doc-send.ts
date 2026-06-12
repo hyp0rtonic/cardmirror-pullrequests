@@ -197,6 +197,10 @@ export function insertSpeechSlice(
   }
 
   setTimeout(() => {
+    // The speech doc can be closed in the 0 ms defer window; dispatching
+    // into a destroyed view throws. ProseMirror nulls `docView` on
+    // destroy — bail if that happened.
+    if ((speechView as unknown as { docView: unknown }).docView == null) return;
     const liveState = speechView.state;
     let liveFrom: number;
     let liveTo: number;

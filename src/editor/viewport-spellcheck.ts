@@ -17,6 +17,7 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view';
 import { settings } from './settings.js';
 import { showToast } from './toast.js';
+import { registerOpenContextMenu, clearOpenContextMenu } from './context-menu-registry.js';
 
 const key = new PluginKey<DecorationSet>('viewportSpellcheck');
 
@@ -323,6 +324,7 @@ function showSpellMenu(
   menu.style.top = `${Math.min(y, Math.max(0, maxY))}px`;
 
   openSpellMenuEl = menu;
+  registerOpenContextMenu(closeSpellMenu);
   setTimeout(() => {
     window.addEventListener('mousedown', maybeCloseSpellMenu, { capture: true });
     window.addEventListener('keydown', maybeCloseSpellMenu, { capture: true });
@@ -330,6 +332,7 @@ function showSpellMenu(
 }
 
 function closeSpellMenu(): void {
+  clearOpenContextMenu(closeSpellMenu);
   if (!openSpellMenuEl) return;
   openSpellMenuEl.remove();
   openSpellMenuEl = null;

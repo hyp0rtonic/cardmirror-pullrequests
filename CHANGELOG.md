@@ -53,6 +53,13 @@ see `DETAILED_CHANGELOG.md`.
   default settings (e.g. the wrong highlight color) instead of your current
   ones.
 
+- **Dragging a card out of the navigation pane auto-scrolls the document.**
+  Dragging toward the top or bottom edge now scrolls the doc into view; it
+  was scrolling the wrong element and doing nothing.
+
+- **The navigation and spellcheck right-click menus no longer stay open at
+  once.** Opening one closes the other.
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 ### Added
