@@ -26,6 +26,7 @@ import { callAnthropic } from './ai/anthropic.js';
 import { resolveAiModel } from './ai/anthropic.js';
 import { showToast } from './toast.js';
 import { AiActivity } from './ai/ai-activity.js';
+import { setCardCutterPreview } from './card-cutter-preview-plugin.js';
 import { getElectronHost } from './host/index.js';
 
 // ─── Engine contract (structural — no import of the package) ──────
@@ -534,6 +535,30 @@ export function setSectionOmitted(
     else tr.addMark(from, to, hlType.create({ color }));
   }
   if (tr.steps.length > 0) view.dispatch(tr);
+}
+
+/** Hover preview for the trim checklist: box the highlighted words a
+ *  section's checkbox would affect (purple boxes hugging each run), or
+ *  clear with `null`. Positions are valid because applying marks never
+ *  moves text. */
+export function previewOmissionSection(
+  view: EditorView,
+  session: CutSession,
+  section: OmissionSection | null,
+): void {
+  if (!section) {
+    setCardCutterPreview(view, null);
+    return;
+  }
+  const ranges: { from: number; to: number }[] = [];
+  for (const s of section.spans) {
+    const base = session.focused.paraStarts[s.p];
+    if (base === undefined) continue;
+    const from = base + s.start;
+    const to = base + s.end;
+    if (to > from) ranges.push({ from, to });
+  }
+  setCardCutterPreview(view, ranges);
 }
 
 export async function ensureEngine(): Promise<boolean> {

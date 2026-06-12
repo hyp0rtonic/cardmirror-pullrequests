@@ -18,6 +18,7 @@ import {
   focusedCardStatus,
   proposeFocusedOmissions,
   setSectionOmitted,
+  previewOmissionSection,
   refineHighlightFocusedCard,
   addHighlightFocusedCard,
   hasCardSubSelection,
@@ -282,6 +283,9 @@ function openTrimChecklist(
     save.className = 'pmd-cardcutter-trim-save';
     save.textContent = `−${sec.words}w · ~${secsFor(sec.words)}s`;
     row.appendChild(save);
+    // Hover preview: box the highlighted words this row would affect.
+    row.addEventListener('mouseenter', () => previewOmissionSection(view, session, sec));
+    row.addEventListener('mouseleave', () => previewOmissionSection(view, session, null));
     list.appendChild(row);
   }
   panel.appendChild(list);
@@ -293,6 +297,7 @@ function openTrimChecklist(
   done.className = 'pmd-text-prompt-ok';
   done.textContent = 'Done';
   const close = (): void => {
+    previewOmissionSection(view, session, null);
     panel.remove();
     document.removeEventListener('keydown', onKey);
   };

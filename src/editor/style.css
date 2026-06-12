@@ -6057,6 +6057,13 @@ body:has(#comments-column:not([hidden])) :is(#editor, .pmd-pane-editor) .pmd-com
   background: color-mix(in srgb, var(--pmd-c-comment-thread) 12%, transparent);
   border-radius: 3px;
 }
+/* Card-cutter trim-checklist hover preview: a purple box hugging each
+   run of highlighted words a checklist row would affect. */
+:is(#editor, .pmd-pane-editor) .pmd-cc-preview {
+  box-shadow: inset 0 0 0 1.5px var(--pmd-c-comment-thread);
+  background: color-mix(in srgb, var(--pmd-c-comment-thread) 12%, transparent);
+  border-radius: 3px;
+}
 
 /* Active annotation — the comment/flashcard whose card is selected in
    the column: a stronger accent tint + a thin outline so the selected
