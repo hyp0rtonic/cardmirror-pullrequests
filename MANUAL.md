@@ -927,9 +927,22 @@ column, pull the selected Flow cells back into your document, or open a new
 Flow from the Verbatim template. They drive Excel directly and need no
 changes to Verbatim Flow itself.
 
+The **Send Headings to Flow** variants send only the heading-level labels
+— and from a cite line, only the marked citation (the same short cite the
+navigation pane previews), not the whole bibliographic paragraph.
+
+**Keeping the connection warm.** The first time you use a Flow command in a
+session, CardMirror opens a background connection to Excel and keeps it
+open, so every send and pull after that is near-instant instead of pausing
+a second or more to reconnect. If you'd rather not wait on that first send
+mid-round, warm the connection ahead of time with the **Start Flow
+Connection** command, or turn on **"Keep a Verbatim Flow connection warm"**
+under Settings to open it automatically the moment CardMirror launches. The
+connection closes when you quit.
+
 These commands aren't on the ribbon and have no default shortcuts — find
 them in the command palette, or bind keys to them under **Settings →
-Keyboard shortcuts**.
+Keyboard shortcuts**. They appear only on Windows.
 
 ---
 
