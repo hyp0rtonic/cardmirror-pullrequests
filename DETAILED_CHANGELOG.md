@@ -117,6 +117,13 @@ code (`reference-docs/AUDIT-2026-06-10.md`):
   independently. Added a shared `context-menu-registry.ts`: each menu
   registers its closer on open (closing any other) and clears it on close.
 
+- **docId stamping clobbered `docProps/custom.xml`** (`ooxml/docx.ts`,
+  `writeDocId`). It wrote a fresh part containing only `cmirDocId`,
+  deleting any other custom document properties — contradicting the
+  lossless contract. It now reads the existing part and merges: strips a
+  prior `cmirDocId`, appends ours with a fresh `pid`, and preserves every
+  other property. Tests in `tests/round-trip/docid.test.ts`.
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 - **Voice control failed to start in packaged builds.** The recognizer

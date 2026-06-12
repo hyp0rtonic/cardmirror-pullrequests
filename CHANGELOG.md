@@ -60,6 +60,10 @@ see `DETAILED_CHANGELOG.md`.
 - **The navigation and spellcheck right-click menus no longer stay open at
   once.** Opening one closes the other.
 
+- **Saving keeps your file's other custom document properties.** Stamping
+  the document id (used by the study/Learn layer) used to overwrite the
+  file's other custom properties; it now merges, leaving them intact.
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 ### Added

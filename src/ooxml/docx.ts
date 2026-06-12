@@ -103,10 +103,28 @@ export class Docx {
    *  (`docProps/custom.xml`) — verified to survive a real Word round-trip.
    *  Adds the part, its content-type override, and a package relationship.
    *  Idempotent-ish: if a custom.xml already exists we replace it (we only
-   *  store the one property). */
+   *  store the one property). When a `custom.xml` already exists we MERGE
+   *  into it — preserving any other custom properties the user/Word set —
+   *  rather than overwriting the whole part. */
   async writeDocId(docId: string): Promise<void> {
-    const propsXml = `${XML_PROLOG}
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="cmirDocId"><vt:lpwstr>${escText(docId)}</vt:lpwstr></property></Properties>`;
+    const prop = (pid: number): string =>
+      `<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="${pid}" name="cmirDocId"><vt:lpwstr>${escText(docId)}</vt:lpwstr></property>`;
+    const existing = await this.readText('docProps/custom.xml');
+    let propsXml: string;
+    if (existing && existing.includes('<Properties')) {
+      // Drop any prior cmirDocId, then append ours with a fresh pid that
+      // doesn't collide with the surviving properties' pids.
+      const stripped = existing.replace(
+        /<property\b[^>]*\bname="cmirDocId"[^>]*>[\s\S]*?<\/property>/,
+        '',
+      );
+      const pids = [...stripped.matchAll(/\bpid="(\d+)"/g)].map((m) => Number(m[1]));
+      const nextPid = (pids.length ? Math.max(...pids) : 1) + 1;
+      propsXml = stripped.replace('</Properties>', `${prop(nextPid)}</Properties>`);
+    } else {
+      propsXml = `${XML_PROLOG}
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">${prop(2)}</Properties>`;
+    }
     this.writeText('docProps/custom.xml', propsXml);
 
     const ct = await this.readText('[Content_Types].xml');
