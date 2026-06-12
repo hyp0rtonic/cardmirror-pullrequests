@@ -127,25 +127,34 @@ export function importDoc(
 
   const bodyChildren = childrenOf(body, 'w:body');
   const paragraphs: ParaInfo[] = [];
-  for (const node of bodyChildren) {
-    if ('w:p' in node) {
-      paragraphs.push(parseParagraph(node, ctx));
-    } else if ('w:tbl' in node) {
-      const tableNode = parseTable(node, ctx);
-      if (tableNode) {
-        paragraphs.push({
-          nodeType: '__rawNode__',
-          inlines: [],
-          headingId: null,
-          pStyle: null,
-          indent: 0,
-          spacing: null,
-          rawNode: tableNode,
-        });
+  const collectBlocks = (children: ReturnType<typeof childrenOf>): void => {
+    for (const node of children) {
+      if ('w:p' in node) {
+        paragraphs.push(parseParagraph(node, ctx));
+      } else if ('w:tbl' in node) {
+        const tableNode = parseTable(node, ctx);
+        if (tableNode) {
+          paragraphs.push({
+            nodeType: '__rawNode__',
+            inlines: [],
+            headingId: null,
+            pStyle: null,
+            indent: 0,
+            spacing: null,
+            rawNode: tableNode,
+          });
+        }
+      } else if ('w:sdt' in node) {
+        // Block-level content control: unwrap and import its inner
+        // content (was silently dropped). The wrapper carries no
+        // document content of its own.
+        const content = findChild(childrenOf(node, 'w:sdt'), 'w:sdtContent');
+        if (content) collectBlocks(childrenOf(content, 'w:sdtContent'));
       }
+      // <w:sectPr>, etc. — skip.
     }
-    // <w:sectPr>, etc. — skip.
-  }
+  };
+  collectBlocks(bodyChildren);
 
   return normalizeUnderlineMarks(assembleDoc(paragraphs));
 }

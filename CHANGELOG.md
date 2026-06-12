@@ -69,6 +69,10 @@ see `DETAILED_CHANGELOG.md`.
   elements. (A page break still comes back as a line break — the break
   type isn't tracked yet.)
 
+- **Content controls no longer drop their contents on import.** Text inside
+  a Word content control (a "structured document tag") was skipped; it now
+  imports normally.
+
 ## 0.1.0-alpha.12 — 2026-06-12
 
 ### Added
