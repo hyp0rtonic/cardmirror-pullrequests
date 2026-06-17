@@ -50,6 +50,8 @@ import {
   searchFileObjects,
   baseName,
   dirName,
+  fileFormat,
+  stripFileExt,
   FILE_OBJECT_KIND_BADGES,
   type FileEntry,
   type FileObject,
@@ -176,7 +178,7 @@ export function prewarmQuickCardFiles(): void {
         const fileList: FileEntry[] = list.map((it) => ({
           path: it.path,
           relPath: it.relPath,
-          name: baseName(it.relPath),
+          name: stripFileExt(baseName(it.relPath)),
           mtimeMs: it.mtimeMs,
         }));
         await runWarmPass(electron, fileList, () => true);
@@ -476,7 +478,8 @@ function badgeText(r: PaletteResult): string {
     case 'settings':
       return 'SET';
     case 'file':
-      return 'FILE';
+      // Badge the file's format so .cmir and .docx results are distinct.
+      return fileFormat(r.filePath ?? r.name).toUpperCase();
     case 'fileobject':
       return r.fileObjectKind ? FILE_OBJECT_KIND_BADGES[r.fileObjectKind] : 'OBJ';
   }
@@ -700,7 +703,13 @@ class QuickCardSearchUI {
         if (this.inFile) break;
         // A selected file (file prefix OR everything search) → dive in.
         if (this.results[this.selected]?.source === 'file') {
-          void this.enterInFile();
+          // Tab dives into a .cmir file to search its objects. .docx files
+          // can't be searched in place yet, so Tab is a no-op for them
+          // (Enter still opens them).
+          const sel = this.results[this.selected];
+          if (sel && fileFormat(sel.filePath ?? sel.name) === 'cmir') {
+            void this.enterInFile();
+          }
           break;
         }
         // Otherwise: the quick-card tag filter.
@@ -886,7 +895,7 @@ class QuickCardSearchUI {
         this.fileList = list.map((it) => ({
           path: it.path,
           relPath: it.relPath,
-          name: baseName(it.relPath),
+          name: stripFileExt(baseName(it.relPath)),
           mtimeMs: it.mtimeMs,
         }));
         this.fileListLoading = false;
@@ -921,7 +930,7 @@ class QuickCardSearchUI {
     this.fileList = payload.entries.map((it) => ({
       path: it.path,
       relPath: it.relPath,
-      name: baseName(it.relPath),
+      name: stripFileExt(baseName(it.relPath)),
       mtimeMs: it.mtimeMs,
     }));
     this.fileListLoading = false;

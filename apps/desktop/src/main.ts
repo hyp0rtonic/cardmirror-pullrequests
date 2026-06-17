@@ -777,9 +777,16 @@ function persistCmirIndex(): Promise<void> {
   return cmirIndexWriteTail;
 }
 
-/** Walk `root` recursively for `.cmir` files, recording mtime + size. */
+/** Walk `root` recursively for openable files (`.cmir` + `.docx`),
+ *  recording mtime + size. */
 async function scanCmirFiles(root: string): Promise<CmirFileEntry[]> {
   const out: CmirFileEntry[] = [];
+  const isOpenable = (name: string): boolean => {
+    // Skip Word's `~$…docx` owner/lock files — not real documents.
+    if (name.startsWith('~$')) return false;
+    const lower = name.toLowerCase();
+    return lower.endsWith('.cmir') || lower.endsWith('.docx');
+  };
   async function walk(cur: string): Promise<void> {
     let entries;
     try {
@@ -790,7 +797,7 @@ async function scanCmirFiles(root: string): Promise<CmirFileEntry[]> {
     for (const ent of entries) {
       const full = path.join(cur, ent.name);
       if (ent.isDirectory()) await walk(full);
-      else if (ent.isFile() && ent.name.toLowerCase().endsWith('.cmir')) {
+      else if (ent.isFile() && isOpenable(ent.name)) {
         try {
           const st = await fs.stat(full);
           out.push({ path: full, relPath: path.relative(root, full), mtimeMs: st.mtimeMs, size: st.size });

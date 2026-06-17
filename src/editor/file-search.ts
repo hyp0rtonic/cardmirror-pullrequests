@@ -105,6 +105,19 @@ export function baseName(p: string): string {
   return m[m.length - 1] ?? p;
 }
 
+/** Openable format of a listed file, by extension. The file scan yields
+ *  only `.cmir` and `.docx`, so anything not `.docx` is treated as `cmir`. */
+export function fileFormat(pathOrName: string): 'cmir' | 'docx' {
+  return /\.docx$/i.test(pathOrName) ? 'docx' : 'cmir';
+}
+
+/** Display name for a listed file: the openable extension (.cmir/.docx)
+ *  stripped, since the result row badges the format separately. Other dots
+ *  in the name are left intact. */
+export function stripFileExt(name: string): string {
+  return name.replace(/\.(cmir|docx)$/i, '');
+}
+
 /** Directory portion of a relPath ('' for a top-level file). */
 export function dirName(relPath: string): string {
   const i = Math.max(relPath.lastIndexOf('/'), relPath.lastIndexOf('\\'));

@@ -7,6 +7,8 @@ import { schema, newHeadingId } from '../../src/schema/index.js';
 import {
   baseName,
   dirName,
+  fileFormat,
+  stripFileExt,
   searchFiles,
   searchFileObjects,
   extractFile,
@@ -24,6 +26,18 @@ describe('path helpers', () => {
   it('dirName drops the filename', () => {
     expect(dirName('a/b/c.cmir')).toBe('a/b');
     expect(dirName('c.cmir')).toBe('');
+  });
+  it('fileFormat reads the extension (default cmir)', () => {
+    expect(fileFormat('a/b/c.cmir')).toBe('cmir');
+    expect(fileFormat('Heg Good.docx')).toBe('docx');
+    expect(fileFormat('SHOUTY.DOCX')).toBe('docx');
+    expect(fileFormat('no-ext')).toBe('cmir');
+  });
+  it('stripFileExt removes only the openable extension', () => {
+    expect(stripFileExt('Warming Impacts.cmir')).toBe('Warming Impacts');
+    expect(stripFileExt('Heg Good.docx')).toBe('Heg Good');
+    expect(stripFileExt('my.report.cmir')).toBe('my.report'); // other dots kept
+    expect(stripFileExt('plain')).toBe('plain');
   });
 });
 

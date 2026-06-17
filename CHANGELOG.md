@@ -7,6 +7,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ## Unreleased
 
+### Added
+
+- **The command bar's file search now finds `.docx` files too.** Searching
+  files (the `f ` prefix, or the everything-search) lists both `.cmir` and
+  `.docx` documents. Each result's badge shows its format — `CMIR` or `DOCX` —
+  and the file name is shown without its extension. Press Enter to open a
+  `.docx` just like a `.cmir`; Tab still dives into a `.cmir` to search inside
+  it (it's a no-op on `.docx` for now).
+
 ### Changed
 
 - **Edge gaps between separately-emphasized words now fill with underline.**

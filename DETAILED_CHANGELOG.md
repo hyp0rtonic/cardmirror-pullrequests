@@ -7,6 +7,22 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Command-bar file search lists `.docx` files**
+  (`apps/desktop/src/main.ts`, `editor/file-search.ts`,
+  `editor/quick-card-search-ui.ts`). The recursive scan behind
+  `host:list-cmir-files` (`scanCmirFiles`) now matches `.docx` as well as
+  `.cmir` (and skips Word's `~$…` owner/lock files). Results badge the format:
+  `badgeText` for a `file` row returns `fileFormat(filePath).toUpperCase()`
+  (`CMIR` / `DOCX`) instead of `FILE`, and the displayed name is run through
+  `stripFileExt` so the extension isn't shown (the badge already conveys it;
+  the search now matches on the bare name, not the extension). Enter opens
+  either format — `openFileByPath` → `routeOpenedFile` already routes `.docx`
+  through `fromDocxFull`, and `host:read-file-at-path` already returns docx
+  bytes — so no open-path change was needed. Tab still dives into a `.cmir`
+  to search its objects but is a no-op on `.docx` (guarded by `fileFormat` in
+  the Tab handler), since in-place object search isn't wired for docx yet.
+  (Internal IPC/type names keep the `cmir` prefix for now.)
+
 - **Emphasized selections fill only their EDGE gaps with underline**
   (`editor/ribbon-commands.ts`). When a formatting apply runs, `withGapFix`
   normalizes the gaps around the edit, but only at the OUTER edges of the user's
