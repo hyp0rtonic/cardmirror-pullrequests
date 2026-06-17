@@ -31,13 +31,17 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
-- **Turning off underline or highlight no longer strands it on the spaces next
-  to the word.** Toggling underline (F9 / Mod-U) or highlight (F11) *on* leaves
-  the space after a double-clicked word unstyled, as it should — but toggling
-  *off* used to leave that space (and the one before the word) still underlined
-  or highlighted, dangling between the now-plain word and its styled neighbor.
-  Toggling off now also clears the style from those adjacent spaces, so a space
-  stays styled only when the words on both sides of it are.
+- **Formatting now keeps the spaces between words consistent automatically.**
+  Applying or removing underline, highlight, emphasis, cite, shading, or a font
+  size now fixes the gaps around what you changed, so a space carries a style
+  only when the words on both sides of it do. Two everyday wins: underlining a
+  word that sits between two already-underlined words now joins up into one
+  continuous underline instead of leaving broken spaces; and turning a style
+  off no longer strands it on the spaces next to the word (it used to leave the
+  space before and after still underlined or highlighted, dangling between the
+  now-plain word and its styled neighbor). Only the style you acted on is
+  touched, and only around your selection — nothing else shifts, and if you
+  deliberately format just a space, that's left as you set it.
 
 - **Cursor no longer jumps to the next paragraph after deleting a selection
   that can't merge.** When a selection includes the paragraph break after it

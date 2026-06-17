@@ -7,21 +7,33 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
-- **Toggle-off of underline / highlight clears dangling boundary whitespace**
-  (`editor/ribbon-commands.ts`). Formatting operating ranges are
-  trailing-trimmed by `getOperatingRangesForFormatting` (Layer 3, so a
-  double-clicked `word ` styles only the word). That's correct for toggle-ON
-  but wrong for toggle-OFF: `removeMark` ran over the trimmed range, leaving a
-  styled space just outside it — between the now-unstyled word and a styled
-  neighbor — still underlined/highlighted. New `clearDanglingBoundaryStyle`
-  runs in the toggle-off branch of `applyUnderline` (F9 / Mod-U, both
-  `underline_mark` and `underline_direct`) and `applyHighlight` (F11): after
-  the `removeMark`, it strips the style from the contiguous styled-whitespace
-  run immediately before `from` and after `to`, bounded to the textblock. A
-  run-style space is kept only when the words on both sides carry it; the
-  toggled side no longer does, so the boundary spaces are cleared. Positions
-  are stable across `removeMark`, so it reads pre-toggle `state.doc` and
-  applies the same coordinates to the transaction.
+- **Per-apply gap normalization for the formatting family**
+  (`editor/ribbon-commands.ts`, `editor/index.ts`). Formatting operating ranges
+  are trailing-trimmed by `getOperatingRangesForFormatting` (Layer 3, so a
+  double-clicked `word ` styles only the word) — right for toggle-ON, but a
+  toggle-OFF left the adjacent space still styled, and word-by-word toggle-ON
+  left visible breaks between styled words. Both are now handled by running the
+  gap logic automatically after each formatting apply. The core of
+  `fixFormattingGaps` is shared via `forEachGap` (the word-to-word gap walker);
+  a new `withGapFix(category, command, effectivePt?)` wraps each formatting
+  factory (`applyUnderline`, `applyBodyMark` cite/emphasis, `applyHighlight`,
+  `applyShading`, `setHighlightColor`, `setShadingColor`, `adjustFontSize`,
+  `setFontSize`). After the wrapped command runs, it reads the ranges its mark
+  steps changed (positions are stable across `AddMarkStep`/`RemoveMarkStep`),
+  expands each to the adjacent bookend word via `expandToAdjacentBookends`, and
+  runs `applyCategoryGapTarget` over those gaps in the command's OWN
+  transaction (one undo step). The fix is **surgical**: only the category the
+  user acted on is normalized, and only around the changed ranges — a far gap,
+  or a gap for a mark the user didn't press, is never touched. Each gap is
+  three-way: BOTH bookends carry the mark → bridge (fill it); EXACTLY ONE → strip
+  (the dangling case the apply created); NEITHER → leave it (an orphan the user
+  didn't act on isn't ours to clear). And a changed range that is itself
+  whitespace-only is skipped entirely — explicitly formatting only whitespace is
+  honored even when a flanking word is styled. This replaces the bespoke
+  `clearDanglingBoundaryStyle`. The
+  shared underline handling now covers `underline_direct` (structural blocks
+  like tags), in both the wrapper and `fixFormattingGaps` itself, so the manual
+  "Fix Formatting Gaps" command also bridges direct underline in tags.
 
 - **Bulk structural re-apply / replace over a shadow selection**
   (`editor/ribbon-commands.ts`). `selectAllOfStyle` (right-click a ribbon style

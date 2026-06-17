@@ -2931,7 +2931,7 @@ function commitFontSizeInput(): void {
   }
   // Clamp to OOXML's sane range (1–409pt; 818 half-points is Word's cap).
   const clamped = Math.max(1, Math.min(409, pt));
-  setFontSize(clamped)(view.state, view.dispatch.bind(view));
+  setFontSize(clamped, effectivePtForNode)(view.state, view.dispatch.bind(view));
   view.focus();
 }
 
@@ -2977,7 +2977,7 @@ function openFontSizePicker(): void {
     btn.textContent = String(pt);
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
-      if (view) setFontSize(pt)(view.state, view.dispatch.bind(view));
+      if (view) setFontSize(pt, effectivePtForNode)(view.state, view.dispatch.bind(view));
       closeFontSizePicker();
       view?.focus();
     });

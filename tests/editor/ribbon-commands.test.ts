@@ -2813,9 +2813,11 @@ describe('applyHighlight (F11)', () => {
     expect(highlightedOffsets(next!.doc, 'word  here')).toEqual(new Set([4, 5]));
   });
 
-  it('range "word  " (word + 2 trailing spaces): trim shaves ONE → "word " highlighted', () => {
-    // Rule 3: the trim is monotonic — always one trailing space when
-    // there's any non-space content in the range.
+  it('range "word  " (word + 2 trailing spaces): trim shaves ONE, then the gap-fix cleans the rest → only "word"', () => {
+    // The trim is monotonic (shaves one trailing space, leaving "word "),
+    // but the per-apply gap-fix then strips the still-dangling trailing
+    // space because the next word ("here") isn't highlighted — a space is
+    // highlighted only when the words on both sides are. Net: just "word".
     const doc = makeDoc([cardWithChildren(tag('T'), cardBody('word  here'))]);
     let start = -1;
     doc.descendants((n, p) => {
@@ -2829,7 +2831,7 @@ describe('applyHighlight (F11)', () => {
     );
     const next = apply(state, applyHighlight(() => 'yellow'));
     expect(next).not.toBeNull();
-    expect(highlightedOffsets(next!.doc, 'word  here')).toEqual(new Set([0, 1, 2, 3, 4]));
+    expect(highlightedOffsets(next!.doc, 'word  here')).toEqual(new Set([0, 1, 2, 3]));
   });
 });
 

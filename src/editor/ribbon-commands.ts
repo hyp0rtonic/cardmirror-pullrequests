@@ -35,6 +35,7 @@
 
 import { Fragment, type Mark, type MarkType, type Node as PMNode, type ResolvedPos } from 'prosemirror-model';
 import { Selection, TextSelection, type Command, type EditorState, type Transaction } from 'prosemirror-state';
+import { AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import type { EditorView } from 'prosemirror-view';
 import { toggleMark } from 'prosemirror-commands';
 import { toggleReadingMarkerCommand } from './reading-marker.js';
@@ -963,7 +964,7 @@ function applyBodyMark(
   markName: 'cite_mark' | 'emphasis_mark',
   opts: { expandToWordWhenEmpty?: boolean } = {},
 ): Command {
-  return (state, dispatch) => {
+  return withGapFix(markName === 'cite_mark' ? 'cite' : 'emphasis', (state, dispatch) => {
     const markType = schema.marks[markName];
     if (!markType) return false;
 
@@ -1014,7 +1015,7 @@ function applyBodyMark(
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  };
+  });
 }
 
 export function applyCite(): Command {
@@ -1260,48 +1261,223 @@ export function highlightAcronym(activeColor: () => string): Command {
 }
 
 /**
- * After a toggle-OFF of underline / highlight, clear the style from
- * whitespace left dangling at the boundary. The operating range is
- * trailing-trimmed (Layer 3) before a toggle, which is right for toggle-ON
- * (don't style the trailing space) but on toggle-OFF leaves a styled space
- * just OUTSIDE the range — between the now-unstyled word and a styled
- * neighbor — still underlined / highlighted. This removes the style from the
- * contiguous styled-whitespace run immediately before `from` and after `to`
- * (bounded to the textblock): a space should carry the run style only when
- * the words on BOTH sides do, and the toggled side no longer does. Positions
- * are stable across `removeMark`, so `doc` is read pre-toggle and the same
- * coordinates apply to `tr`.
+ * Word-to-word gap regex (Verbatim's FixFormattingGaps, widened): a left
+ * bookend (one word char incl. straight/curly quotes) + 1+ gap chars +
+ * a lookahead at the right bookend. The lookahead keeps `/g`'s lastIndex
+ * from eating a single-char interior word that's the right bookend of one
+ * gap and the left bookend of the next.
  */
-function clearDanglingBoundaryStyle(
-  tr: Transaction,
+const GAP_REGEX = /[A-Za-z0-9'"‘’“”][.,;:?()\-! ]+(?=[A-Za-z0-9'"‘’“”])/g;
+const GAP_CHAR_RE = /[.,;:?()\-! ]/;
+
+interface GapHit {
+  gapFrom: number;
+  gapTo: number;
+  firstNode: PMNode;
+  lastNode: PMNode;
+  parent: PMNode;
+}
+
+/** Walk every word-to-word gap in the textblocks intersecting `[from, to]`,
+ *  calling `cb` with the gap's doc range (the chars strictly between the
+ *  bookends) and the two bookend text nodes. Shared by `fixFormattingGaps`
+ *  (full, all mark types) and the per-apply surgical normalizer. Bridges
+ *  never cross paragraph breaks. */
+function forEachGap(
   doc: PMNode,
   from: number,
   to: number,
-  markTypes: readonly MarkType[],
+  cb: (hit: GapHit) => void,
 ): void {
-  const charIsSpace = (pos: number): boolean => {
-    const ch = doc.textBetween(pos, pos + 1);
-    return ch.length === 1 && /\s/.test(ch);
-  };
-  const charHasStyle = (pos: number): boolean => {
-    let found = false;
-    doc.nodesBetween(pos, pos + 1, (node) => {
-      if (!node.isText) return true;
-      if (node.marks.some((m) => markTypes.includes(m.type))) found = true;
-      return false;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    const tbFrom = Math.max(from, pos + 1);
+    const tbTo = Math.min(to, pos + node.nodeSize - 1);
+    if (tbFrom >= tbTo) return false;
+    let text = '';
+    const charDocPos: number[] = [];
+    const charNode: PMNode[] = [];
+    let inlineOffset = 0;
+    node.forEach((child) => {
+      if (child.isText && child.text) {
+        const childStart = pos + 1 + inlineOffset;
+        const localFrom = Math.max(tbFrom, childStart);
+        const localTo = Math.min(tbTo, childStart + child.nodeSize);
+        if (localFrom < localTo) {
+          const slice = child.text.slice(localFrom - childStart, localTo - childStart);
+          for (let i = 0; i < slice.length; i++) {
+            charDocPos.push(localFrom + i);
+            charNode.push(child);
+          }
+          text += slice;
+        }
+      }
+      inlineOffset += child.nodeSize;
     });
-    return found;
+    GAP_REGEX.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = GAP_REGEX.exec(text)) !== null) {
+      const firstBookendIdx = m.index;
+      const gapStartIdx = firstBookendIdx + 1;
+      const gapEndIdx = firstBookendIdx + m[0].length - 1;
+      const secondBookendIdx = firstBookendIdx + m[0].length;
+      if (gapStartIdx > gapEndIdx) continue;
+      const gapFromPos = charDocPos[gapStartIdx];
+      const gapEndPos = charDocPos[gapEndIdx];
+      if (gapFromPos == null || gapEndPos == null) continue;
+      const firstNode = charNode[firstBookendIdx];
+      const lastNode = charNode[secondBookendIdx];
+      if (!firstNode || !lastNode) continue;
+      cb({ gapFrom: gapFromPos, gapTo: gapEndPos + 1, firstNode, lastNode, parent: node });
+    }
+    return false;
+  });
+}
+
+/** Formatting families the per-apply normalizer understands — each leaves a
+ *  visible run that should span a gap iff both flanking words carry it. */
+type GapCategory = 'underline' | 'emphasis' | 'cite' | 'highlight' | 'shading' | 'fontSize';
+
+/** Expand `[from, to]` outward to include the word char just past each end
+ *  (skipping gap chars first) so the boundary gap between the changed region
+ *  and its neighbor word is in scope — but no further, so unrelated gaps
+ *  elsewhere in the paragraph aren't touched. Bounded to the textblock. */
+function expandToAdjacentBookends(
+  doc: PMNode,
+  from: number,
+  to: number,
+): { from: number; to: number } {
+  const isGap = (pos: number): boolean => {
+    const ch = doc.textBetween(pos, pos + 1);
+    return ch.length === 1 && GAP_CHAR_RE.test(ch);
   };
-  // Leading styled-whitespace run immediately before the toggled-off range.
   const tbStart = doc.resolve(from).start();
-  let p = from;
-  while (p > tbStart && charIsSpace(p - 1) && charHasStyle(p - 1)) p--;
-  if (p < from) for (const mt of markTypes) tr.removeMark(p, from, mt);
-  // Trailing styled-whitespace run immediately after the toggled-off range.
+  let eFrom = from;
+  while (eFrom > tbStart && isGap(eFrom - 1)) eFrom--;
+  if (eFrom > tbStart) eFrom--; // include the left bookend word char
   const tbEnd = doc.resolve(to).end();
-  let q = to;
-  while (q < tbEnd && charIsSpace(q) && charHasStyle(q)) q++;
-  if (q > to) for (const mt of markTypes) tr.removeMark(to, q, mt);
+  let eTo = to;
+  while (eTo < tbEnd && isGap(eTo)) eTo++;
+  if (eTo < tbEnd) eTo++; // include the right bookend word char
+  return { from: eFrom, to: eTo };
+}
+
+/** Normalize ONE gap for ONE formatting category: bridge the mark across the
+ *  gap when both bookends carry it, strip it otherwise. Surgical — touches
+ *  only the given category, so an apply never disturbs marks the user didn't
+ *  act on. Mirrors the per-type rules in `fixFormattingGaps`. */
+function applyCategoryGapTarget(
+  tr: Transaction,
+  hit: GapHit,
+  category: GapCategory,
+  effectivePt?: (node: PMNode | null, parent: PMNode) => number,
+): void {
+  const { gapFrom, gapTo, firstNode, lastNode, parent } = hit;
+  const fm = firstNode.marks;
+  const lm = lastNode.marks;
+  const has = (marks: readonly Mark[], t: MarkType): boolean =>
+    marks.some((mk) => mk.type === t);
+
+  // Three-way per the user's rule: BOTH bookends carry it → bridge; EXACTLY
+  // ONE carries it → strip (the dangling case the apply created); NEITHER →
+  // leave the gap untouched (an explicitly-styled space between two plain
+  // words, or any orphan the user didn't just act on, is not ours to clear).
+
+  if (category === 'underline') {
+    const um = schema.marks['underline_mark']!;
+    const ud = schema.marks['underline_direct']!;
+    const fU = has(fm, um) || has(fm, ud);
+    const lU = has(lm, um) || has(lm, ud);
+    if (fU && lU) {
+      const structural = STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE.has(parent.type.name);
+      const target = structural ? ud : um;
+      const other = structural ? um : ud;
+      tr.removeMark(gapFrom, gapTo, other);
+      tr.addMark(gapFrom, gapTo, target.create());
+    } else if (fU !== lU) {
+      tr.removeMark(gapFrom, gapTo, um);
+      tr.removeMark(gapFrom, gapTo, ud);
+    }
+    return;
+  }
+
+  if (category === 'emphasis' || category === 'cite') {
+    const t = schema.marks[category === 'emphasis' ? 'emphasis_mark' : 'cite_mark']!;
+    const f = has(fm, t);
+    const l = has(lm, t);
+    if (f && l) tr.addMark(gapFrom, gapTo, t.create());
+    else if (f !== l) tr.removeMark(gapFrom, gapTo, t);
+    return;
+  }
+
+  if (category === 'highlight' || category === 'shading') {
+    const t = schema.marks[category]!;
+    const f = fm.find((mk) => mk.type === t);
+    const l = lm.find((mk) => mk.type === t);
+    if (f && l) tr.addMark(gapFrom, gapTo, t.create(f.attrs));
+    else if (!!f !== !!l) tr.removeMark(gapFrom, gapTo, t);
+    return;
+  }
+
+  // fontSize: only act when at least one bookend has an explicit font_size
+  // (i.e. the size change is what we're normalizing); bridge the
+  // smaller-effective-pt bookend's explicit mark.
+  const t = schema.marks['font_size']!;
+  if (!effectivePt) return;
+  const f = fm.find((mk) => mk.type === t);
+  const l = lm.find((mk) => mk.type === t);
+  if (!f && !l) return;
+  const fEpt = effectivePt(firstNode, parent);
+  const lEpt = effectivePt(lastNode, parent);
+  let target: Mark | null = null;
+  if (fEpt < lEpt) {
+    if (f) target = f;
+  } else if (lEpt < fEpt) {
+    if (l) target = l;
+  } else if (f && l) {
+    target = f;
+  }
+  if (target) tr.addMark(gapFrom, gapTo, t.create(target.attrs));
+  else tr.removeMark(gapFrom, gapTo, t);
+}
+
+/** Wrap a formatting Command so that, after it runs, the gaps it touched are
+ *  normalized for ONE category — bridging the style across gaps the two new
+ *  neighbors share, and clearing it from a gap a now-unstyled word leaves
+ *  dangling. Runs in the command's OWN transaction (one undo step); reads the
+ *  changed ranges from its mark steps (positions are stable across mark
+ *  steps). Surgical: only this category, only around the changed ranges. */
+function withGapFix(
+  category: GapCategory,
+  command: Command,
+  effectivePt?: (node: PMNode | null, parent: PMNode) => number,
+): Command {
+  return (state, dispatch, view) => {
+    if (!dispatch) return command(state, undefined, view);
+    let captured: Transaction | null = null;
+    const result = command(state, (tr) => { captured = tr; }, view);
+    const tr = captured as Transaction | null;
+    if (!tr) return result;
+    const ranges: { from: number; to: number }[] = [];
+    for (const step of tr.steps) {
+      if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+        ranges.push({ from: step.from, to: step.to });
+      }
+    }
+    for (const r of ranges) {
+      // When the user formatted ONLY whitespace, that's a deliberate choice —
+      // honor it and don't let the gap-fix strip it, even if a flanking word
+      // is styled. The cleanup is for spaces left dangling as a side effect of
+      // formatting a WORD, not for whitespace the user selected directly.
+      if (/^\s*$/.test(tr.doc.textBetween(r.from, r.to))) continue;
+      const span = expandToAdjacentBookends(tr.doc, r.from, r.to);
+      forEachGap(tr.doc, span.from, span.to, (hit) =>
+        applyCategoryGapTarget(tr, hit, category, effectivePt),
+      );
+    }
+    dispatch(tr);
+    return result;
+  };
 }
 
 /**
@@ -1332,7 +1508,7 @@ function clearDanglingBoundaryStyle(
 export function applyUnderline(
   clearFormattingOnToggleOff: () => boolean = () => true,
 ): Command {
-  return (state, dispatch) => {
+  return withGapFix('underline', (state, dispatch) => {
     const namedMark = schema.marks['underline_mark']!;
     const directMark = schema.marks['underline_direct']!;
 
@@ -1374,7 +1550,6 @@ export function applyUnderline(
         // Verbatim's "press F9 twice clears formatting" — opt-out
         // via setting.
         if (clearFormattingOnToggleOff()) stripDirectFormatting(tr, from, to);
-        clearDanglingBoundaryStyle(tr, state.doc, from, to, [namedMark, directMark]);
       }
     } else {
       // Toggle on: per-textblock segments across all operating
@@ -1409,7 +1584,7 @@ export function applyUnderline(
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  };
+  });
 }
 
 const STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE = new Set([
@@ -1536,7 +1711,7 @@ export function toggleBold(): Command {
  * span multiple words and users select before applying).
  */
 export function applyHighlight(activeColor: () => string): Command {
-  return (state, dispatch) => {
+  return withGapFix('highlight', (state, dispatch) => {
     const highlightType = schema.marks['highlight'];
     if (!highlightType) return false;
 
@@ -1558,10 +1733,7 @@ export function applyHighlight(activeColor: () => string): Command {
     if (!dispatch) return true;
     const tr = state.tr;
     if (allMarked) {
-      for (const { from, to } of op.ranges) {
-        tr.removeMark(from, to, highlightType);
-        clearDanglingBoundaryStyle(tr, state.doc, from, to, [highlightType]);
-      }
+      for (const { from, to } of op.ranges) tr.removeMark(from, to, highlightType);
     } else {
       // Replace any existing highlight color with the active one
       // across each range. removeMark + addMark guarantees the new
@@ -1574,7 +1746,7 @@ export function applyHighlight(activeColor: () => string): Command {
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  };
+  });
 }
 
 /**
@@ -1587,7 +1759,7 @@ export function applyHighlight(activeColor: () => string): Command {
  * highlight" fallback that survives Word's Remove Highlighting.
  */
 export function applyShading(activeColor: () => string): Command {
-  return (state, dispatch) => {
+  return withGapFix('shading', (state, dispatch) => {
     const shadingType = schema.marks['shading'];
     if (!shadingType) return false;
 
@@ -1616,7 +1788,7 @@ export function applyShading(activeColor: () => string): Command {
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  };
+  });
 }
 
 /**
@@ -1631,7 +1803,7 @@ export function applyShading(activeColor: () => string): Command {
  * the OOXML convention used elsewhere in the schema.
  */
 export function setHighlightColor(color: string): Command {
-  return (state, dispatch) => {
+  return withGapFix('highlight', (state, dispatch) => {
     const type = schema.marks['highlight'];
     if (!type) return false;
     const op = getOperatingRangesForFormatting(state);
@@ -1645,11 +1817,11 @@ export function setHighlightColor(color: string): Command {
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  };
+  });
 }
 
 export function setShadingColor(rgb: string): Command {
-  return (state, dispatch) => {
+  return withGapFix('shading', (state, dispatch) => {
     const type = schema.marks['shading'];
     if (!type) return false;
     const op = getOperatingRangesForFormatting(state);
@@ -1663,7 +1835,7 @@ export function setShadingColor(rgb: string): Command {
     if (op.fromShadow) tr.setMeta(META_OPERATING_ON_SHADOW, true);
     dispatch(tr);
     return true;
-  };
+  });
 }
 
 /**
@@ -1897,7 +2069,7 @@ export function adjustFontSize(
   delta: number,
   effectivePt: (node: PMNode | null, parent: PMNode) => number,
 ): Command {
-  return (state, dispatch) => {
+  return withGapFix('fontSize', (state, dispatch) => {
     const type = schema.marks['font_size'];
     if (!type) return false;
     const sel = state.selection;
@@ -1980,7 +2152,7 @@ export function adjustFontSize(
     });
     dispatch(tr);
     return true;
-  };
+  }, effectivePt);
 }
 
 /**
@@ -1991,8 +2163,11 @@ export function adjustFontSize(
  * behavior. `pt` is in points (the chip's user-facing unit); we
  * convert to OOXML half-points internally.
  */
-export function setFontSize(pt: number | null): Command {
-  return (state, dispatch) => {
+export function setFontSize(
+  pt: number | null,
+  effectivePt: (node: PMNode | null, parent: PMNode) => number,
+): Command {
+  return withGapFix('fontSize', (state, dispatch) => {
     const type = schema.marks['font_size'];
     if (!type) return false;
     const sel = state.selection;
@@ -2038,7 +2213,7 @@ export function setFontSize(pt: number | null): Command {
     }
     dispatch(tr);
     return true;
-  };
+  }, effectivePt);
 }
 
 // ----------------------------------------------------------------
@@ -3147,6 +3322,7 @@ export function fixFormattingGaps(
     const to = sel.empty ? state.doc.content.size : sel.to;
 
     const underlineType = schema.marks['underline_mark']!;
+    const underlineDirectType = schema.marks['underline_direct']!;
     const emphasisType = schema.marks['emphasis_mark']!;
     const citeType = schema.marks['cite_mark']!;
     const highlightType = schema.marks['highlight']!;
@@ -3242,10 +3418,12 @@ export function fixFormattingGaps(
 
         const fm = firstNode.marks;
         const lm = lastNode.marks;
-        const fmU = fm.some((mk) => mk.type === underlineType);
+        const fmU =
+          fm.some((mk) => mk.type === underlineType || mk.type === underlineDirectType);
         const fmE = fm.some((mk) => mk.type === emphasisType);
         const fmC = fm.some((mk) => mk.type === citeType);
-        const lmU = lm.some((mk) => mk.type === underlineType);
+        const lmU =
+          lm.some((mk) => mk.type === underlineType || mk.type === underlineDirectType);
         const lmE = lm.some((mk) => mk.type === emphasisType);
         const lmC = lm.some((mk) => mk.type === citeType);
         const fmHl = fm.find((mk) => mk.type === highlightType);
@@ -3263,19 +3441,32 @@ export function fixFormattingGaps(
         // Named-style target: same on both → that mark; mixed u/e →
         // underline; otherwise → none (and strip any stale named-
         // style mark from the gap).
-        let namedStyle: MarkType | null = null;
-        if (fmU && lmU) namedStyle = underlineType;
-        else if (fmE && lmE) namedStyle = emphasisType;
-        else if (fmC && lmC) namedStyle = citeType;
-        else if ((fmU && lmE) || (fmE && lmU)) namedStyle = underlineType;
-        if (namedStyle) {
-          // The schema's `excludes` on the three named-style marks
-          // strips the other two automatically when this one is
-          // added in the gap range, so we don't need explicit
-          // removeMark calls for them.
-          marksToAdd.push(namedStyle.create());
+        let namedStyle: 'underline' | 'emphasis' | 'cite' | null = null;
+        if (fmU && lmU) namedStyle = 'underline';
+        else if (fmE && lmE) namedStyle = 'emphasis';
+        else if (fmC && lmC) namedStyle = 'cite';
+        else if ((fmU && lmE) || (fmE && lmU)) namedStyle = 'underline';
+        if (namedStyle === 'underline') {
+          // Body underline is the named `underline_mark`; structural
+          // blocks (tag / analytic / …) use `underline_direct`. The
+          // direct mark has no `excludes`, so strip the other underline
+          // kind and the other named styles explicitly.
+          const structural = STRUCTURAL_TEXTBLOCKS_FOR_UNDERLINE.has(node.type.name);
+          marksToAdd.push((structural ? underlineDirectType : underlineType).create());
+          marksToRemove.push(
+            structural ? underlineType : underlineDirectType,
+            emphasisType,
+            citeType,
+          );
+        } else if (namedStyle === 'emphasis') {
+          // `excludes` strips underline_mark / cite automatically.
+          marksToAdd.push(emphasisType.create());
+          marksToRemove.push(underlineDirectType);
+        } else if (namedStyle === 'cite') {
+          marksToAdd.push(citeType.create());
+          marksToRemove.push(underlineDirectType);
         } else {
-          marksToRemove.push(underlineType, emphasisType, citeType);
+          marksToRemove.push(underlineType, underlineDirectType, emphasisType, citeType);
         }
 
         // highlight / shading: bridge when BOTH bookends have it,
