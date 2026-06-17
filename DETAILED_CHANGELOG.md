@@ -5,7 +5,7 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
-## Unreleased
+## 0.1.0-alpha.16 — 2026-06-17
 
 - **`fileSearchFormats` setting controls which formats the file search lists**
   (`editor/settings.ts`, `editor/settings-ui.ts`,
