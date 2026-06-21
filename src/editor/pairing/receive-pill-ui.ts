@@ -216,7 +216,7 @@ export class ReceivePillController {
     const total = this.items.length;
     const unread = inboxStore.unreadCount();
     this.badge.hidden = total === 0;
-    this.badge.textContent = unread > 0 ? `${total} | ${unread} new` : String(total);
+    this.badge.textContent = unread > 0 ? `${total} · ${unread} new` : String(total);
     this.badge.classList.toggle('pmd-receive-badge-unread', unread > 0);
     this.root.classList.toggle('pmd-pill-empty', total === 0);
 
@@ -224,7 +224,7 @@ export class ReceivePillController {
     if (total === 0) {
       const empty = document.createElement('li');
       empty.className = 'pmd-receive-empty';
-      empty.textContent = 'No cards received yet. Share your code so a partner can send you one.';
+      empty.textContent = 'No cards received yet. Share your code so others can send you cards.';
       this.listEl.appendChild(empty);
       return;
     }

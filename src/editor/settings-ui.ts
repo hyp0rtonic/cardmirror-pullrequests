@@ -1820,7 +1820,7 @@ function buildPairingOwnCodeEditor(): HTMLElement {
   regenBtn.type = 'button';
   regenBtn.className = 'pmd-settings-btn';
   regenBtn.title =
-    'Make a new code. Partners using your old code can no longer reach you until you re-share.';
+    'Make a new code. Anyone using your old code can no longer reach you until you re-share.';
   regenBtn.addEventListener('click', () => {
     const had = !!settings.get('pairingOwnCode');
     if (
@@ -1871,7 +1871,7 @@ function buildPairingPartnersEditor(): HTMLElement {
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'pmd-readers-add';
-  addBtn.textContent = '+ Add partner';
+  addBtn.textContent = '+ Add recipient';
   wrap.appendChild(addBtn);
 
   const commit = (partners: PairingPartner[]): void => {
@@ -1884,7 +1884,7 @@ function buildPairingPartnersEditor(): HTMLElement {
     if (partners.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'pmd-pairing-empty';
-      empty.textContent = 'No partners yet. Add one with the code they shared with you.';
+      empty.textContent = 'No recipients yet. Add one with the code it shared with you.';
       list.appendChild(empty);
     }
     partners.forEach((partner, idx) => {
@@ -1895,7 +1895,7 @@ function buildPairingPartnersEditor(): HTMLElement {
       nameInput.type = 'text';
       nameInput.className = 'pmd-pairing-name';
       nameInput.value = partner.name;
-      nameInput.placeholder = 'Nickname';
+      nameInput.placeholder = 'Name';
       nameInput.addEventListener('change', () => {
         commit(
           settings
@@ -1909,7 +1909,7 @@ function buildPairingPartnersEditor(): HTMLElement {
       codeInput.type = 'text';
       codeInput.className = 'pmd-pairing-code';
       codeInput.value = partner.code;
-      codeInput.placeholder = 'card-XXXX-XXXX-XXXX-XXXX';
+      codeInput.placeholder = 'paste their code (cmk1.…)';
       codeInput.spellcheck = false;
       codeInput.autocomplete = 'off';
       codeInput.addEventListener('change', () => {
@@ -1925,7 +1925,7 @@ function buildPairingPartnersEditor(): HTMLElement {
       delBtn.type = 'button';
       delBtn.className = 'pmd-pairing-delete';
       setIcon(delBtn, 'close');
-      delBtn.title = 'Remove partner';
+      delBtn.title = 'Remove recipient';
       delBtn.addEventListener('click', () => {
         commit(settings.get('pairingPartners').filter((_, i) => i !== idx));
       });
@@ -1937,7 +1937,7 @@ function buildPairingPartnersEditor(): HTMLElement {
 
   addBtn.addEventListener('click', () => {
     const cur = settings.get('pairingPartners');
-    commit([...cur, { code: '', name: `Partner ${cur.length + 1}` }]);
+    commit([...cur, { code: '', name: `Recipient ${cur.length + 1}` }]);
   });
 
   render();
@@ -1973,7 +1973,7 @@ function buildPairingGroupsEditor(): HTMLElement {
     if (groups.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'pmd-pairing-empty';
-      empty.textContent = 'No groups yet. A group sends one card to several partners at once.';
+      empty.textContent = 'No groups yet. A group sends one card to several recipients at once.';
       list.appendChild(empty);
     }
     groups.forEach((group, idx) => {
@@ -2013,7 +2013,7 @@ function buildPairingGroupsEditor(): HTMLElement {
       if (partners.length === 0) {
         const hint = document.createElement('span');
         hint.className = 'pmd-pairing-empty';
-        hint.textContent = 'Add partners first, then check who belongs to this group.';
+        hint.textContent = 'Add recipients first, then check who belongs to this group.';
         members.appendChild(hint);
       } else {
         partners.forEach((p) => {

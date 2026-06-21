@@ -78,7 +78,7 @@ export function initPairingWiring(): void {
       if (now - lastMismatchToast < 8000) return;
       lastMismatchToast = now;
       showToast(
-        `A partner is on a different CardMirror version (${info.partnerVersion}) — ` +
+        `Someone is on a different CardMirror version (${info.partnerVersion}) — ` +
           `update both to share cards.`,
       );
     });

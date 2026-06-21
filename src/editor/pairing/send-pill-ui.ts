@@ -79,7 +79,7 @@ export class SendPillController {
 
     this.bar = document.createElement('div');
     this.bar.className = 'pmd-pill-bar pmd-send-bar';
-    this.bar.title = 'Drag a card here to send it to a partner';
+    this.bar.title = 'Drag a card here to send it';
     const icon = document.createElement('span');
     icon.className = 'pmd-pill-icon';
     icon.setAttribute('aria-hidden', 'true');
@@ -184,7 +184,7 @@ export class SendPillController {
     if (partners.length === 0 && groups.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'pmd-send-empty';
-      hint.textContent = 'Add a partner in Settings → Card Sharing.';
+      hint.textContent = 'Add a recipient in Settings → Card Sharing.';
       this.panel.appendChild(hint);
       return;
     }
@@ -194,7 +194,7 @@ export class SendPillController {
       for (const g of groups) this.panel.appendChild(this.groupRow(g, partners));
     }
     if (partners.length > 0) {
-      this.panel.appendChild(this.sectionLabel('Partners'));
+      this.panel.appendChild(this.sectionLabel('To'));
       for (const p of partners) {
         this.panel.appendChild(this.targetRow(p.name || p.code, [p.code], p.name || p.code));
       }
@@ -217,7 +217,7 @@ export class SendPillController {
     const count = document.createElement('span');
     count.className = 'pmd-send-target-count';
     count.textContent = `${codes.length}`;
-    count.title = `${codes.length} partner${codes.length === 1 ? '' : 's'}`;
+    count.title = `${codes.length} recipient${codes.length === 1 ? '' : 's'}`;
     row.appendChild(count);
     row.classList.add('pmd-send-target-group');
     return row;
@@ -269,7 +269,7 @@ export class SendPillController {
     if (!session) return;
     const srcView: EditorView = session.view;
     if (target.codes.length === 0) {
-      showToast('That group has no partners yet');
+      showToast('That group has no recipients yet');
       return;
     }
 

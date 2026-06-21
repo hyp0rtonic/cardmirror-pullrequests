@@ -2034,17 +2034,17 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'pairingEnabled',
     label: 'Enable card sharing',
     description:
-      'Turn on cross-machine card sharing. Adds a Send and a Receive pill next to the dropzone: drag a card onto Send to push it to a paired machine, and cards others send you land in Receive. Your machine polls for incoming cards while this is on. Desktop only.',
+      'Turn on cross-machine card sharing. Adds a Send and a Receive pill next to the dropzone: drag a card onto Send to push it to a recipient, and cards others send you land in Receive. Your machine polls for incoming cards while this is on. Desktop only.',
     kind: 'toggle',
     category: 'pairing',
     electronOnly: true,
-    aliases: ['share', 'send card', 'partner', 'pairing'],
+    aliases: ['share', 'send card', 'recipient', 'to', 'pairing'],
   },
   {
     key: 'pairingOwnCode',
     label: 'Your pairing code',
     description:
-      "This machine's code. Share it with a partner so they can send you cards. Anyone with this code (and the app) can send to you; regenerate it to cut off old shares.",
+      "This machine's code. Share it with anyone you want to be able to send you cards. Anyone with this code (and the app) can send to you; regenerate it to cut off old shares.",
     kind: 'pairingOwnCode',
     category: 'pairing',
     electronOnly: true,
@@ -2054,7 +2054,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'pairingDisplayName',
     label: 'Your display name',
     description:
-      "Optional name stamped on cards you send, so a partner who hasn't nicknamed you yet still sees who it's from. Leave empty to send just your code.",
+      "Optional name stamped on cards you send, so someone who hasn't named you yet still sees who it's from. Leave empty to send just your code.",
     kind: 'text',
     category: 'pairing',
     electronOnly: true,
@@ -2062,9 +2062,9 @@ export const SETTING_METADATA: SettingMeta[] = [
   },
   {
     key: 'pairingPartners',
-    label: 'Paired machines',
+    label: 'Recipients',
     description:
-      'Machines you can send to. Add a partner by pasting the code they shared with you and giving them a nickname (shown in the send picker and on cards they send you).',
+      'Machines you can send to. Add one by pasting the code it shared with you and giving it a name (shown in the To list when sending, and on cards you receive from it).',
     kind: 'pairingPartners',
     category: 'pairing',
     electronOnly: true,
@@ -2074,7 +2074,7 @@ export const SETTING_METADATA: SettingMeta[] = [
     key: 'pairingGroups',
     label: 'Groups',
     description:
-      'Named sets of partners for one-drop sends — e.g. a "Smith/Jones" partnership. Dropping a card on a group sends it to every member.',
+      'Named sets of recipients for one-drop sends — e.g. a "Smith/Jones" team. Dropping a card on a group sends it to every member.',
     kind: 'pairingGroups',
     category: 'pairing',
     electronOnly: true,
