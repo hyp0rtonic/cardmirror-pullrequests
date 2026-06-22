@@ -1155,13 +1155,15 @@ This is the same idea as the **"Curing Stylepox"** cleaner described on
 [Debate Decoded](https://debate-decoded.ghost.io/leveling-up-your-debate-software-3-curing-stylepox/),
 but it runs entirely inside CardMirror — so it's **much faster** (seconds, not
 the overnight runs the worst files used to need) and has **much better handling
-of old files**. It understands pre-Verbatim style conventions
+of old files**. It recognizes the common pre-Verbatim style conventions
 (`Tags` / `Cards` / `Cites` / `Block Headings`, `Author-Date`, `Debate
 Underline`, …) and rebuilds them into the modern Verbatim structure, injects
 the standard styles when a document is missing them, and repairs `!!`-marked
-style names that older cleaners choke on. The same understanding applies when
-you simply **open** an old `.docx` in CardMirror — it reconstructs proper
-cards, tags, cites, and headings rather than importing the file as flat text.
+style names that older cleaners choke on — so it handles **many** old files
+cleanly, though not every one (unusual or one-off style schemes may still not
+be fully understood). The same applies when you simply **open** an old `.docx`
+in CardMirror: for files it recognizes, it reconstructs the cards, tags, cites,
+and headings instead of importing flat text.
 
 ### Saving
 

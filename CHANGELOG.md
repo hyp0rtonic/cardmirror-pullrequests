@@ -22,15 +22,18 @@ see `DETAILED_CHANGELOG.md`.
   ["Curing Stylepox"](https://debate-decoded.ghost.io/leveling-up-your-debate-software-3-curing-stylepox/)
   cleaner, but it runs inside CardMirror, so it's **much faster** (seconds, not
   the overnight runs the worst files used to need) and has **far better handling
-  of old files** — it rebuilds pre-Verbatim style conventions (Tags/Cards/Cites/
-  Block Headings, Author-Date, Debate Underline, …) into the modern Verbatim
-  structure, adds the standard styles when a document is missing them, and
-  repairs `!!`-marked style names that trip up older cleaners.
+  of old files** — it rebuilds the common pre-Verbatim style conventions
+  (Tags/Cards/Cites/Block Headings, Author-Date, Debate Underline, …) into the
+  modern Verbatim structure, adds the standard styles when a document is missing
+  them, and repairs `!!`-marked style names that trip up older cleaners. Coverage
+  is broad but not universal — unusual or one-off style schemes may still not be
+  fully handled.
 
-- **Old debate files open with their structure intact.** Opening a pre-Verbatim
-  `.docx` that uses the old Tags/Cards/Cites/Block Headings style family now
-  reconstructs proper cards, tags, cites, and headings instead of importing it
-  as flat, unstyled text.
+- **Many old debate files open with their structure intact.** Opening a
+  pre-Verbatim `.docx` that uses the common Tags/Cards/Cites/Block Headings style
+  family now reconstructs cards, tags, cites, and headings instead of importing
+  it as flat, unstyled text. (Coverage is broad but not universal — unusual or
+  one-off style schemes may still come in as plain text.)
 
 ## 0.1.0-alpha.18 — 2026-06-21
 
