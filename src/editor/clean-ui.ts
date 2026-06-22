@@ -78,10 +78,11 @@ class CleanModal {
   private outputPathEl!: HTMLDivElement;
   private cleanBtn!: HTMLButtonElement;
   private barFillEl!: HTMLDivElement;
-  private mainBody!: HTMLDivElement;
-  private protectedBody!: HTMLDivElement;
-  private protectedListEl!: HTMLDivElement;
+  private protectedListEl: HTMLDivElement | null = null;
   private protectedCountEl!: HTMLSpanElement;
+  /** Stacked sub-modals (the protected-styles editor, the template picker)
+   *  layered over the Clean modal. Escape closes the topmost first. */
+  private subOverlays: { el: HTMLDivElement; onClose?: () => void }[] = [];
   private busy = false;
   private settled = false;
 
@@ -108,9 +109,8 @@ class CleanModal {
       // Capture-phase: stop Escape from also reaching the home screen's
       // keydown handler (which would dismiss home under the closing modal).
       e.stopPropagation();
-      // From the protected-styles panel, Escape backs out to the main view.
-      if (this.protectedBody && !this.protectedBody.hidden) this.showProtected(false);
-      else this.close();
+      // Close the topmost open sub-modal first, else the Clean modal itself.
+      if (!this.closeTopSubOverlay()) this.close();
     }
   };
 
@@ -118,6 +118,7 @@ class CleanModal {
     if (this.settled || this.busy) return;
     this.settled = true;
     document.removeEventListener('keydown', this.onKey, true);
+    for (const s of this.subOverlays.splice(0)) s.el.remove();
     this.overlay.remove();
   }
 
@@ -132,7 +133,7 @@ class CleanModal {
     gear.className = 'pmd-bulk-close';
     setIcon(gear, 'settings');
     gear.title = 'Protected styles';
-    gear.addEventListener('click', () => this.showProtected(true));
+    gear.addEventListener('click', () => this.openProtectedModal());
     header.appendChild(gear);
     const close = document.createElement('button');
     close.type = 'button';
@@ -145,7 +146,6 @@ class CleanModal {
 
     const body = document.createElement('div');
     body.className = 'pmd-bulk-body';
-    this.mainBody = body;
 
     const blurb = document.createElement('p');
     blurb.className = 'pmd-bulk-blurb';
@@ -166,7 +166,7 @@ class CleanModal {
     const protRow = document.createElement('div');
     protRow.className = 'pmd-clean-prot-summary';
     this.protectedCountEl = document.createElement('span');
-    const manageBtn = button('Manage…', () => this.showProtected(true));
+    const manageBtn = button('Manage…', () => this.openProtectedModal());
     manageBtn.classList.add('pmd-clean-prot-manage');
     protRow.append(this.protectedCountEl, manageBtn);
     optField.appendChild(protRow);
@@ -228,40 +228,49 @@ class CleanModal {
     body.appendChild(this.statusEl);
 
     this.dialog.appendChild(body);
-    this.buildProtectedPanel();
     this.updateProtectedCount();
     this.refresh();
   }
 
-  // ── Protected styles panel ─────────────────────────────────────────
+  // ── Protected styles (a separate modal opened from the gear) ────────
 
-  private buildProtectedPanel(): void {
-    const panel = document.createElement('div');
-    panel.className = 'pmd-bulk-body';
-    panel.hidden = true;
+  private openProtectedModal(): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'pmd-bulk-overlay';
+    const dialog = document.createElement('div');
+    dialog.className = 'pmd-bulk-dialog';
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.closeSubOverlay(overlay);
+    });
 
-    const backRow = document.createElement('div');
-    backRow.className = 'pmd-clean-prot-back';
-    const back = button('Back', () => this.showProtected(false));
-    setIcon(back, 'chevron-left', { label: 'Back' });
-    backRow.appendChild(back);
-    panel.appendChild(backRow);
+    const header = document.createElement('header');
+    header.className = 'pmd-bulk-header';
+    const h = document.createElement('h2');
+    h.textContent = 'Protected styles';
+    header.appendChild(h);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'pmd-bulk-close';
+    setIcon(close, 'close');
+    close.title = 'Close';
+    close.addEventListener('click', () => this.closeSubOverlay(overlay));
+    header.appendChild(close);
+    dialog.appendChild(header);
 
-    const heading = document.createElement('h3');
-    heading.className = 'pmd-bulk-field-label';
-    heading.textContent = 'Protected styles';
-    panel.appendChild(heading);
+    const body = document.createElement('div');
+    body.className = 'pmd-bulk-body';
 
     const blurb = document.createElement('p');
     blurb.className = 'pmd-bulk-blurb';
     blurb.textContent =
-      'Styles listed here are never pruned, removed, or reassigned by Clean ' +
-      '(their dependencies are kept too). Match is by name, case-insensitive.';
-    panel.appendChild(blurb);
+      'Styles listed here are never removed or reassigned by Clean (their ' +
+      'dependencies are kept too). Match is by name, case-insensitive.';
+    body.appendChild(blurb);
 
     this.protectedListEl = document.createElement('div');
     this.protectedListEl.className = 'pmd-clean-prot-list';
-    panel.appendChild(this.protectedListEl);
+    body.appendChild(this.protectedListEl);
 
     // Add manually.
     const addField = document.createElement('div');
@@ -292,17 +301,44 @@ class CleanModal {
     });
     addRow.append(input, button('Add', submit), button('Add from template…', () => void this.addFromTemplate()));
     addField.appendChild(addRow);
-    panel.appendChild(addField);
+    body.appendChild(addField);
 
-    this.dialog.appendChild(panel);
-    this.protectedBody = panel;
+    const actions = document.createElement('div');
+    actions.className = 'pmd-bulk-actions';
+    const done = button('Done', () => this.closeSubOverlay(overlay));
+    done.classList.add('pmd-bulk-btn-primary');
+    actions.appendChild(done);
+    body.appendChild(actions);
+
+    dialog.appendChild(body);
+    this.pushSubOverlay(overlay, () => {
+      this.protectedListEl = null;
+      this.updateProtectedCount();
+    });
     this.refreshProtectedList();
+    input.focus();
   }
 
-  private showProtected(show: boolean): void {
-    this.mainBody.hidden = show;
-    this.protectedBody.hidden = !show;
-    if (!show) this.updateProtectedCount();
+  // ── Stacked sub-modals (Escape closes the topmost) ─────────────────
+
+  private pushSubOverlay(el: HTMLDivElement, onClose?: () => void): void {
+    this.subOverlays.push({ el, onClose });
+    document.body.appendChild(el);
+  }
+
+  private closeSubOverlay(el: HTMLDivElement): void {
+    const idx = this.subOverlays.findIndex((s) => s.el === el);
+    if (idx < 0) return;
+    const [removed] = this.subOverlays.splice(idx, 1);
+    el.remove();
+    removed?.onClose?.();
+  }
+
+  private closeTopSubOverlay(): boolean {
+    const top = this.subOverlays[this.subOverlays.length - 1];
+    if (!top) return false;
+    this.closeSubOverlay(top.el);
+    return true;
   }
 
   private getProtectedNames(): string[] {
@@ -329,13 +365,15 @@ class CleanModal {
   }
 
   private refreshProtectedList(): void {
+    const listEl = this.protectedListEl;
+    if (!listEl) return; // the editor modal isn't open
     const names = this.getProtectedNames();
-    this.protectedListEl.innerHTML = '';
+    listEl.innerHTML = '';
     if (names.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'pmd-clean-prot-empty';
       empty.textContent = 'None yet.';
-      this.protectedListEl.appendChild(empty);
+      listEl.appendChild(empty);
       return;
     }
     names.forEach((name, i) => {
@@ -356,7 +394,7 @@ class CleanModal {
       });
       remove.classList.add('pmd-clean-prot-remove');
       row.append(field, remove);
-      this.protectedListEl.appendChild(row);
+      listEl.appendChild(row);
     });
   }
 
@@ -383,7 +421,7 @@ class CleanModal {
     dialog.className = 'pmd-bulk-dialog';
     overlay.appendChild(dialog);
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
+      if (e.target === overlay) this.closeSubOverlay(overlay);
     });
 
     const header = document.createElement('header');
@@ -425,14 +463,14 @@ class CleanModal {
     const add = button('Add selected', () => {
       const picked = checks.filter((c) => c.input.checked && !c.input.disabled).map((c) => c.name);
       if (picked.length) this.addNames(picked);
-      overlay.remove();
+      this.closeSubOverlay(overlay);
     });
     add.classList.add('pmd-bulk-btn-primary');
-    actions.append(add, button('Cancel', () => overlay.remove()));
+    actions.append(add, button('Cancel', () => this.closeSubOverlay(overlay)));
     body.appendChild(actions);
 
     dialog.appendChild(body);
-    document.body.appendChild(overlay);
+    this.pushSubOverlay(overlay);
   }
 
   private setProgress(done: number, total: number): void {
