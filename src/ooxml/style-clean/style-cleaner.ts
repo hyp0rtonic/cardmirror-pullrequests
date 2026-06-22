@@ -95,6 +95,23 @@ function getStyleVariation(doc: OoxmlDoc, base: string): string {
   return base;
 }
 
+/** Repair a required style that's present under the canonical styleId but a name
+ *  the cleaner doesn't recognize — e.g. a Verbatim "!!Style Underline". Without
+ *  this it fails the name-based availability check even though the style is right
+ *  there, and injection can't help because the styleId is already taken. Only
+ *  fires when the name isn't already an accepted variant, so well-named docs are
+ *  untouched. */
+function normalizeRequiredStyleNames(doc: OoxmlDoc): void {
+  for (const [id, variants] of Object.entries(VARIATIONS)) {
+    const style = doc.styles.byId(id);
+    if (!style) continue;
+    const name = style.name;
+    if (name !== null && variants.includes(name)) continue; // already recognized
+    const canonical = COMBINED_STYLE_MAP[id]?.name;
+    if (canonical) style.name = canonical;
+  }
+}
+
 // ── run / paragraph analysis helpers ─────────────────────────────────
 
 function checkEntirelyBold(paragraph: Paragraph): Run[] | null {
@@ -490,6 +507,12 @@ export async function cleanDocumentBytes(
 
   const docx = await Docx.load(fileBytes);
   const doc = await OoxmlDoc.fromDocx(docx);
+
+  // Repair required styles present under the canonical styleId but an
+  // unrecognized name (e.g. a Verbatim "!!"-marked name) before any of the
+  // name-based checks below — otherwise they look "missing" and injection can't
+  // fix them (the styleId is already taken).
+  normalizeRequiredStyleNames(doc);
 
   // If the document is missing the required Verbatim styles, inject the
   // canonical definitions so the cleaner can classify formatting instead of
