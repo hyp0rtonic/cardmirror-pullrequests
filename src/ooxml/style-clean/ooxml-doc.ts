@@ -460,6 +460,25 @@ export class OoxmlDoc {
     return descendants(this.documentDoc.documentElement, 'hyperlink');
   }
 
+  /** Add every <w:style> from a canonical styles.xml whose styleId is not
+   *  already defined (by id), importing the full definition. Returns the ids
+   *  added. Used to inject the Verbatim styles the cleaner needs when a
+   *  document is missing them, rather than failing. */
+  injectMissingStyles(canonicalStylesXml: string): string[] {
+    const canon = new DOMParser().parseFromString(canonicalStylesXml, 'application/xml');
+    const root = this.stylesDoc.documentElement;
+    const existing = new Set(this.styles.all().map((s) => s.styleId).filter((id): id is string => id !== null));
+    const added: string[] = [];
+    for (const styleEl of Array.from(canon.getElementsByTagNameNS(W, 'style'))) {
+      const sid = getAttr(styleEl, 'styleId');
+      if (sid === null || existing.has(sid)) continue;
+      root.appendChild(this.stylesDoc.importNode(styleEl, true));
+      existing.add(sid);
+      added.push(sid);
+    }
+    return added;
+  }
+
   /** Serialize document.xml + styles.xml back into the docx and return bytes. */
   async save(): Promise<Uint8Array> {
     this.docx.writeText('word/document.xml', new XMLSerializer().serializeToString(this.documentDoc));
