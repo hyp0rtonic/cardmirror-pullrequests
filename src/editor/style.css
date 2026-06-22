@@ -7863,6 +7863,11 @@ body.pmd-recovery-active.pmd-multi-doc #app {
 .pmd-clean-prot-remove {
   flex: 0 0 auto;
 }
+/* "+ Add from template" sits on its own line, content-width (not stretched
+   by the flex-column field). */
+.pmd-clean-prot-template {
+  align-self: flex-start;
+}
 .pmd-clean-prot-picklist {
   display: flex;
   flex-direction: column;

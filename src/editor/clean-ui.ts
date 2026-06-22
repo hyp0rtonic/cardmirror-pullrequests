@@ -289,11 +289,13 @@ class CleanModal {
     addBtn.addEventListener('click', submit);
     const tmplBtn = document.createElement('button');
     tmplBtn.type = 'button';
-    tmplBtn.className = 'pmd-readers-add';
+    tmplBtn.className = 'pmd-readers-add pmd-clean-prot-template';
     tmplBtn.textContent = '+ Add from template';
     tmplBtn.addEventListener('click', () => void this.addFromTemplate());
-    addRow.append(input, addBtn, tmplBtn);
-    addField.appendChild(addRow);
+    addRow.append(input, addBtn);
+    // "Add from template" sits on its own line so it doesn't read as tied to
+    // the style-name box.
+    addField.append(addRow, tmplBtn);
     body.appendChild(addField);
 
     const actions = document.createElement('div');
