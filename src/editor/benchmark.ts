@@ -23,8 +23,6 @@ import { preciseScrollIntoView } from './precise-scroll.js';
 import { applyCite, applyUnderline, applyEmphasis, applyHighlight } from './ribbon-commands.js';
 import { condenseBranchC } from './condense.js';
 import { applyPlainPasteFromText } from './paste-plugin.js';
-import { dragController } from './drag-controller.js';
-import { collectHeadings, computeHeadingRange, headingInsertPos } from './headings.js';
 
 /** A long, realistic body so the card-cutting sweep is visible and meaningful. */
 const LONG_BODY =
@@ -82,7 +80,6 @@ export interface BenchmarkResults {
   docInfo: { headings: number; cards: number; chars: number };
   scroll: (FrameStats & { durationMs: number; frameMs: number[] }) | null;
   nav: { medianMs: number; p90Ms: number; samples: number[] } | null;
-  drag: { ms: number } | null;
   edit: { steps: EditStep[]; totalMs: number } | null;
   relayout: { ms: number } | null;
   longTasks: { count: number; totalMs: number; maxMs: number };
@@ -358,7 +355,10 @@ async function sweepMark(view: EditorView, ranges: Range[], cmd: Command): Promi
   let total = 0;
   for (const r of ranges) {
     if (r.to <= r.from) continue;
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from, r.to)));
+    // scrollIntoView so the view follows the cutter top→bottom down the card.
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from, r.to)).scrollIntoView(),
+    );
     const t0 = performance.now();
     cmd(view.state, view.dispatch.bind(view), view);
     await nextPaint();
@@ -385,6 +385,11 @@ async function benchEdit(
   const HEAD = 'Benchmark';
   const TAGTXT = 'Benchmark Tag';
   const CITETXT = 'Smith, John. 2024. Journal of Testing.';
+
+  // Jump to the very top so the new card and the card-cutting happen on screen
+  // (the nav test leaves the viewport mid-document).
+  scrollGate(view).scrollTop = 0;
+  await nextPaint();
 
   await measureStep(
     'New heading at top',
@@ -455,7 +460,9 @@ async function benchEdit(
       const from = at + 2;
       const to = at + cite.content.size;
       if (to <= from) throw new Error('cite too short');
-      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
+      view.dispatch(
+        view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)).scrollIntoView(),
+      );
       applyCite()(view.state, view.dispatch.bind(view), view);
     },
     onProgress,
@@ -510,7 +517,11 @@ async function benchEdit(
     'Condense the card',
     () => {
       const r = lastBodyRange(view.state.doc, tagId);
-      if (r) view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from)));
+      if (r) {
+        view.dispatch(
+          view.state.tr.setSelection(TextSelection.create(view.state.doc, r.from)).scrollIntoView(),
+        );
+      }
       condenseBranchC()(view.state, view.dispatch.bind(view), view);
     },
     onProgress,
@@ -521,58 +532,10 @@ async function benchEdit(
   return { steps, totalMs };
 }
 
-/** Drag-move the first top-level section below the next one (the real drag
- *  controller commit path), timed begin→commit→settled. */
-async function benchDrag(view: EditorView, onProgress?: ProgressFn): Promise<{ ms: number } | null> {
-  let hs;
-  try {
-    hs = collectHeadings(view.state.doc, { skipCite: true });
-  } catch {
-    return null;
-  }
-  if (!hs || hs.length < 3) return null;
-  const src = hs[0]!;
-  const range = computeHeadingRange(view.state.doc, src);
-  const dropPos = headingInsertPos(view.state.doc, hs[2]!);
-  if (!range || dropPos == null) return null;
-
-  onProgress?.('Drag-move…');
-  await nextPaint();
-  const item = {
-    from: range.from,
-    to: range.to,
-    id: src.id,
-    type: src.type,
-    level: src.level,
-    label: src.text,
-  };
-  const t0 = performance.now();
-  try {
-    dragController.begin({ view, items: [item] });
-    await sleep(STEP_PAUSE_MS); // let the drop indicators show
-    dragController.setHoverTarget({ view, insertPos: dropPos });
-    dragController.commit();
-  } catch (err) {
-    try {
-      dragController.cancel();
-    } catch {
-      /* ignore */
-    }
-    console.warn('[benchmark] drag failed', err);
-    return null;
-  }
-  await settleScroll(scrollGate(view));
-  await nextPaint();
-  const ms = round1(performance.now() - t0);
-  await sleep(STEP_PAUSE_MS);
-  return { ms };
-}
-
 function computeScore(r: BenchmarkResults): number {
   let s = 0;
   if (r.scroll) s += r.scroll.fps * 3 + r.scroll.lowFps1pct * 2 - r.scroll.jankFrames * 2;
   if (r.nav) s += Math.max(0, 2000 - r.nav.medianMs) / 4;
-  if (r.drag) s += Math.max(0, 1000 - r.drag.ms) / 4;
   if (r.edit) s += Math.max(0, 2000 - r.edit.totalMs) / 8;
   if (r.relayout) s += Math.max(0, 1000 - r.relayout.ms) / 4;
   s -= r.longTasks.totalMs / 10;
@@ -609,8 +572,6 @@ export async function runBenchmark(view: EditorView, onProgress?: ProgressFn): P
   const scroll = await benchScroll(view, 4000);
   onProgress?.('Navigating…');
   const nav = await benchNav(view, onProgress);
-  onProgress?.('Drag-move…');
-  const drag = await benchDrag(view, onProgress);
   onProgress?.('Editing…');
   const edit = await benchEdit(view, onProgress);
   onProgress?.('Relayout…');
@@ -622,7 +583,6 @@ export async function runBenchmark(view: EditorView, onProgress?: ProgressFn): P
     docInfo: { headings, cards, chars },
     scroll,
     nav,
-    drag,
     edit,
     relayout,
     longTasks: {

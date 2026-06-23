@@ -18,8 +18,8 @@ export async function launchBenchmarkOverlay(): Promise<void> {
     return;
   }
   running = true;
-  // Snapshot the editor state + suppress autosave; the edit/drag tests mutate
-  // the live doc and we revert from this snapshot when done.
+  // Snapshot the editor state + suppress autosave; the editing test mutates the
+  // live doc and we revert from this snapshot when done.
   const snapshot = beginBenchmark();
   const chip = makeChip();
   document.body.appendChild(chip.el);
@@ -127,12 +127,6 @@ function showResults(r: BenchmarkResults): void {
             ['Jumps', String(r.nav.samples.length)],
           ]
         : [['Not run', 'needs ≥4 headings']],
-    ),
-  );
-  list.appendChild(
-    section(
-      'Drag-move',
-      r.drag ? [['Move a section', `${r.drag.ms} ms`]] : [['Not run', 'needs ≥3 sections']],
     ),
   );
   if (r.edit) {

@@ -825,7 +825,7 @@ export function getActiveView(): EditorView | null {
   return view;
 }
 
-/** Benchmark lifecycle (Settings → Benchmark). The mutating edit/drag tests run
+/** Benchmark lifecycle (Settings → Benchmark). The mutating editing test runs
  *  on the live doc, but `dispatchTransaction` checks `isBenchmarkActive()` and
  *  skips the autosave / dirty / nav-rebuild side effects, so nothing touches
  *  disk and the nav doesn't churn. `endBenchmark` reverts the whole editor state
