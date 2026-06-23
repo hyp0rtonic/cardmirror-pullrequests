@@ -43,6 +43,32 @@ see `DETAILED_CHANGELOG.md`.
   found under more than one is searched only once. Your existing folder is
   carried over automatically.
 
+- **Read mode allows safe drag edits.** While reading, you can now drag cards to
+  reorder them and drag into / out of the dropzone and the send/receive pills —
+  moves the drag handles already validate — while ordinary typing edits stay
+  locked to prevent accidents. Clicking a dropzone or received-card item in read
+  mode appends it to the **bottom** of the document instead of at the cursor.
+
+### Fixed
+
+- **Windows/Linux: the editor could lock up after a pop-up.** Pressing `` ` `` to
+  send to the speech document when none is open — and a few similar cases (e.g.
+  image-insert errors) — showed a warning that took keyboard focus; on
+  Windows/Linux that focus wasn't returned, so the editor wouldn't accept edits
+  until you clicked back into it. Focus is now reclaimed automatically. macOS was
+  unaffected.
+
+- **Drag auto-scroll works in more places.** Dragging a card toward the top or
+  bottom edge now scrolls the pane under the pointer — including when dragging
+  between panes or from the nav panel into the editor — and correctly scrolls
+  past a pane's sticky nav header. It also no longer scrolls the document out
+  from under you when you drag toward the bottom-left dropzone/send/receive
+  pills.
+
+- **More citations survive import.** Files whose cite style is stored under the
+  legacy `Cite` name (rather than the modern `Style13ptBold`) now import as
+  citations instead of plain text.
+
 ## 0.1.0-alpha.18 — 2026-06-21
 
 ### Added
