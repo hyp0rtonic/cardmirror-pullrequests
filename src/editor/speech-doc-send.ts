@@ -294,6 +294,11 @@ export function sendToSpeech(
     window.alert(
       'No speech document yet. Use "New speech document" to create one or "Mark active doc as speech" to designate an existing pane.',
     );
+    // `window.alert` steals OS-level focus from the editor's contenteditable.
+    // macOS Chromium hands it back on dismiss; Windows/Linux don't, leaving the
+    // editor unable to take edits. Reclaim it explicitly (same fix as the
+    // confirm above).
+    sourceView.focus();
     return;
   }
   const slice = resolveSendSlice(sourceView);
@@ -331,6 +336,7 @@ export function sendToSpeech(
       // broadcast. Surface a brief notice so the user understands
       // why nothing landed.
       window.alert("The speech document's window has closed.");
+      sourceView.focus(); // reclaim focus the alert stole (see note above)
     } else if (result.reason === 'same-window') {
       // Shouldn't trigger in practice — we check locally above —
       // but main has the same guard. Silent.
