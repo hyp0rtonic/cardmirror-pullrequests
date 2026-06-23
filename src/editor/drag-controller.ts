@@ -24,6 +24,7 @@ import { Fragment, type Node as PMNode, Slice } from 'prosemirror-model';
 import { newHeadingId } from '../schema/ids.js';
 import { preciseScrollIntoView } from './precise-scroll.js';
 import { READ_MODE_DRAG_META } from './reading-marker.js';
+import { autoScrollUnderPointer } from './drag-autoscroll.js';
 
 export interface DragItem {
   /** Doc position range covering the dragged unit (heading + its
@@ -155,6 +156,9 @@ class DragControllerImpl {
   setPointer(x: number, y: number): void {
     this.pointerX = x;
     this.pointerY = y;
+    // Pointer-centric auto-scroll: scroll whatever pane/list is under the
+    // pointer (works across panes), once per move from this single chokepoint.
+    autoScrollUnderPointer(x, y);
     this.notify('move');
   }
 

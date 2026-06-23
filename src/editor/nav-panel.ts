@@ -17,7 +17,6 @@ import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { settings } from './settings.js';
 import { registerOpenContextMenu, clearOpenContextMenu } from './context-menu-registry.js';
 import { dragController, type DragItem, type DragSurface } from './drag-controller.js';
-import { pointerOverPillTrayColumn } from './pill-tray.js';
 import { preciseScrollIntoView } from './precise-scroll.js';
 import {
   collectHeadings,
@@ -370,7 +369,6 @@ export class NavigationPanel {
         const hovered = this.entryUnderPointer(x, y);
         this.maybeAutoExpand(hovered);
         this.maybeRestoreAutoExpanded(hovered);
-        this.maybeAutoScroll(x, y);
         // Keep the pickup pill's copy badge in sync with the
         // controller's copy-mode flag. The flag is updated by drag-
         // source pointer/key handlers; this is how the badge picks up
@@ -1094,7 +1092,6 @@ export class NavigationPanel {
     const hovered = this.entryUnderPointer(e.clientX, e.clientY);
     this.maybeAutoExpand(hovered);
     this.maybeRestoreAutoExpanded(hovered);
-    this.maybeAutoScroll(e.clientX, e.clientY);
   }
 
   private onDragUp(e: PointerEvent): void {
@@ -1516,63 +1513,6 @@ export class NavigationPanel {
       this.autoExpandTimer = null;
     }
     this.autoExpandTarget = null;
-  }
-
-  private editorScrollGateEl: HTMLElement | null = null;
-  /** The editor's actual scroll container — `#editor` itself doesn't
-   *  scroll (the overflow lives on an ancestor, `#app` in single-doc), so
-   *  scrolling `#editor` was a no-op. Walk up to the first scrollable
-   *  ancestor, mirroring `findNavScrollGate`. */
-  private findEditorScrollGate(editorEl: HTMLElement): HTMLElement {
-    if (this.editorScrollGateEl && this.editorScrollGateEl.isConnected) {
-      return this.editorScrollGateEl;
-    }
-    let cur: HTMLElement | null = editorEl;
-    while (cur && cur !== document.body) {
-      const overflow = getComputedStyle(cur).overflowY;
-      if (overflow === 'auto' || overflow === 'scroll') {
-        this.editorScrollGateEl = cur;
-        return cur;
-      }
-      cur = cur.parentElement;
-    }
-    this.editorScrollGateEl = editorEl;
-    return editorEl;
-  }
-
-  private maybeAutoScroll(clientX: number, clientY: number): void {
-    // Auto-scroll the nav list when the pointer is near its top/
-    // bottom edges.
-    const navRect = this.listEl.getBoundingClientRect();
-    const margin = 30;
-    if (clientY < navRect.top + margin) {
-      this.listEl.scrollBy({ top: -10, behavior: 'auto' });
-    } else if (clientY > navRect.bottom - margin) {
-      this.listEl.scrollBy({ top: 10, behavior: 'auto' });
-    }
-    // Also auto-scroll the editor when the pointer is near its top/bottom
-    // edges — the user can drag from the nav into a portion of the doc
-    // that isn't visible yet. Gate on the pointer being over the editor
-    // in BOTH axes (a drag within the nav pane shouldn't scroll the doc),
-    // and scroll the real scroll container, not `#editor`.
-    const editorEl = document.getElementById('editor');
-    if (!editorEl) return;
-    const er = editorEl.getBoundingClientRect();
-    const scroller = this.findEditorScrollGate(editorEl);
-    // Edge test against the SCROLL VIEWPORT (the gate), not `#editor` — `#editor`
-    // is the full-height content element (it doesn't scroll; `#app` does), so
-    // its top/bottom sit off-screen once the doc is scrolled and the test never
-    // fired. `#editor`'s horizontal bounds still gate out the nav pane.
-    const sr = scroller.getBoundingClientRect();
-    const overEditor =
-      clientX >= er.left && clientX <= er.right && clientY >= sr.top && clientY <= sr.bottom;
-    if (!overEditor) return;
-    if (clientY < sr.top + margin) {
-      scroller.scrollBy({ top: -10, behavior: 'auto' });
-    } else if (clientY > sr.bottom - margin && !pointerOverPillTrayColumn(clientX)) {
-      // Don't scroll down over the bottom-left dropzone / send / receive pills.
-      scroller.scrollBy({ top: 10, behavior: 'auto' });
-    }
   }
 
   private createPickupPill(items: DragItem[]): void {
