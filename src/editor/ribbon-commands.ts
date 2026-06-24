@@ -4736,6 +4736,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   lockHighlighting: ['lock highlights', 'grey highlights', 'gray highlights', 'rehighlight'],
   regrow: ['unshrink', 'regrow', 'restore text size', 'unshrink card text'],
   smartShrink: ['smart shrink', 'deep shrink'],
+  aiAskAboutSelection: ['question'],
   pasteAsText: ['paste without formatting', 'paste unformatted', 'paste text'],
   removeHyperlinks: ['remove links', 'delete links', 'unlink'],
   applyShading: ['shading', 'text highlight color'],

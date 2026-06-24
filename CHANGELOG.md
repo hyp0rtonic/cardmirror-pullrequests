@@ -36,6 +36,9 @@ see `DETAILED_CHANGELOG.md`.
   the **Dropzone / Send and Receive Cards** group). Starring a target un-stars any
   other, and the star clears itself if you remove that recipient or group.
 
+- **Type "question" to find Ask AI.** The command bar now surfaces **Ask AI About
+  Selection** when you search for "question".
+
 ### Fixed
 
 - **Clean handles a whole messy library without choking.** Cleaning a large
