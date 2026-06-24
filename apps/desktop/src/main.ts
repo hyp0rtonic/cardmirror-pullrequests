@@ -2342,7 +2342,9 @@ void app.whenReady().then(() => {
     occlusionSwitchDisabled: false,
     logPath: path.join(app.getPath('userData'), 'cross-window-debug.log'),
   });
-  Menu.setApplicationMenu(buildMenu());
+  // macOS only — see the note at the other setApplicationMenu call. Windows/Linux
+  // get no native menu bar so it can't swallow Alt-key editor shortcuts.
+  Menu.setApplicationMenu(process.platform === 'darwin' ? buildMenu() : null);
   // Decide what to mount on first launch:
   //   - macOS `open-file` already arrived → that file
   //   - Win / Linux: scan argv for a file path → that file
