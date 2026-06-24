@@ -65,6 +65,11 @@ see `DETAILED_CHANGELOG.md`.
   Create; it now matches the manage screen's New card / Import / Export buttons,
   so the two sit the same size side by side.
 
+- **Send and Receive pills match the dropzone.** The card-sharing **Send** and
+  **Receive** pills were a solid gray that stood out next to the dropzone pill;
+  they now share the dropzone bar's softer color scheme, so the three read as one
+  family.
+
 ## 0.1.0-alpha.19 — 2026-06-22
 
 ### Added
