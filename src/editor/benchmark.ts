@@ -579,14 +579,59 @@ async function benchEdit(
   return { steps, totalMs };
 }
 
+// ── Score ────────────────────────────────────────────────────────────────────
+// A 0–100 "how fast on this machine" grade. Each component is a SMOOTH 0–100
+// sub-score (no hard cliffs — a slow machine degrades gradually instead of
+// snapping to zero) combined as a weighted average. Frame-rate smoothness, the
+// thing you actually feel, dominates; the operation latencies modulate it.
+//
+// Deliberately NOT penalized by long-task time. The benchmark's own battery
+// (cut / condense / shrink / the mark sweeps) is itself captured as long tasks,
+// so subtracting that total punished the suite for doing the very work it exists
+// to run — and punished slower hardware most, which is how the old formula
+// bottomed out at 0. Perceived jank still reaches the score through the scroll's
+// 1%-low frame rate. longTasks stays in the results for information only.
+
+/** Frame rate → 0–100 against a 60fps "smooth enough" target (capped, so a
+ *  high-refresh display isn't rewarded for exceeding smoothness). */
+function fpsSubScore(fps: number, target = 60): number {
+  return 100 * Math.min(1, Math.max(0, fps / target));
+}
+
+/** Latency → 0–100: full marks at or under `refMs`, then a smooth 1/x decay
+ *  above it (never a hard zero, so even a slow run keeps a proportional score). */
+function latencySubScore(actualMs: number, refMs: number): number {
+  if (actualMs <= refMs) return 100;
+  return (100 * refMs) / actualMs;
+}
+
+// Reference times (ms) at/under which a component earns full marks. Tunable —
+// set near a healthy desktop's numbers so typical machines land high and only
+// genuine slowness drags the grade down. (Dial in once we have real run data
+// from a few machines.)
+const EDIT_REF_MS = 600;
+const NAV_REF_MS = 250;
+const RELAYOUT_REF_MS = 250;
+
 function computeScore(r: BenchmarkResults): number {
-  let s = 0;
-  if (r.scroll) s += r.scroll.fps * 3 + r.scroll.lowFps1pct * 2 - r.scroll.jankFrames * 2;
-  if (r.nav) s += Math.max(0, 2000 - r.nav.medianMs) / 4;
-  if (r.edit) s += Math.max(0, 2000 - r.edit.totalMs) / 8;
-  if (r.relayout) s += Math.max(0, 1000 - r.relayout.ms) / 4;
-  s -= r.longTasks.totalMs / 10;
-  return Math.max(0, Math.round(s));
+  const parts: Array<[number, number]> = []; // [sub-score 0–100, weight]
+  if (r.scroll) {
+    // Smoothness is dominated by the worst frames (1%-low), with the mean as a
+    // secondary signal: a scroll that mostly hits refresh but hitches scores
+    // below one that's uniformly smooth.
+    const smooth = 0.6 * fpsSubScore(r.scroll.lowFps1pct) + 0.4 * fpsSubScore(r.scroll.fps);
+    parts.push([smooth, 45]);
+  }
+  if (r.edit) parts.push([latencySubScore(r.edit.totalMs, EDIT_REF_MS), 30]);
+  if (r.relayout) parts.push([latencySubScore(r.relayout.ms, RELAYOUT_REF_MS), 15]);
+  // Nav settle is partly bound by the scroll animation's own duration, so it's a
+  // weaker hardware signal — kept, but weighted lightly.
+  if (r.nav) parts.push([latencySubScore(r.nav.medianMs, NAV_REF_MS), 10]);
+
+  const wSum = parts.reduce((a, [, w]) => a + w, 0);
+  if (!wSum) return 0;
+  const weighted = parts.reduce((a, [sub, w]) => a + sub * w, 0) / wSum;
+  return Math.round(weighted);
 }
 
 /** Run the full battery on the active view's current document. Reports progress
