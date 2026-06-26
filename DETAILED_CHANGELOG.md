@@ -7,6 +7,25 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Bundle metric-compatible open-source substitutes for the proprietary / system
+  fonts the picker offers** (`editor/style.css`, `editor/font-detect.ts`,
+  `editor/fonts/`). The picker listed Calibri / Cambria / Times New Roman / Arial /
+  Georgia / Helvetica / Comic Sans MS / Verdana / Tahoma / Liberation / DejaVu /
+  Noto but shipped none of them, so a user without the font got a generic fallback.
+  Added latin-subset woff2 (regular / bold / italic / bold-italic) for Carlito
+  (→Calibri), Caladea (→Cambria), Tinos (→Times New Roman / Liberation Serif),
+  Arimo (→Arial / Helvetica / Liberation Sans), Gelasio (→Georgia), Comic Neue
+  (→Comic Sans MS), DejaVu Sans (→Verdana / Tahoma), DejaVu Serif, and Noto
+  Sans / Serif — 40 files, fetched from the Fontsource CDN. Each is declared in
+  `@font-face` under the PROPRIETARY family name, `src` listing **style-specific**
+  `local()` faces first (`local('Times New Roman Bold')` for the 700 face, with
+  `Oblique` aliases for the italic faces) then the bundled `url()` — so a user's
+  real font, including its true bold/italic, still wins, and the clone is fetched
+  only when the real font is absent. All families added to `BUNDLED_FONTS` in
+  `font-detect.ts` so they show in the picker unconditionally. Licenses (OFL 1.1 /
+  Apache 2.0 / DejaVu-Bitstream Vera) are documented in `fonts/LICENSES.md`, with
+  the full Apache and DejaVu texts saved as `Apache-2.0.txt` / `DejaVu-License.txt`.
+
 - **Doc loading sniffs the bytes for the parser instead of trusting the `format`
   field** (`editor/index.ts`, `editor/multi-pane-shell.ts`). A doc's `format`
   (`'cmir'` / `'docx'`) is its SAVE format, but the in-memory + journal

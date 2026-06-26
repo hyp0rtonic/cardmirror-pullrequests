@@ -9,6 +9,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Missing fonts now have bundled open-source stand-ins.** When a document uses
+  a font you don't have installed — Calibri, Cambria, Times New Roman, Arial,
+  Georgia, Helvetica, Comic Sans MS, Verdana, Tahoma (plus Liberation, DejaVu,
+  and Noto) — CardMirror now ships a metric-compatible open-source equivalent
+  (Calibri→Carlito, Cambria→Caladea, Times New Roman→Tinos, Arial→Arimo,
+  Georgia→Gelasio, and so on), so the text renders the way it should instead of
+  falling back to a generic. If you *do* have the real font, you still get it —
+  the bundled copy is only a fallback, and your real bold/italic still apply.
+
 - **Open recovery journals (`.cmir-journal`) directly.** File → Open now accepts
   `.cmir-journal` files — it loads the document the journal was protecting, as a
   recovered, *unsaved* copy (so saving won't overwrite the original; use Save As

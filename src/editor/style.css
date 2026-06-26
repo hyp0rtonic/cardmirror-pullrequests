@@ -72,6 +72,433 @@
   src: url('./fonts/opendyslexic-700.woff2') format('woff2');
 }
 
+/* Metric-compatible open-source substitutes for the proprietary / system
+ * fonts the picker offers but which we cannot ship. `local()` faces are listed
+ * first (with the style-specific face name, so bold/italic resolve to the real
+ * bold/italic, not the regular), so a user who HAS the real font keeps it;
+ * everyone else gets the bundled clone. License/provenance in fonts/LICENSES.md. */
+
+@font-face {
+  font-family: "Calibri";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Calibri"), local("Carlito"), url("./fonts/carlito-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Calibri";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Calibri Bold"), local("Carlito Bold"), url("./fonts/carlito-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Calibri";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Calibri Italic"), local("Calibri Oblique"), local("Carlito Italic"), local("Carlito Oblique"), url("./fonts/carlito-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Calibri";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Calibri Bold Italic"), local("Calibri Bold Oblique"), local("Carlito Bold Italic"), local("Carlito Bold Oblique"), url("./fonts/carlito-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cambria";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Cambria"), local("Caladea"), url("./fonts/caladea-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cambria";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Cambria Bold"), local("Caladea Bold"), url("./fonts/caladea-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cambria";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Cambria Italic"), local("Cambria Oblique"), local("Caladea Italic"), local("Caladea Oblique"), url("./fonts/caladea-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cambria";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Cambria Bold Italic"), local("Cambria Bold Oblique"), local("Caladea Bold Italic"), local("Caladea Bold Oblique"), url("./fonts/caladea-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Times New Roman";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Times New Roman"), local("Tinos"), url("./fonts/tinos-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Times New Roman";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Times New Roman Bold"), local("Tinos Bold"), url("./fonts/tinos-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Times New Roman";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Times New Roman Italic"), local("Times New Roman Oblique"), local("Tinos Italic"), local("Tinos Oblique"), url("./fonts/tinos-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Times New Roman";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Times New Roman Bold Italic"), local("Times New Roman Bold Oblique"), local("Tinos Bold Italic"), local("Tinos Bold Oblique"), url("./fonts/tinos-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Liberation Serif"), local("Tinos"), url("./fonts/tinos-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Liberation Serif Bold"), local("Tinos Bold"), url("./fonts/tinos-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Liberation Serif Italic"), local("Liberation Serif Oblique"), local("Tinos Italic"), local("Tinos Oblique"), url("./fonts/tinos-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Liberation Serif Bold Italic"), local("Liberation Serif Bold Oblique"), local("Tinos Bold Italic"), local("Tinos Bold Oblique"), url("./fonts/tinos-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Arial";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Arial"), local("Arimo"), url("./fonts/arimo-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Arial";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Arial Bold"), local("Arimo Bold"), url("./fonts/arimo-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Arial";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Arial Italic"), local("Arial Oblique"), local("Arimo Italic"), local("Arimo Oblique"), url("./fonts/arimo-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Arial";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Arial Bold Italic"), local("Arial Bold Oblique"), local("Arimo Bold Italic"), local("Arimo Bold Oblique"), url("./fonts/arimo-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Helvetica";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Helvetica"), local("Arimo"), url("./fonts/arimo-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Helvetica";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Helvetica Bold"), local("Arimo Bold"), url("./fonts/arimo-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Helvetica";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Helvetica Italic"), local("Helvetica Oblique"), local("Arimo Italic"), local("Arimo Oblique"), url("./fonts/arimo-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Helvetica";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Helvetica Bold Italic"), local("Helvetica Bold Oblique"), local("Arimo Bold Italic"), local("Arimo Bold Oblique"), url("./fonts/arimo-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Liberation Sans"), local("Arimo"), url("./fonts/arimo-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Liberation Sans Bold"), local("Arimo Bold"), url("./fonts/arimo-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Liberation Sans Italic"), local("Liberation Sans Oblique"), local("Arimo Italic"), local("Arimo Oblique"), url("./fonts/arimo-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Liberation Sans Bold Italic"), local("Liberation Sans Bold Oblique"), local("Arimo Bold Italic"), local("Arimo Bold Oblique"), url("./fonts/arimo-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Georgia";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Georgia"), local("Gelasio"), url("./fonts/gelasio-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Georgia";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Georgia Bold"), local("Gelasio Bold"), url("./fonts/gelasio-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Georgia";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Georgia Italic"), local("Georgia Oblique"), local("Gelasio Italic"), local("Gelasio Oblique"), url("./fonts/gelasio-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Georgia";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Georgia Bold Italic"), local("Georgia Bold Oblique"), local("Gelasio Bold Italic"), local("Gelasio Bold Oblique"), url("./fonts/gelasio-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Comic Sans MS";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Comic Sans MS"), local("Comic Neue"), url("./fonts/comic-neue-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Comic Sans MS";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Comic Sans MS Bold"), local("Comic Neue Bold"), url("./fonts/comic-neue-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Comic Sans MS";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Comic Sans MS Italic"), local("Comic Sans MS Oblique"), local("Comic Neue Italic"), local("Comic Neue Oblique"), url("./fonts/comic-neue-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Comic Sans MS";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Comic Sans MS Bold Italic"), local("Comic Sans MS Bold Oblique"), local("Comic Neue Bold Italic"), local("Comic Neue Bold Oblique"), url("./fonts/comic-neue-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Verdana";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Verdana"), local("DejaVu Sans"), url("./fonts/dejavu-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Verdana";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Verdana Bold"), local("DejaVu Sans Bold"), url("./fonts/dejavu-sans-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Verdana";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Verdana Italic"), local("Verdana Oblique"), local("DejaVu Sans Italic"), local("DejaVu Sans Oblique"), url("./fonts/dejavu-sans-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Verdana";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Verdana Bold Italic"), local("Verdana Bold Oblique"), local("DejaVu Sans Bold Italic"), local("DejaVu Sans Bold Oblique"), url("./fonts/dejavu-sans-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Tahoma";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Tahoma"), local("DejaVu Sans"), url("./fonts/dejavu-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Tahoma";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Tahoma Bold"), local("DejaVu Sans Bold"), url("./fonts/dejavu-sans-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Tahoma";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Tahoma Italic"), local("Tahoma Oblique"), local("DejaVu Sans Italic"), local("DejaVu Sans Oblique"), url("./fonts/dejavu-sans-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Tahoma";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Tahoma Bold Italic"), local("Tahoma Bold Oblique"), local("DejaVu Sans Bold Italic"), local("DejaVu Sans Bold Oblique"), url("./fonts/dejavu-sans-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("DejaVu Sans"), url("./fonts/dejavu-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("DejaVu Sans Bold"), url("./fonts/dejavu-sans-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("DejaVu Sans Italic"), local("DejaVu Sans Oblique"), url("./fonts/dejavu-sans-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Sans";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("DejaVu Sans Bold Italic"), local("DejaVu Sans Bold Oblique"), url("./fonts/dejavu-sans-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("DejaVu Serif"), url("./fonts/dejavu-serif-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("DejaVu Serif Bold"), url("./fonts/dejavu-serif-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("DejaVu Serif Italic"), local("DejaVu Serif Oblique"), url("./fonts/dejavu-serif-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DejaVu Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("DejaVu Serif Bold Italic"), local("DejaVu Serif Bold Oblique"), url("./fonts/dejavu-serif-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Noto Sans"), url("./fonts/noto-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Noto Sans Bold"), url("./fonts/noto-sans-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Noto Sans Italic"), local("Noto Sans Oblique"), url("./fonts/noto-sans-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Noto Sans Bold Italic"), local("Noto Sans Bold Oblique"), url("./fonts/noto-sans-700-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Noto Serif"), url("./fonts/noto-serif-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Noto Serif Bold"), url("./fonts/noto-serif-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Noto Serif Italic"), local("Noto Serif Oblique"), url("./fonts/noto-serif-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Noto Serif Bold Italic"), local("Noto Serif Bold Oblique"), url("./fonts/noto-serif-700-italic.woff2") format("woff2");
+}
+
 * {
   box-sizing: border-box;
 }

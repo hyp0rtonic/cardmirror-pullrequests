@@ -1,16 +1,37 @@
 # Bundled font licenses
 
-The three font families in this directory (Atkinson Hyperlegible,
-Lexend, OpenDyslexic) are redistributed under the SIL Open Font
-License version 1.1. The full license text is reproduced at the
-bottom of this file; each font's per-family copyright notice and
-"Reserved Font Names" line is reproduced under its own heading
-below (both are required by the OFL when redistributing).
+This directory bundles latin-subset woff2 webfonts under three licenses:
+the **SIL Open Font License 1.1** (full text at the bottom of this file;
+copyright notices and "Reserved Font Names" reproduced per family, as the
+OFL requires), the **Apache License 2.0** (full text in `Apache-2.0.txt`),
+and the **DejaVu / Bitstream Vera license** (full text in `DejaVu-License.txt`).
+All families were obtained from the Fontsource CDN (jsdelivr / npm
+`@fontsource/<name>`).
 
-Files in this directory are the latin-subset woff2 variants only —
-italic faces are not bundled (browser-synthesized italics are used
-instead). Source upstream URLs are listed per-font so the original
-binaries and full glyph sets can be recovered.
+Two groups of fonts live here:
+
+1. **Readability fonts** — Atkinson Hyperlegible, Lexend, OpenDyslexic.
+   Regular + bold only; the browser synthesizes italics.
+
+2. **Metric-compatible substitutes** for the proprietary / system fonts the
+   picker offers but which can't be shipped — regular, bold, italic, and
+   bold-italic each. `style.css` declares each one under the *proprietary*
+   family name with a `local()` fallback, so a user who actually has the real
+   font keeps it and everyone else gets the open-source clone:
+
+   | Picker font(s) | Bundled clone | License |
+   | --- | --- | --- |
+   | Calibri | Carlito | OFL 1.1 |
+   | Cambria | Caladea | OFL 1.1 |
+   | Times New Roman, Liberation Serif | Tinos | OFL 1.1 |
+   | Arial, Helvetica, Liberation Sans | Arimo | Apache 2.0 |
+   | Georgia | Gelasio | OFL 1.1 |
+   | Comic Sans MS | Comic Neue | OFL 1.1 |
+   | Verdana, Tahoma, DejaVu Sans | DejaVu Sans | DejaVu / Bitstream Vera |
+   | DejaVu Serif | DejaVu Serif | DejaVu / Bitstream Vera |
+   | Noto Sans / Noto Serif | Noto Sans / Noto Serif | OFL 1.1 |
+
+Each substitute ships four files: `<name>-{400,700,400-italic,700-italic}.woff2`.
 
 ## Atkinson Hyperlegible
 
@@ -37,6 +58,47 @@ Copyright (c) 2018-2020, The Lexend Project Authors
 
 Copyright (c) 2019-2020, Abelardo Gonzalez
 (abbiecod.es@gmail.com), with Reserved Font Name "OpenDyslexic".
+
+## Carlito (substitutes for Calibri) — OFL 1.1
+
+Copyright 2013 The Carlito Project Authors
+(https://github.com/googlefonts/carlito), with Reserved Font Name "Carlito".
+
+## Caladea (substitutes for Cambria) — OFL 1.1
+
+Copyright 2012 The Caladea Project Authors
+(https://github.com/huertatipografica/Caladea), with Reserved Font Name
+"Caladea".
+
+## Tinos (substitutes for Times New Roman / Liberation Serif) — OFL 1.1
+
+Copyright Google Inc., with Reserved Font Name "Tinos".
+
+## Gelasio (substitutes for Georgia) — OFL 1.1
+
+Copyright 2022 The Gelasio Project Authors
+(https://github.com/SorkinType/Gelasio), with Reserved Font Name "Gelasio".
+
+## Comic Neue (substitutes for Comic Sans MS) — OFL 1.1
+
+Copyright 2014 The Comic Neue Project Authors
+(https://github.com/crozynski/comicneue), with Reserved Font Name "Comic Neue".
+
+## Noto Sans / Noto Serif — OFL 1.1
+
+Copyright 2022 The Noto Project Authors
+(https://github.com/notofonts/latin-greek-cyrillic), with Reserved Font Names
+"Noto Sans" and "Noto Serif".
+
+## Arimo (substitutes for Arial / Helvetica / Liberation Sans) — Apache 2.0
+
+Digitized data copyright Google Inc. Licensed under the Apache License,
+Version 2.0 — full text in `Apache-2.0.txt`.
+
+## DejaVu Sans / DejaVu Serif (substitutes for Verdana / Tahoma, and themselves)
+
+DejaVu fonts: the Bitstream Vera Fonts Copyright (c) 2003 by Bitstream, Inc.,
+with DejaVu changes in the public domain. Full text in `DejaVu-License.txt`.
 
 ## SIL Open Font License, Version 1.1
 

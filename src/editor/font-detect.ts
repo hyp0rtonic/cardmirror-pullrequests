@@ -33,9 +33,31 @@ const GENERIC_KEYWORDS = new Set([
  *  we KNOW they'll be available once `document.fonts.ready` resolves,
  *  and showing them in the dropdown immediately is the right UX. */
 const BUNDLED_FONTS = new Set([
+  // Accessibility fonts (woff2 in src/editor/fonts).
   'Atkinson Hyperlegible',
   'Lexend',
   'OpenDyslexic',
+  // Metric-compatible open-source substitutes for the proprietary / system
+  // fonts the picker offers but can't ship (Carlito→Calibri, Caladea→Cambria,
+  // Tinos→Times New Roman / Liberation Serif, Arimo→Arial / Helvetica /
+  // Liberation Sans, Gelasio→Georgia, Comic Neue→Comic Sans MS, DejaVu Sans→
+  // Verdana / Tahoma), plus the real OSS families themselves. The @font-face
+  // `local()` still prefers a user's real font. See style.css + LICENSES.md.
+  'Calibri',
+  'Cambria',
+  'Times New Roman',
+  'Arial',
+  'Georgia',
+  'Helvetica',
+  'Comic Sans MS',
+  'Verdana',
+  'Tahoma',
+  'Liberation Serif',
+  'Liberation Sans',
+  'DejaVu Sans',
+  'DejaVu Serif',
+  'Noto Sans',
+  'Noto Serif',
 ]);
 
 const TEST_STRING = 'mmmmmmmmmmlli';
