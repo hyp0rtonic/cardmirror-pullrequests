@@ -7,6 +7,34 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Pasting card content fits INTO the card instead of splitting it — new
+  `tryPasteCardContent` matrix** (`editor/paste-plugin.ts`,
+  `tests/editor/paste-cite-tag-disconnect.test.ts`). A cite / body / undertag
+  copied from inside a card serializes to the clipboard as a single OPEN `card`
+  (`openStart` 2, its required `tag` cut off by the openness). On paste,
+  `handlePaste`'s structural path (`tryPasteSplitContainer`) saw the leading
+  `card` and SPLIT the destination card to insert it, detaching the tag into its
+  own empty-bodied card — un-selectable, un-draggable, the gray `.pmd-card` rail
+  no longer reaching the tag. An interim inline-merge attempt then over-corrected,
+  flattening pasted cites into plain `card_body` text (silent data loss — a
+  `cite_paragraph` is only subtly styled, so it was easy to miss). Replaced both
+  with `tryPasteCardContent`, run BEFORE the split path: it unwraps a leading open
+  `card` / `analytic_unit` and fits the carried blocks into the cursor's card per
+  an agreed matrix that never breaks the card and preserves block types —
+  - body (`card_body` / `paragraph`) into a `card_body` / `cite_paragraph` → absorbed inline;
+  - a same-type paste (cite→cite, undertag→undertag) → merges inline;
+  - otherwise the block inserts as its OWN type, splitting the cursor's block and
+    coalescing empty edges (cite → card_body becomes a real cite line; body →
+    undertag splits the undertag with a `card_body` between the halves);
+  - an EMPTY target block is overwritten (filled), not split;
+  - OUTSIDE a card the blocks drop in loose with body → `paragraph` (no more
+    phantom empty-tag card), and the cursor lands at the END of the pasted run —
+    matching the in-card / F2 paste paths instead of stranding it behind an empty
+    line.
+  A `tag` / `analytic` / heading / whole closed `card` lead still bails to the
+  split path (those SHOULD start a new card). `tryPasteAsCardBodies` is restored
+  to its narrow role as the F2 plain-text helper. Locked by 17 matrix-cell tests.
+
 - **Plain reload keeps its menu item but drops the Cmd/Ctrl+R accelerator**
   (`apps/desktop/src/main.ts`). `buildMenu`'s View menu used `{ role: 'reload' }`,
   which auto-binds CmdOrCtrl+R — a stray Cmd-R mid-edit reloaded the renderer and

@@ -32,8 +32,21 @@
  * Order: armed mode wins over auto-split.
  */
 
-import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from 'prosemirror-state';
-import { DOMParser as PMDOMParser, Fragment, Slice, type Node as PMNode } from 'prosemirror-model';
+import {
+  Plugin,
+  PluginKey,
+  Selection,
+  TextSelection,
+  type EditorState,
+  type Transaction,
+} from 'prosemirror-state';
+import {
+  DOMParser as PMDOMParser,
+  Fragment,
+  Slice,
+  type Node as PMNode,
+  type ResolvedPos,
+} from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 import { schema } from '../schema/index.js';
 import { freshHeadingIds } from './drag-controller.js';
@@ -116,6 +129,15 @@ const STRUCTURAL_HEAD_NAMES = new Set<string>([
 const DOC_LEVEL_HEADINGS = new Set<string>(['pocket', 'hat', 'block']);
 /** Whole structural containers a paste can lead with. */
 const STRUCTURAL_CONTAINERS = new Set<string>(['card', 'analytic_unit']);
+/** Blocks that are valid `card` / `analytic_unit` content, so a paste of them
+ *  can be fitted INTO the container instead of bubbling a split up to the card
+ *  level. `paragraph` is converted to `card_body`; the rest keep their type. */
+const CARD_FITTABLE_PASTE = new Set<string>([
+  'paragraph',
+  'cite_paragraph',
+  'undertag',
+  'card_body',
+]);
 
 /** Fit an arbitrary body node into a `card`'s content rule
  *  (`card_body | undertag | cite_paragraph | analytic | table`). A bare
@@ -354,6 +376,21 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
           return true;
         }
 
+        // Card-fitting FIRST. Content that BELONGS in the cursor's card — a
+        // cite_paragraph / undertag / multiple body paragraphs, OR a cite/body
+        // copied from inside a card (which serializes as a single OPEN `card`,
+        // openStart>0, with its tag cut off) — must fit INTO the card. Doing it
+        // before the split path keeps the split at the card_body level instead
+        // of bubbling up to spawn a phantom empty-tag card sibling (the
+        // "disconnected tag" bug). Bails for content that should WIN — a tag /
+        // heading / closed whole card — which the split path below then handles.
+        const cardBodyTr = tryPasteCardContent(view.state, slice);
+        if (cardBodyTr) {
+          event.preventDefault();
+          view.dispatch(cardBodyTr.scrollIntoView());
+          return true;
+        }
+
         // A structural-led paste (tag / analytic / heading / whole card) into
         // a card body splits the destination so the pasted structure wins.
         // Try the slice PM gave us first; if its head was flattened to inline
@@ -367,17 +404,6 @@ export function buildPastePlugin(ctx: PastePluginCtx): Plugin<PluginState> {
         if (splitTr) {
           event.preventDefault();
           view.dispatch(splitTr.scrollIntoView());
-          return true;
-        }
-
-        // Multi-paragraph paste into a card_body cursor context:
-        // pre-fit the slice into card_body children so PM doesn't
-        // bubble the split up to the card level (which produces
-        // a phantom empty-tag card sibling).
-        const cardBodyTr = tryPasteAsCardBodies(view.state, slice);
-        if (cardBodyTr) {
-          event.preventDefault();
-          view.dispatch(cardBodyTr.scrollIntoView());
           return true;
         }
 
@@ -588,14 +614,16 @@ export function tryPasteSplitContainer(
 }
 
 /**
- * Pre-fit a multi-paragraph paste into a `card_body` cursor
- * context: convert each top-level paragraph in the slice into a
- * `card_body` of the same content, then `replaceSelection`. Lets
- * PM split WITHIN the card cleanly instead of bubbling the split
- * up to the card level and producing a phantom-empty-tag sibling
- * card. Returns null when the cursor isn't in a card_body, the
- * slice isn't a single-depth multi-paragraph shape, or the
- * cursor's containing card / analytic_unit isn't a valid target.
+ * Pre-fit a multi-paragraph PLAIN-TEXT paste into a `card_body` cursor:
+ * convert each top-level paragraph in the slice to a `card_body` and
+ * `replaceSelection`, so PM splits WITHIN the card instead of bubbling the
+ * split up to the card level (which would spawn a phantom empty-tag sibling).
+ * Used by the F2 / plain-text paste path. Returns null unless the slice is 2+
+ * plain paragraphs and the cursor is in a `card_body` inside a card /
+ * analytic_unit — a lone paragraph falls through to PM's inline merge.
+ *
+ * (Rich pastes of cite / undertag / body content go through
+ * `tryPasteCardContent`, which implements the full card-paste matrix.)
  *
  * Exported for tests.
  */
@@ -603,39 +631,164 @@ export function tryPasteAsCardBodies(
   state: EditorState,
   slice: Slice,
 ): Transaction | null {
-  // Slice must be multi-paragraph at depth 1 (no nested
-  // containers). Anything else falls through to PM's default.
   if (slice.content.childCount < 2) return null;
   for (let i = 0; i < slice.content.childCount; i++) {
     if (slice.content.child(i).type.name !== 'paragraph') return null;
   }
-
-  // Cursor must be in a card_body inside a card or analytic_unit
-  // (both accept card_body in their content rules).
   const sel = state.selection;
   if (!(sel instanceof TextSelection)) return null;
   const $from = sel.$from;
   if ($from.parent.type.name !== 'card_body') return null;
   if ($from.depth < 2) return null;
   const container = $from.node($from.depth - 1);
-  const containerName = container.type.name;
-  if (containerName !== 'card' && containerName !== 'analytic_unit') return null;
-
+  if (container.type.name !== 'card' && container.type.name !== 'analytic_unit') {
+    return null;
+  }
   const cardBodyType = schema.nodes['card_body'];
   if (!cardBodyType) return null;
-
-  // Convert each paragraph child to a card_body, preserving
-  // content (including any inline marks).
   const converted: PMNode[] = [];
-  slice.content.forEach((p) => {
-    converted.push(cardBodyType.create(null, p.content));
-  });
+  slice.content.forEach((p) => converted.push(cardBodyType.create(null, p.content)));
   const newSlice = new Slice(
     Fragment.fromArray(converted),
     slice.openStart,
     slice.openEnd,
   );
   return state.tr.replace(sel.from, sel.to, newSlice);
+}
+
+/** Pasted blocks that are body text (vs. a structural label). */
+const BODY_PASTE_TYPES = new Set<string>(['card_body', 'paragraph']);
+/** Textblocks that ABSORB pasted body text inline (content, not a label). */
+const CONTENT_TEXTBLOCKS = new Set<string>(['card_body', 'cite_paragraph']);
+/** Card-content slots the cursor can sit in that we fit a paste into. */
+const CARD_CONTENT_SLOTS = new Set<string>([
+  'card_body',
+  'cite_paragraph',
+  'undertag',
+]);
+
+/**
+ * Fit a paste of card content (`cite_paragraph` / `undertag` / body) at the
+ * cursor, per the agreed card-paste matrix:
+ *  - NEVER breaks the card; pasted block types are preserved.
+ *  - Body text is absorbed INLINE into a `card_body` / `cite_paragraph`, and a
+ *    same-type paste (cite→cite, undertag→undertag) merges; otherwise the block
+ *    inserts as its OWN type, splitting the cursor's block (coalescing empty
+ *    edges so there's no stray blank line).
+ *  - An EMPTY target block is OVERWRITTEN.
+ *  - OUTSIDE a card, content drops in loose (body → `paragraph`).
+ * Returns null for a `tag` / `analytic` / heading / whole closed `card` lead, so
+ * the split path handles it — those SHOULD start a new card.
+ *
+ * Exported for tests.
+ */
+export function tryPasteCardContent(
+  state: EditorState,
+  slice: Slice,
+): Transaction | null {
+  if (slice.content.childCount === 0) return null;
+
+  // Unwrap a leading open card / analytic_unit (cite/body copied from inside a
+  // card serializes WITH its container — openStart > 0, the tag cut off).
+  const lead = slice.content.firstChild!;
+  const unwrap =
+    slice.content.childCount === 1 &&
+    STRUCTURAL_CONTAINERS.has(lead.type.name) &&
+    slice.openStart > 0;
+  const srcFrag = unwrap ? lead.content : slice.content;
+  if (srcFrag.childCount === 0) return null;
+
+  // Every source block must be card-fittable; a tag / analytic / heading /
+  // whole card lead bails to the split path — that one breaks the card.
+  const blocks: PMNode[] = [];
+  let fittable = true;
+  srcFrag.forEach((b) => {
+    if (!CARD_FITTABLE_PASTE.has(b.type.name)) fittable = false;
+    blocks.push(b);
+  });
+  if (!fittable) return null;
+
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection) || sel.from !== sel.to) return null;
+  const $from = sel.$from;
+
+  // Inside a card / analytic_unit?
+  let inCard = false;
+  for (let d = $from.depth; d >= 1; d--) {
+    if (STRUCTURAL_CONTAINERS.has($from.node(d).type.name)) {
+      inCard = true;
+      break;
+    }
+  }
+  // Outside a card → drop loose; body becomes a plain paragraph.
+  if (!inCard) return fitBlocks(state, blocks, $from, 'paragraph');
+
+  // Cursor must be in a card-content slot (not the tag / analytic head).
+  if (!CARD_CONTENT_SLOTS.has($from.parent.type.name)) return null;
+
+  return fitBlocks(state, blocks, $from, 'card_body');
+}
+
+/**
+ * Place `blocks` at the cursor per the card-paste matrix. `bodyType` is what a
+ * body block becomes — `card_body` inside a card, `paragraph` at the doc level.
+ * A single block MERGES inline into a body-absorbing textblock (or its own type);
+ * otherwise blocks insert as their own type, splitting the cursor's block and
+ * coalescing empty edges. An EMPTY target is overwritten (filled), not split.
+ * The cursor lands at the END of the pasted content, matching the in-card / F2
+ * paste paths (so the user keeps typing after what they pasted).
+ */
+function fitBlocks(
+  state: EditorState,
+  blocks: PMNode[],
+  $from: ResolvedPos,
+  bodyType: 'card_body' | 'paragraph',
+): Transaction {
+  const sel = state.selection;
+  const Bt = $from.parent.type.name;
+  const Bempty = $from.parent.content.size === 0;
+  const tr = state.tr;
+  // The destination's own bodyType textblock absorbs body text too (e.g. a
+  // plain paragraph at the doc level behaves like a card_body inside a card).
+  const absorbsBody = (t: string): boolean =>
+    CONTENT_TEXTBLOCKS.has(t) || t === bodyType;
+
+  // A single block can MERGE inline; a multi-block run always lands as blocks.
+  if (blocks.length === 1 && !Bempty) {
+    const P = blocks[0]!;
+    const Pt = P.type.name;
+    if ((BODY_PASTE_TYPES.has(Pt) && absorbsBody(Bt)) || Pt === Bt) {
+      tr.replaceWith(sel.from, sel.to, P.content); // absorb inline; cursor after
+      return tr;
+    }
+  }
+
+  // Body → bodyType; cite / undertag keep their own type.
+  const frag = Fragment.fromArray(
+    blocks.map((b) =>
+      BODY_PASTE_TYPES.has(b.type.name)
+        ? schema.nodes[bodyType]!.create(null, b.content)
+        : b,
+    ),
+  );
+
+  let insertAt: number;
+  if (Bempty) {
+    insertAt = $from.before();
+    tr.replaceWith($from.before(), $from.after(), frag); // fill the empty target
+  } else if (sel.from === $from.start()) {
+    insertAt = $from.before();
+    tr.insert($from.before(), frag); // before B — no empty pre-edge
+  } else if (sel.from === $from.end()) {
+    insertAt = $from.after();
+    tr.insert($from.after(), frag); // after B — no empty post-edge
+  } else {
+    tr.replaceSelection(new Slice(frag, 0, 0)); // split B, insert between
+    return tr; // replaceSelection already lands the cursor after the content
+  }
+  // Land the cursor at the END of the pasted run (matches in-card / F2).
+  tr.setSelection(Selection.near(tr.doc.resolve(insertAt + frag.size), -1));
+  return tr;
 }
 
 /**

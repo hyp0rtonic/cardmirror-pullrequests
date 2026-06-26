@@ -16,6 +16,21 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **Severe: pasting between cards could detach a card from its tag and silently
+  strip a cite — please update.** Copying a cite, body paragraph, or undertag and
+  pasting it into another card could split that card away from its tag: the card
+  became impossible to select or drag (only the tag moved), and the gray body rail
+  no longer reached the tag. Cards left in this broken state behaved erratically —
+  among other things they refused a variety of edits that should have been
+  legitimate (for instance, pressing Enter to add a new line could silently do
+  nothing). In some cases a pasted cite was also quietly demoted to plain body
+  text, losing its cite formatting with no visible warning. And
+  pasting card content *outside* a card left behind a stray empty card. All of it
+  is fixed — pasted content now lands cleanly at your cursor, keeps its own kind
+  (cites stay cites, undertags stay undertags, body stays body), and never breaks
+  the card. **This was a severe bug, so anyone still on 0.1.0-beta.1 should update
+  to this release.**
+
 - **The "Layout on this device" setting (web edition) now matches the others.**
   Its Auto / Mobile / Desktop options were showing as a cramped, unstyled stack —
   their CSS classes had never been defined — so they now use the same tidy column
