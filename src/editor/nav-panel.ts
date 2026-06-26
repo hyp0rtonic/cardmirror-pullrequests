@@ -674,7 +674,6 @@ export class NavigationPanel {
 
       const li = document.createElement('li');
       li.className = `pmd-nav-item pmd-nav-level-${entry.level} pmd-nav-type-${entry.type}`;
-      li.title = TYPE_LABEL[entry.type] ?? entry.type;
       if (entry.id) li.dataset['id'] = entry.id;
       li.dataset['pos'] = String(entry.pos);
       if (entry.id != null && this.selectedIds.has(entry.id)) {

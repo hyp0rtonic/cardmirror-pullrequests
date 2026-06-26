@@ -7,6 +7,28 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Tooltips are custom-rendered instead of native `title`** (`editor/ribbon-tooltips.ts`,
+  `editor/style.css`, `index.html`, `editor/nav-panel.ts`). The ribbon tooltip
+  controller set `el.title = …`; Electron/Chromium on macOS renders native `title`
+  tooltips erratically (long, inconsistent trigger delay, flicker, frequently
+  swallowed), so the desktop build's tooltips were slow / missing while the same
+  attributes were fine in the web build's real browser. Replaced `el.title` with a
+  small custom renderer: one shared `.pmd-ribbon-tooltip` element, delegated
+  `pointerover` / `pointerout` (so dynamically added/removed targets need no
+  per-element listeners), a ~450 ms hover delay, positioned under the target
+  (flips above / clamps to the viewport), hidden on `pointerdown` / scroll / blur.
+  Icon buttons get an `aria-label` so screen readers keep a name (and there's no
+  double-tooltip, since `title` is gone). Because most of the app sets `title`
+  directly and bypasses the controller (find/replace, comments, dropzone, command
+  bar, speech controls, …), the controller also ADOPTS any native `title` on first
+  hover — moving the text into the same renderer and stripping the flaky attribute
+  — except inside the contenteditable document, so it doesn't fight ProseMirror's
+  DOM. `reapplyAllRibbonTooltips()` still tracks `ribbonTooltipMode` / rebinds.
+  Two related tweaks rode along: the command-bar button's tooltip was relabeled
+  `Search quick cards` → `Toggle command bar` (`index.html`), and the redundant
+  per-row type-label `title` on nav-pane outline entries (`nav-panel.ts`) was
+  dropped.
+
 - **Pasting card content fits INTO the card instead of splitting it — new
   `tryPasteCardContent` matrix** (`editor/paste-plugin.ts`,
   `tests/editor/paste-cite-tag-disconnect.test.ts`). A cite / body / undertag

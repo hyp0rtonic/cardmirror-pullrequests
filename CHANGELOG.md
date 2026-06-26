@@ -14,6 +14,13 @@ see `DETAILED_CHANGELOG.md`.
   in the View menu; the Cmd-Shift-R force-reload shortcut — far harder to hit by
   accident — still works.
 
+- **The command-bar button's tooltip now reads "Toggle command bar"** (it used to
+  say "Search quick cards").
+
+- **Nav-pane headings no longer pop a tooltip on hover.** Each outline row used to
+  show a redundant "Pocket" / "Card" / etc. type label when you moused over it;
+  it's gone.
+
 ### Fixed
 
 - **Severe: pasting between cards could detach a card from its tag and silently
@@ -35,6 +42,15 @@ see `DETAILED_CHANGELOG.md`.
   Its Auto / Mobile / Desktop options were showing as a cramped, unstyled stack —
   their CSS classes had never been defined — so they now use the same tidy column
   styling as every other radio setting.
+
+- **Toolbar tooltips are reliable in the desktop app now.** On the Mac desktop
+  build the ribbon tooltips were erratic — slow, flickery, or simply not appearing
+  — because they relied on the operating system's native tooltip, which Electron
+  renders unreliably on macOS (the web build, in a real browser, was always fine).
+  They're now drawn by CardMirror itself, so they behave identically and show up
+  reliably on both desktop and web. The same fix covers the other hover tooltips
+  that had the problem — find & replace, the comments panel, the dropzone, the
+  command-bar controls, and the speech-document buttons.
 
 ## 0.1.0-beta.1 — 2026-06-24
 
