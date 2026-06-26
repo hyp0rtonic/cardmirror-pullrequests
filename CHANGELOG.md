@@ -9,6 +9,12 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Rebindable "next / previous document" shortcuts for three-pane mode.** Two
+  new commands — *Next Document in Slot* and *Previous Document in Slot* —
+  single-press cycle through the documents stacked in the focused pane. They're
+  unbound by default; assign keys under Settings → Keyboard shortcuts (the
+  existing Ctrl+Tab hold-to-cycle is unchanged).
+
 - **Missing fonts now have bundled open-source stand-ins.** When a document uses
   a font you don't have installed — Calibri, Cambria, Times New Roman, Arial,
   Georgia, Helvetica, Comic Sans MS, Verdana, Tahoma (plus Liberation, DejaVu,
@@ -26,14 +32,18 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **"one" / "two" / "three" find the slot commands in the command bar.** Typing a
+  spelled-out number in Search Everything now surfaces that slot's Focus-Slot and
+  Send-to-Slot commands.
+
 - **"Check for updates on launch" is now "Check for updates automatically" — and
   it also checks daily.** With it enabled, the desktop app checks for updates at
   launch and once every 24 hours while it's running, staying silent and only
   surfacing a prompt when an update is actually available.
 
-- **Cmd-R no longer reloads the desktop app by accident.** A stray Cmd-R mid-edit
+- **Mod-R no longer reloads the desktop app by accident.** A stray Mod-R mid-edit
   used to reload the whole window, which felt like a crash. Reload now lives only
-  in the View menu; the Cmd-Shift-R force-reload shortcut — far harder to hit by
+  in the View menu; the Mod-Shift-R force-reload shortcut — far harder to hit by
   accident — still works.
 
 - **The command-bar button's tooltip now reads "Toggle command bar"** (it used to

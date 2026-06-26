@@ -2855,6 +2855,8 @@ const VIEWLESS_RIBBON_COMMANDS = new Set<RibbonCommandId>([
   'sendDocToSlot2',
   'sendDocToSlot3',
   'toggleSlotExpand',
+  'cycleDocNext',
+  'cycleDocPrev',
   'closeDocOrWindow',
   // Voice toggle flips a session, not a doc — works with no pane focused.
   'toggleVoice',
@@ -2892,6 +2894,8 @@ function runViewlessRibbon(id: RibbonCommandId): void {
     case 'sendDocToSlot2': void runMultiPane('sendDocToSlot', 1); return;
     case 'sendDocToSlot3': void runMultiPane('sendDocToSlot', 2); return;
     case 'toggleSlotExpand': void runMultiPane('toggleSlotExpand', 0); return;
+    case 'cycleDocNext': void runMultiPaneCycle(1); return;
+    case 'cycleDocPrev': void runMultiPaneCycle(-1); return;
     case 'closeDocOrWindow':
       void (async () => {
         const { tryCloseVisibleInFocusedSlot } = await import(
@@ -2935,6 +2939,14 @@ async function runMultiPane(
       m.toggleFocusedSlotExpand();
       return;
   }
+}
+
+/** Cycle the focused slot's visible doc forward (+1) / back (-1). Bound by the
+ *  rebindable `cycleDocNext` / `cycleDocPrev` commands (unbound by default).
+ *  No-op outside multi-pane mode. */
+async function runMultiPaneCycle(direction: 1 | -1): Promise<void> {
+  const m = await import('./multi-pane-shell.js');
+  m.cycleFocusedSlotDoc(direction);
 }
 
 // Wire the color panel (split buttons + swatch pickers). Pass a ref

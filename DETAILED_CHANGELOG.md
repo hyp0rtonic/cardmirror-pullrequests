@@ -7,6 +7,25 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Rebindable single-press doc-cycle commands for three-pane mode**
+  (`editor/ribbon-commands.ts`, `editor/ribbon-groups.ts`,
+  `editor/multi-pane-shell.ts`, `editor/index.ts`). Added two `RibbonCommandId`s,
+  `cycleDocNext` / `cycleDocPrev` (labels "Next / Previous Document in Slot",
+  default keys `''` → unbound + rebindable), in the "Multi-pane workspace" group.
+  They dispatch via `runViewlessRibbon` → `runMultiPaneCycle(±1)` → the new module
+  export `cycleFocusedSlotDoc`, which calls `MultiPaneShell.cycleFocusedSlotDoc`:
+  it instantly switches the focused slot's visible doc one step through the stack
+  (from `visibleIndex`, wrapping) via `slot.showRecord`, with no Alt+Tab overlay.
+  The existing hold-to-preview Ctrl-Tab (`onDocCycleKey`, a raw window listener)
+  is untouched. Every `RibbonCommandId` exhaustive switch + the group drift guard
+  required adding the ids in each place.
+
+- **`one` / `two` / `three` aliased to the slot commands**
+  (`editor/ribbon-commands.ts`). Added spelled-out-number aliases to
+  `RIBBON_COMMAND_ALIASES` for `focusSlot1-3` / `sendDocToSlot1-3`, which the
+  command-bar search (`quick-card-search-ui.ts`, which folds aliases into each
+  command's search haystack) now matches by word.
+
 - **Auto-update: renamed the setting and added a daily background check**
   (`editor/settings-ui.ts`, `editor/index.ts`). The toggle "Check for updates on
   launch" is renamed "Check for updates automatically." Alongside the existing

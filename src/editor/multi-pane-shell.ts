@@ -1371,6 +1371,23 @@ class MultiPaneShell {
     slot.visible?.view.focus();
   }
 
+  /** Cycle the focused slot's visible doc to the next (+1) or previous (-1) doc
+   *  in its stack, instantly — no Alt+Tab overlay. No-op outside a focused slot
+   *  holding 2+ docs. Bound to the rebindable `cycleDocNext` / `cycleDocPrev`
+   *  commands (unbound by default); the hold-to-preview Ctrl-Tab path is
+   *  separate. Cycles in stack order from the visible doc, matching Ctrl-Tab. */
+  cycleFocusedSlotDoc(direction: 1 | -1): void {
+    const slot = this.focusedSlot;
+    if (!slot || slot.stack.length < 2) return;
+    const len = slot.stack.length;
+    const start = slot.visibleIndex < 0 ? 0 : slot.visibleIndex;
+    const next = slot.stack[(start + direction + len) % len];
+    if (next && next !== slot.visible) {
+      slot.showRecord(next);
+      slot.visible?.view.focus();
+    }
+  }
+
   /** Send the focused slot's visible doc to the slot at `idx`
    *  (0/1/2). Used by the `sendDocToSlotN` ribbon commands. */
   sendVisibleToSlotByIndex(idx: 0 | 1 | 2): void {
@@ -2174,6 +2191,13 @@ export function sendVisibleToSlotByIndex(idx: 0 | 1 | 2): void {
 export function toggleFocusedSlotExpand(): void {
   if (!shell) return;
   shell.toggleFocusedSlotExpand();
+}
+
+/** Cycle the focused slot's visible doc forward (+1) / back (-1). No-op when
+ *  the shell isn't active. Used by the `cycleDocNext` / `cycleDocPrev` commands. */
+export function cycleFocusedSlotDoc(direction: 1 | -1): void {
+  if (!shell) return;
+  shell.cycleFocusedSlotDoc(direction);
 }
 
 /** If the multi-pane shell is active AND the focused slot has a
