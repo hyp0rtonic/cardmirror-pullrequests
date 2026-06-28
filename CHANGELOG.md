@@ -60,6 +60,14 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Changed
 
+- **Find and Paragraph Integrity match across dashes and ellipses.** Searching
+  (or typing a paragraph-start phrase) now treats every kind of dash — hyphen,
+  en-dash, em-dash, minus sign, and the rest of Unicode's dash family — as
+  interchangeable, and treats an ASCII `...` and the single `…` character as the
+  same. This joins the existing curly-vs-straight quote matching, so text pasted
+  from Word matches whether you type the fancy character or the plain one. (The
+  invisible soft hyphen is left as-is.)
+
 - **Timer durations are capped at 99 minutes** in settings (speech presets and
   prep), up to which any value is allowed.
 

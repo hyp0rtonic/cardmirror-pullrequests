@@ -80,6 +80,48 @@ export function foldQuotes(s: string): string {
     .replace(/[“”„‟]/g, '"');
 }
 
+/**
+ * Normalize text for fuzzy matching, returning the normalized string AND a
+ * `map` from normalized-index → original-index (with a final entry equal to the
+ * original length), so callers can translate a match's start/end back to the
+ * real character offsets they map to doc positions.
+ *
+ * Folds, in order:
+ *   - curly quotes → straight (via {@link foldQuotes});
+ *   - every Unicode dash (the `\p{Dash}` property: hyphen, non-breaking hyphen,
+ *     en/em dash, horizontal bar, minus sign, two/three-em dash, fullwidth
+ *     hyphen, …) → ASCII `-`. All are single BMP chars, so this stays
+ *     length-preserving;
+ *   - an ASCII `...` and the ellipsis char `…` both → a single canonical `…`.
+ *
+ * The quote/dash folds are length-preserving (one char → one char), so every
+ * character maps to itself there. The ellipsis collapse is the ONLY
+ * length-changing step (`...` is three chars, `…` is one) — which is exactly why
+ * the index map exists: without it, a `...` earlier in the haystack would shift
+ * every later match offset.
+ */
+export function normalizeForMatch(s: string): { text: string; map: number[] } {
+  // Length-preserving folds first, so indices into `folded` equal indices into
+  // `s` and the map can be built against `folded` directly.
+  const folded = foldQuotes(s).replace(/\p{Dash}/gu, '-');
+  let text = '';
+  const map: number[] = [];
+  let i = 0;
+  while (i < folded.length) {
+    if (folded[i] === '.' && folded[i + 1] === '.' && folded[i + 2] === '.') {
+      map.push(i);
+      text += '…';
+      i += 3;
+    } else {
+      map.push(i);
+      text += folded[i]!;
+      i += 1;
+    }
+  }
+  map.push(folded.length);
+  return { text, map };
+}
+
 /** The base unit (without trailing-space absorption) containing
  *  the character at index `idx` in `text`. Returns `{ from, to }`
  *  with `to` exclusive. `idx` must satisfy `0 <= idx < text.length`;

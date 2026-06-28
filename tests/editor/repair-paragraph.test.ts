@@ -78,6 +78,28 @@ describe('findBodyMatches', () => {
     expect(findBodyMatches(d2, range2, 'it’s')).toHaveLength(1);
     expect(findBodyMatches(d2, range2, '“fine”')).toHaveLength(1);
   });
+
+  it('a hyphen query matches en/em-dash body text', () => {
+    const d = doc(card(tag('T'), cardBody('pre–war and pre—war eras')));
+    const range = { from: 0, to: d.firstChild!.nodeSize };
+    expect(findBodyMatches(d, range, 'pre-war')).toHaveLength(2);
+  });
+
+  it('a "..." query matches a "…" in the body; the range covers the real char', () => {
+    const d = doc(card(tag('T'), cardBody('he paused… then spoke')));
+    const range = { from: 0, to: d.firstChild!.nodeSize };
+    const m = findBodyMatches(d, range, 'paused...');
+    expect(m).toHaveLength(1);
+    expect(d.textBetween(m[0]!.from, m[0]!.to)).toBe('paused…');
+  });
+
+  it('an earlier ellipsis collapse does not shift a later match offset', () => {
+    const d = doc(card(tag('T'), cardBody('intro... Target here')));
+    const range = { from: 0, to: d.firstChild!.nodeSize };
+    const m = findBodyMatches(d, range, 'Target');
+    expect(m).toHaveLength(1);
+    expect(d.textBetween(m[0]!.from, m[0]!.to)).toBe('Target');
+  });
 });
 
 describe('plugin state via meta', () => {

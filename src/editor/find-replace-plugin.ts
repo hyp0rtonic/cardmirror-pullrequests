@@ -42,7 +42,7 @@ import {
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import type { Node as PMNode } from 'prosemirror-model';
 import { preciseScrollIntoView } from './precise-scroll.js';
-import { isWordChar, foldQuotes } from './word-break.js';
+import { isWordChar, normalizeForMatch } from './word-break.js';
 
 /** Match category, derived from the containing textblock's node type
  *  at scan time. Used by the `categorized` sort mode to bubble
@@ -184,9 +184,11 @@ function findMatches(
 ): FindMatch[] {
   if (!query) return [];
   const out: FindMatch[] = [];
-  // Fold curly quotes so a straight ' / " query matches Word's smart quotes
-  // (and vice versa). Length-preserving, so offsets still map to doc positions.
-  const needleNorm = foldQuotes(caseSensitive ? query : query.toLowerCase());
+  // Normalize curly quotes, dashes, and ellipses so e.g. a straight-quote /
+  // hyphen / "..." query matches Word's smart quotes / en–em dashes / "…", and
+  // vice versa. The `.map` returned alongside translates normalized offsets back
+  // to real ones (only the "..."→"…" collapse changes length).
+  const needleNorm = normalizeForMatch(caseSensitive ? query : query.toLowerCase()).text;
   state.doc.descendants((node, pos) => {
     if (out.length >= FIND_MATCH_CAP) return false; // stop collecting past the cap
     if (!node.isTextblock) return true;
@@ -199,28 +201,29 @@ function findMatches(
     const text = node.textBetween(0, node.content.size, undefined, '\u0000');
     if (!text) return false;
     const category = categoryForTextblockType(node.type.name);
-    const hay = foldQuotes(caseSensitive ? text : text.toLowerCase());
+    const { text: hay, map } = normalizeForMatch(caseSensitive ? text : text.toLowerCase());
     let searchFrom = 0;
     while (searchFrom <= hay.length - needleNorm.length) {
       const idx = hay.indexOf(needleNorm, searchFrom);
       if (idx < 0) break;
+      // `idx` is a NORMALIZED offset; map both ends back to real character
+      // offsets (these differ only where a "..." collapsed to one char).
+      const origFrom = map[idx]!;
+      const origTo = map[idx + needleNorm.length]!;
       if (wholeWord) {
-        const before = idx > 0 ? text[idx - 1]! : '';
-        const after =
-          idx + needleNorm.length < text.length
-            ? text[idx + needleNorm.length]!
-            : '';
+        const before = origFrom > 0 ? text[origFrom - 1]! : '';
+        const after = origTo < text.length ? text[origTo]! : '';
         if (isWordChar(before) || isWordChar(after)) {
           searchFrom = idx + 1;
           continue;
         }
       }
       // `pos` is the position of the textblock node itself; `pos + 1`
-      // is the start of its inline content. `idx` is a character
-      // offset inside `textContent` — which for plain text-only
-      // textblocks equals the inline character offset.
-      const matchFrom = pos + 1 + idx;
-      const matchTo = pos + 1 + idx + needleNorm.length;
+      // is the start of its inline content. `origFrom`/`origTo` are
+      // character offsets into that content — which (with the placeholder
+      // trick) equal the inline character offsets / doc positions.
+      const matchFrom = pos + 1 + origFrom;
+      const matchTo = pos + 1 + origTo;
       // Apply scope filter (if any) before producing the match.
       // Partial overlap at the boundary is dropped — keeps the
       // "search within selection" mental model clean.

@@ -7,6 +7,24 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Find + Paragraph Integrity: dash and ellipsis normalization**
+  (`editor/word-break.ts`, `editor/find-replace-plugin.ts`,
+  `editor/repair-paragraph-plugin.ts`, `tests/editor/quote-fold.test.ts`,
+  `tests/editor/repair-paragraph.test.ts`). New `normalizeForMatch(s)` returns the
+  folded string PLUS an index map back to original offsets. It folds curly quotes
+  (via `foldQuotes`), every `\p{Dash}` character → ASCII `-` (hyphen, en/em dash,
+  minus sign, two/three-em dash, fullwidth hyphen, …), and collapses both an ASCII
+  `...` and the `…` char to a single canonical `…`. Quotes/dashes are
+  length-preserving (all single BMP chars); the `...`→`…` collapse (3→1) is the
+  only length-changing step, which is why the map exists — both matchers now
+  translate match start/end (and Find's whole-word boundary checks) through it, so
+  highlights, Replace ranges, and the split-before-phrase still land on the real
+  characters even when an earlier `...` shifted offsets. Replaces the previous
+  length-preserving `foldQuotes`-only path in both matchers. Soft hyphen U+00AD
+  (not a `\p{Dash}` char, and invisible) is intentionally left unfolded. Tests
+  cover the folds, the map, both directions for each class, and that an earlier
+  `...` doesn't shift a later match.
+
 - **"Cycle Timer Preset" command + shared timer-profile module**
   (`editor/timer-profile.ts` new, `editor/ribbon-commands.ts`,
   `editor/ribbon-groups.ts`, `editor/index.ts`, `editor/settings-ui.ts`,
