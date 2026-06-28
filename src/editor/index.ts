@@ -2436,6 +2436,22 @@ let lastKeyboardMacros = settings.get('keyboardMacros');
 let lastReadMode = settings.get('readMode');
 let lastReadModeBorders = settings.get('hideEmphasisBordersInReadMode');
 
+/** Show/hide the chrome's optional clusters per their (default-off) settings:
+ *  the dropzone pill and the Quick Cards button stack. Called from the settings
+ *  subscriber AND once at boot — `settings.subscribe` does NOT fire on
+ *  registration, so without the boot call the default-hidden state wouldn't take
+ *  effect until the setting was next changed. */
+function applyPillVisibility(): void {
+  document.documentElement.classList.toggle(
+    'pmd-dropzone-pill-hidden',
+    !settings.get('showDropzonePill'),
+  );
+  document.documentElement.classList.toggle(
+    'pmd-quickcards-hidden',
+    !settings.get('showQuickCardButtons'),
+  );
+}
+
 // Apply read-mode visual state and editing lockdown whenever the
 // setting changes (and once now to handle the persisted value).
 settings.subscribe((s) => {
@@ -2472,14 +2488,7 @@ settings.subscribe((s) => {
   refreshFlashcardDueDot(); // the due-dot setting may have toggled
   reapplyAllRibbonTooltips();
   pushNativeMenuBindings();
-  document.documentElement.classList.toggle(
-    'pmd-dropzone-pill-hidden',
-    !s.showDropzonePill,
-  );
-  document.documentElement.classList.toggle(
-    'pmd-quickcards-hidden',
-    !s.showQuickCardButtons,
-  );
+  applyPillVisibility();
   // Reposition the pill when it's toggled on (toggling doesn't resize
   // #app, so the ResizeObserver won't fire). rAF lets the display change
   // apply first. The editor's scroll runway is pure CSS (the editable's
@@ -2661,6 +2670,7 @@ applyTheme(settings.get('theme'), settings.get('themeAppliesToDocument'));
 applyShowDocNameChip(settings.get('showDocNameChip'));
 applyIconSet(settings.get('iconSet'));
 applyReduceMotion(settings.get('reduceMotion'));
+applyPillVisibility(); // default-off dropzone pill + quick-card cluster, at boot
 // Build the timer panel + button bindings. Visibility is gated
 // on `timerVisible` (transient per-window setting); the panel
 // stays hidden in the DOM until the user toggles ⏱ in the
