@@ -18,6 +18,9 @@
  *     do NOT terminate the absorption zone.
  *   - card_body → card_body (rare at doc level, but valid in both
  *     containers and harmless to absorb in place).
+ *   - table → table (valid in both containers; shows up after F7 on text
+ *     followed by an evidence table — without absorbing it the card wrapper
+ *     would stop at the table instead of covering the whole card).
  *
  * Cases preserved (no absorption):
  *   - Block / Hat / Pocket → paragraph → tag        (legitimate bridge text)
@@ -159,7 +162,12 @@ function findAbsorbRegions(doc: PMNode): AbsorbRegion[] {
     } else if (t === 'paragraph') {
       bodiesPieces.push(schema.nodes['card_body']!.create(null, child.content));
       regionEndPos = childEnd;
-    } else if (t === 'cite_paragraph' || t === 'undertag' || t === 'card_body') {
+    } else if (
+      t === 'cite_paragraph' ||
+      t === 'undertag' ||
+      t === 'card_body' ||
+      t === 'table'
+    ) {
       bodiesPieces.push(child);
       regionEndPos = childEnd;
     } else {
@@ -215,12 +223,18 @@ export function absorbedDocChildren(doc: PMNode): Fragment | null {
       absorbed.push(schema.nodes['card_body']!.create(null, child.content));
       return;
     }
-    if (t === 'cite_paragraph' || t === 'undertag' || t === 'card_body') {
-      // All three are valid in both card and analytic_unit content
+    if (
+      t === 'cite_paragraph' ||
+      t === 'undertag' ||
+      t === 'card_body' ||
+      t === 'table'
+    ) {
+      // All four are valid in both card and analytic_unit content
       // expressions, so absorb regardless of container type. The bare
       // undertag case shows up after F7 on text followed by an undertag
-      // annotation — without this, the undertag would orphan and the
-      // absorption zone would terminate prematurely.
+      // annotation; the table case is F7 on text followed by an evidence
+      // table — without these the node would orphan and the absorption
+      // zone would terminate prematurely.
       absorbed.push(child);
       return;
     }

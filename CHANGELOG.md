@@ -50,6 +50,12 @@ see `DETAILED_CHANGELOG.md`.
   own section, and the rest of the card you pasted into follows under it — the
   same way pasting a heading on its own already behaved.
 
+- **Tagging content that includes a table now wraps the whole card.** When you
+  put a tag on a run of paragraphs (with a cite and a table) to turn it into a
+  card, the card used to stop at the table, leaving the table and everything
+  after it stranded outside. Tables are now pulled into the card along with the
+  rest, so the card covers the whole thing.
+
 ## 0.1.0-beta.2 — 2026-06-25
 
 ### Added

@@ -126,6 +126,21 @@ in each release, see `CHANGELOG.md`.
   node. Covered by 7 tests (paragraph + heading / whole card / bare tag,
   body-start, multi-paragraph prefix, cite-in-prefix, bail cases).
 
+- **Loose tables after a card / analytic_unit are now absorbed into it**
+  (`editor/absorb-plugin.ts`, `tests/editor/absorb.test.ts`). The absorb plugin
+  pulled loose `paragraph` / `cite_paragraph` / `undertag` / `card_body` siblings
+  into a preceding `card` / `analytic_unit` but STOPPED at a `table`, so tagging
+  a run of content that included a table (F7 on the lead line, then absorb)
+  produced a card that ended at the table — the table and everything after it
+  stranded at doc level. `table` is valid content of both `card` and
+  `analytic_unit` (the importer already nests inline tables in cards), so it's
+  now in the absorbable set in both `findAbsorbRegions` (the live plugin path)
+  and `absorbedDocChildren`, passed through unchanged like cite / undertag /
+  card_body. (Images need no handling — they're inline atoms inside a textblock,
+  so they absorb along with their paragraph.) Covered by 4 tests: table after a
+  card, table doesn't break the zone, table after an analytic_unit, and the live
+  plugin path.
+
 ## 0.1.0-beta.2 — 2026-06-25
 
 - **Rebindable single-press doc-cycle commands for three-pane mode**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { EditorState } from 'prosemirror-state';
 import { schema, newHeadingId } from '../../src/schema/index.js';
-import { absorbedDocChildren } from '../../src/editor/absorb-plugin.js';
+import { absorbedDocChildren, absorbPlugin } from '../../src/editor/absorb-plugin.js';
 
 function makeCard(): ReturnType<typeof schema.nodes['card']['create']> {
   return schema.nodes['card']!.create(null, [
@@ -20,6 +21,14 @@ function makeBlock(text: string): ReturnType<typeof schema.nodes['block']['creat
 
 function para(text: string): ReturnType<typeof schema.nodes['paragraph']['create']> {
   return schema.nodes['paragraph']!.create(null, schema.text(text));
+}
+
+function makeTable(text: string): ReturnType<typeof schema.nodes['table']['create']> {
+  const cell = schema.nodes['table_cell']!.create(null, [
+    schema.nodes['paragraph']!.create(null, schema.text(text)),
+  ]);
+  const row = schema.nodes['table_row']!.create(null, [cell]);
+  return schema.nodes['table']!.create(null, [row]);
 }
 
 describe('paragraph absorption (ARCHITECTURE.md §14.3)', () => {
@@ -215,5 +224,48 @@ describe('paragraph absorption (ARCHITECTURE.md §14.3)', () => {
     expect(result!.childCount).toBe(1);
     const unit = result!.child(0);
     expect(unit.lastChild!.type.name).toBe('undertag');
+  });
+});
+
+describe('table absorption (tables are valid card / analytic_unit content)', () => {
+  it('absorbs a free-floating table after a card', () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [makeCard(), makeTable('cell')]);
+    const result = absorbedDocChildren(doc);
+    expect(result).not.toBeNull();
+    expect(result!.childCount).toBe(1);
+    const card = result!.child(0);
+    expect(card.lastChild!.type.name).toBe('table');
+  });
+
+  it('a table does NOT break the absorption zone — content after it still absorbs', () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [
+      makeCard(),
+      makeTable('t'),
+      para('after the table'),
+    ]);
+    const result = absorbedDocChildren(doc);
+    expect(result).not.toBeNull();
+    expect(result!.childCount).toBe(1);
+    const types: string[] = [];
+    result!.child(0).forEach((c) => types.push(c.type.name));
+    expect(types).toEqual(['tag', 'table', 'card_body']);
+    expect(result!.child(0).lastChild!.textContent).toBe('after the table');
+  });
+
+  it('absorbs a free-floating table after an analytic_unit', () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [makeAnalyticUnit(), makeTable('cell')]);
+    const result = absorbedDocChildren(doc);
+    expect(result).not.toBeNull();
+    expect(result!.child(0).lastChild!.type.name).toBe('table');
+  });
+
+  it('the live plugin absorbs a loose table after a card (F7-then-absorb path)', () => {
+    const doc = schema.nodes['doc']!.createChecked(null, [makeCard(), makeTable('t')]);
+    let state = EditorState.create({ doc, plugins: [absorbPlugin] });
+    // Any doc-changing transaction triggers the appendTransaction absorb pass.
+    state = state.apply(state.tr.insertText('x', 2));
+    expect(state.doc.childCount).toBe(1);
+    expect(state.doc.child(0).lastChild!.type.name).toBe('table');
+    expect(() => state.doc.check()).not.toThrow();
   });
 });
