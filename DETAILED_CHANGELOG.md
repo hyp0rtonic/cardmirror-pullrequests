@@ -5,7 +5,7 @@ behavior, rationale, and (where useful) the implementation context
 behind a change. For a shorter, jargon-free summary of what's new
 in each release, see `CHANGELOG.md`.
 
-## Unreleased
+## 0.1.0-beta.3 — 2026-06-29
 
 - **Nav-pane caret-tracking no longer flickers to the next heading while typing**
   (`editor/nav-panel.ts`, `editor/index.ts`, `editor/multi-pane-shell.ts`,
