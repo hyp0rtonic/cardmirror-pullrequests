@@ -47,6 +47,7 @@ import {
   condenseWithWarning,
   uncondense,
   toggleCase,
+  type HeadingMode,
 } from './condense.js';
 import { applyPlainPasteFromText, togglePlainPaste } from './paste-plugin.js';
 import { lockHighlighting } from './create-reference.js';
@@ -3425,6 +3426,70 @@ async function runElectronPlainPaste(
 }
 
 /**
+ * Desktop-only: paste the clipboard's plain text, then DESTRUCTIVELY condense
+ * just the pasted content WITHOUT preserving paragraph integrity — the net
+ * effect of an F2 plain paste followed by Alt-F3 (Condense Without Paragraph
+ * Integrity) over what you pasted. Reads the clipboard via the host (web can't),
+ * pastes with the settings-driven condense-on-paste suppressed, then forces
+ * `condenseMerge({ withPilcrows: false })` over the inserted range regardless of
+ * the user's condense settings. Unbound by default; no-op (the key falls
+ * through) off Electron.
+ */
+export function pasteCondensed(ctx: Pick<RibbonContext, 'headingMode'>): Command {
+  return (_state, dispatch, view) => {
+    if (!dispatch) return true;
+    const electron = getElectronHost();
+    if (!electron || !view) return false; // desktop-only — let the key fall through on web
+    void runPasteCondensed(electron, view, ctx);
+    return true;
+  };
+}
+
+async function runPasteCondensed(
+  electron: { clipboardReadText: () => Promise<string> },
+  view: EditorView,
+  ctx: Pick<RibbonContext, 'headingMode'>,
+): Promise<void> {
+  let text: string;
+  try {
+    text = await electron.clipboardReadText();
+  } catch (err) {
+    console.warn('Paste + condense — clipboard read failed:', err);
+    return;
+  }
+  pasteTextAndCondense(view, text, ctx.headingMode());
+}
+
+/**
+ * Paste `text` like an F2 plain paste (its settings-driven condense suppressed),
+ * then destructively condense just the inserted range with paragraph integrity
+ * off — the shared core of the Paste-and-Condense command, minus the clipboard
+ * read. Exported for tests.
+ */
+export function pasteTextAndCondense(view: EditorView, text: string, headingMode: HeadingMode): void {
+  if (!text) return;
+  // Left boundary of the paste: content lands at the selection start, and the
+  // cursor ends up at the far end after the paste.
+  const from = view.state.selection.from;
+  applyPlainPasteFromText(view, text, {
+    condenseOnPaste: () => false,
+    paragraphIntegrity: () => false,
+    usePilcrows: () => false,
+    headingMode: () => headingMode,
+  });
+  const to = view.state.selection.from; // cursor parked at the end of the paste
+  if (to <= from) return; // nothing landed
+  try {
+    // Select the just-pasted range, then run the destructive, integrity-off
+    // condense (identical to the Alt-F3 command, but scoped to the paste).
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
+    condenseMerge({ withPilcrows: false, headingMode })(view.state, view.dispatch.bind(view));
+  } catch (err) {
+    console.warn('Paste + condense — condense step failed:', err);
+  }
+}
+
+/**
  * Remove every `link` mark from the current scope — Verbatim's
  * `RemoveHyperlinks` macro, parity-friendly. Selection-sensitive:
  *
@@ -4366,6 +4431,7 @@ export type RibbonCommandId =
   | 'toggleCase'
   | 'copyPreviousCite'
   | 'pasteAsText'
+  | 'pasteCondensed'
   | 'clearToNormal'
   | 'shrink'
   | 'smartShrink'
@@ -4538,6 +4604,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'toggleCase',
   'copyPreviousCite',
   'pasteAsText',
+  'pasteCondensed',
   'clearToNormal',
   'shrink',
   'smartShrink',
@@ -4682,6 +4749,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   toggleCase: 'Toggle Case',
   copyPreviousCite: 'Copy Previous Cite',
   pasteAsText: 'Paste Plain Text',
+  pasteCondensed: 'Paste and Destructively Condense',
   clearToNormal: 'Clear',
   shrink: 'Shrink Card Text',
   smartShrink: 'Smart Shrink (Deeper for Unmarked Paragraphs)',
@@ -4826,6 +4894,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   smartShrink: ['smart shrink', 'deep shrink'],
   aiAskAboutSelection: ['question'],
   pasteAsText: ['paste without formatting', 'paste unformatted', 'paste text'],
+  pasteCondensed: ['paste condense', 'paste merge', 'paste flatten', 'paste no paragraphs', 'destructive paste'],
   removeHyperlinks: ['remove links', 'unlink'], // "delete …" via the delete/remove synonym group
   applyShading: ['shading', 'text highlight color'],
   insertImage: ['add image', 'insert picture', 'photo'],
@@ -4907,6 +4976,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   toggleCase: 'Shift-F3',
   copyPreviousCite: 'Alt-F8',
   pasteAsText: 'F2',
+  pasteCondensed: '',
   clearToNormal: 'F12',
   shrink: 'Mod-8',
   smartShrink: 'Mod-Alt-8',
@@ -5401,6 +5471,8 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
     case 'copyPreviousCite': return copyPreviousCite();
     case 'pasteAsText':
       return pasteAsText(ctx);
+    case 'pasteCondensed':
+      return pasteCondensed(ctx);
     case 'clearToNormal':
       return clearToNormal();
     case 'shrink':

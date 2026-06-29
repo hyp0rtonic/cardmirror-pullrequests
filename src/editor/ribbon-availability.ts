@@ -37,6 +37,8 @@ const FLOW_COMMANDS = new Set<RibbonCommandId>([
 export function isRibbonCommandAvailable(id: RibbonCommandId): boolean {
   if (FLOW_COMMANDS.has(id)) return isWindowsHost();
   if (id === 'toggleVoice') return getElectronHost() !== null;
+  // Reads the OS clipboard via the host — unreachable on the web build.
+  if (id === 'pasteCondensed') return getElectronHost() !== null;
   if (id === 'openCardCutter') return settings.get('cardCutterEnabled') === true;
   return true;
 }

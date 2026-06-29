@@ -9,6 +9,13 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Paste and Destructively Condense (desktop).** A command that pastes the
+  clipboard's plain text and immediately condenses just what you pasted, merging
+  its paragraphs (paragraph integrity off, destructive) — the result of an F2
+  paste followed by Alt-F3 over the pasted text. Unbound by default (bind it
+  under Settings → Keybindings). Desktop only — the web build can't read the
+  clipboard.
+
 - **Save Marked Cards.** Pull out just the cards you've placed a reading marker
   in and save them on their own, in your chosen format. Two ways in: a **"Marked
   Doc"** button in the Save As dialog, and a **Save Marked Cards** command

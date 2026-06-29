@@ -97,6 +97,7 @@ export const RIBBON_GROUPS: RibbonGroup[] = [
     title: 'Editing utilities',
     commands: [
       'pasteAsText',
+      'pasteCondensed',
       'clearToNormal',
       'shrink',
       'smartShrink',

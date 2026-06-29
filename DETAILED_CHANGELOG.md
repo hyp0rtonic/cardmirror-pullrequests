@@ -7,6 +7,23 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Paste and Destructively Condense command** (`editor/ribbon-commands.ts`,
+  `editor/ribbon-groups.ts`, `editor/ribbon-availability.ts`,
+  `tests/editor/paste-condensed.test.ts`). New desktop-only `pasteCondensed`
+  ribbon command — unbound by default, Editing-utilities group, palette aliases —
+  a direct PM Command modeled on `pasteAsText`: reads the OS clipboard via
+  `electron.clipboardReadText()`, pastes through `applyPlainPasteFromText` with
+  its settings-driven condense-on-paste suppressed, then runs a forced
+  `condenseMerge({ withPilcrows: false, headingMode: ctx.headingMode() })` over
+  the captured inserted range — equivalent to F2 then Alt-F3 (Condense Without
+  Paragraph Integrity) on the pasted content, regardless of the user's condense
+  settings. Web-gated via `isRibbonCommandAvailable` (`getElectronHost() !== null`,
+  like `toggleVoice`) plus a body self-guard that returns false so the key falls
+  through. The orchestration is extracted into an exported
+  `pasteTextAndCondense(view, text, headingMode)` (paste → capture range →
+  destructive condense) for testing; the test covers a 3-line paste merging into
+  a single card_body with no surviving breaks, and the empty no-op.
+
 - **Save Marked Cards** (`export/transform-for-export.ts`, `editor/save-as-ui.ts`,
   `editor/index.ts`, `editor/ribbon-commands.ts`, `editor/ribbon-groups.ts`,
   `editor/settings.ts`, `editor/settings-ui.ts`,
