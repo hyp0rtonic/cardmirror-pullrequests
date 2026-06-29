@@ -48,6 +48,9 @@ export interface SaveAsResult {
   /** Bake the private AI-thread layer into the file as real comments.
    *  Off by default, same rationale as notes. */
   includeAiThreads: boolean;
+  /** Keep ONLY the cards that contain a reading marker, flat (no headings, no
+   *  analytics). Mutually exclusive with the include-* / readMode options. */
+  markedCardsOnly: boolean;
 }
 
 export interface OpenSaveAsOptions {
@@ -161,6 +164,7 @@ class SaveAsModal {
         readMode: false,
         includeNotes: this.notesBox.checked,
         includeAiThreads: this.aiThreadsBox.checked,
+        markedCardsOnly: false,
       });
     });
 
@@ -191,6 +195,7 @@ class SaveAsModal {
           readMode: false,
           includeNotes: false,
           includeAiThreads: false,
+          markedCardsOnly: false,
         },
       ),
     );
@@ -205,6 +210,7 @@ class SaveAsModal {
           readMode: false,
           includeNotes: false,
           includeAiThreads: false,
+          markedCardsOnly: false,
         },
         'SEND_',
       ),
@@ -220,8 +226,25 @@ class SaveAsModal {
           readMode: true,
           includeNotes: false,
           includeAiThreads: false,
+          markedCardsOnly: false,
         },
         'READ_',
+      ),
+    );
+    presets.appendChild(
+      this.buildPreset(
+        'Marked Doc',
+        'Saves only the cards you marked.',
+        {
+          includeComments: false,
+          includeAnalytics: false,
+          includeUndertags: true,
+          readMode: false,
+          includeNotes: false,
+          includeAiThreads: false,
+          markedCardsOnly: true,
+        },
+        'MARKED_',
       ),
     );
     form.appendChild(presets);
@@ -282,6 +305,7 @@ class SaveAsModal {
       readMode: boolean;
       includeNotes: boolean;
       includeAiThreads: boolean;
+      markedCardsOnly: boolean;
     },
     prefix = '',
   ): HTMLElement {
@@ -397,6 +421,7 @@ class SaveAsModal {
       readMode: boolean;
       includeNotes: boolean;
       includeAiThreads: boolean;
+      markedCardsOnly: boolean;
     },
     prefix = '',
   ): void {

@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { schema, newHeadingId } from '../../src/schema/index.js';
-import { transformForExport } from '../../src/export/transform-for-export.js';
+import { transformForExport, countMarkedCards } from '../../src/export/transform-for-export.js';
 
 // ---- Doc builders ----------------------------------------------
 
@@ -288,5 +288,72 @@ describe('transformForExport — read mode', () => {
     const out = transformForExport(doc, RM);
     expect(out.childCount).toBe(1);
     expect(out.firstChild!.type.name).toBe('pocket');
+  });
+});
+
+// ---- marked cards -------------------------------------------------
+
+describe('markedCardsOnly transform', () => {
+  const MARKED = {
+    includeComments: false,
+    includeAnalytics: false,
+    includeUndertags: true,
+    readMode: false,
+    markedCardsOnly: true,
+  };
+  // A reading marker is plain red text — the font_color mark at FF0000.
+  const marker = (s: string) =>
+    schema.text(s, [schema.marks['font_color']!.create({ color: 'FF0000' })]);
+
+  it('keeps only marked cards, flat — drops headings, unmarked cards, analytics', () => {
+    const doc = makeDoc(
+      pocket('Pocket'),
+      card(tag('Tag A'), cardBody(txt('plain one'))), // unmarked
+      hat('Hat'),
+      card(tag('Tag B'), cardBody(txt('read to '), marker('Marked 3:00'))), // marked
+      analyticUnit(
+        schema.nodes['analytic']!.create({ id: newHeadingId() }, marker('marked analytic')),
+      ), // a marked ANALYTIC — not a card, so dropped
+      card(tag('Tag C'), cardBody(txt('plain two'))), // unmarked
+    );
+    const out = transformForExport(doc, MARKED);
+    expect(out.childCount).toBe(1);
+    expect(out.firstChild!.type.name).toBe('card');
+    expect(out.firstChild!.textContent).toContain('Tag B');
+  });
+
+  it('detects the marker anywhere in a card (tag, cite, undertag), not just the body', () => {
+    const plain = card(tag('T0'), cardBody(txt('no marker')));
+    const inTag = card(
+      schema.nodes['tag']!.create({ id: newHeadingId() }, marker('Marked tag')),
+      cardBody(txt('body')),
+    );
+    const inUndertag = card(
+      tag('T2'),
+      cardBody(txt('body')),
+      schema.nodes['undertag']!.create(null, marker('Marked undertag')),
+    );
+    const inCite = card(tag('T3'), citeParagraph(marker('Marked cite')));
+    const out = transformForExport(makeDoc(plain, inTag, inUndertag, inCite), MARKED);
+    expect(out.childCount).toBe(3); // every card but `plain`
+  });
+
+  it('countMarkedCards counts only cards with a marker', () => {
+    expect(countMarkedCards(makeDoc(card(tag('T'), cardBody(txt('plain')))))).toBe(0);
+    const some = makeDoc(
+      card(tag('T'), cardBody(marker('Marked'))),
+      card(tag('T2'), cardBody(txt('plain'))),
+      card(tag('T3'), cardBody(txt('x '), marker('Marked'))),
+    );
+    expect(countMarkedCards(some)).toBe(2);
+  });
+
+  it('produces an empty doc when nothing is marked', () => {
+    const doc = makeDoc(
+      pocket('P'),
+      card(tag('T'), cardBody(txt('plain'))),
+      analyticUnit(analytic('an analytic')),
+    );
+    expect(transformForExport(doc, MARKED).childCount).toBe(0);
   });
 });

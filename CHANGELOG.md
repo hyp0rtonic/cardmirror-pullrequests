@@ -9,6 +9,15 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Added
 
+- **Save Marked Cards.** Pull out just the cards you've placed a reading marker
+  in and save them on their own, in your chosen format. Two ways in: a **"Marked
+  Doc"** button in the Save As dialog, and a **Save Marked Cards** command
+  (default **Mod-Alt-M**, rebindable) that saves silently to a configurable
+  destination — Settings → *Marked Cards destination* (same folder / fixed
+  folder), with the `MARKED_` filename prefix and your default format — mirroring
+  Save Send Doc. Cards only (analytics and headings are dropped); if nothing is
+  marked it does nothing and says so.
+
 - **Smart quotes (optional).** Turn on Settings → Editing → "Smart quotes" and a
   straight `'` or `"` you type curls to the right direction by context — opening
   after a space, dash, bracket, or start of line; closing (and the apostrophe)

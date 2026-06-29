@@ -745,6 +745,10 @@ class SettingsModal {
       row.appendChild(text);
       row.appendChild(buildSendDocDestinationEditor());
       return row;
+    } else if (meta.kind === 'markedCardsDestination') {
+      row.appendChild(text);
+      row.appendChild(buildMarkedCardsDestinationEditor());
+      return row;
     } else if (meta.kind === 'findCategoryOrder') {
       row.appendChild(text);
       row.appendChild(buildFindCategoryOrderEditor());
@@ -3460,13 +3464,26 @@ function buildTranslationEditor(): HTMLElement {
 }
 
 function buildSendDocDestinationEditor(): HTMLElement {
+  return buildDestinationEditor('sendDocDestination', 'pmd-send-doc-dest');
+}
+
+function buildMarkedCardsDestinationEditor(): HTMLElement {
+  return buildDestinationEditor('markedCardsDestination', 'pmd-marked-cards-dest');
+}
+
+/** Same/fixed-folder radio for a save destination setting (Send Doc, Marked
+ *  Cards). `key` is the setting; `idPrefix` keeps the radio group distinct. */
+function buildDestinationEditor(
+  key: 'sendDocDestination' | 'markedCardsDestination',
+  idPrefix: string,
+): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'pmd-multi-doc-layout-mode-editor';
   const options: { value: 'sameFolder' | 'fixedFolder'; label: string }[] = [
     { value: 'sameFolder', label: 'Same folder as the document (default)' },
     { value: 'fixedFolder', label: 'Fixed folder (set below)' },
   ];
-  const groupName = `pmd-send-doc-dest-${Math.random().toString(36).slice(2, 8)}`;
+  const groupName = `${idPrefix}-${Math.random().toString(36).slice(2, 8)}`;
   for (const o of options) {
     const row = document.createElement('label');
     row.className = 'pmd-multi-doc-layout-mode-row';
@@ -3474,9 +3491,9 @@ function buildSendDocDestinationEditor(): HTMLElement {
     input.type = 'radio';
     input.name = groupName;
     input.value = o.value;
-    input.checked = o.value === settings.get('sendDocDestination');
+    input.checked = o.value === settings.get(key);
     input.addEventListener('change', () => {
-      if (input.checked) settings.set('sendDocDestination', o.value);
+      if (input.checked) settings.set(key, o.value);
     });
     row.appendChild(input);
     const labelText = document.createElement('span');

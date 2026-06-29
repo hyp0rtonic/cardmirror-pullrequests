@@ -4420,6 +4420,7 @@ export type RibbonCommandId =
   | 'save'
   | 'saveAs'
   | 'saveSendDoc'
+  | 'saveMarkedCards'
   | 'toggleAutosave'
   | 'newSpeechDocument'
   | 'markActiveAsSpeech'
@@ -4591,6 +4592,7 @@ export const RIBBON_COMMAND_IDS: RibbonCommandId[] = [
   'save',
   'saveAs',
   'saveSendDoc',
+  'saveMarkedCards',
   'toggleAutosave',
   'newSpeechDocument',
   'markActiveAsSpeech',
@@ -4734,6 +4736,7 @@ export const RIBBON_COMMAND_LABELS: Record<RibbonCommandId, string> = {
   save: 'Save',
   saveAs: 'Save As…',
   saveSendDoc: 'Save Send Doc',
+  saveMarkedCards: 'Save Marked Cards',
   toggleAutosave: 'Toggle Autosave',
   newSpeechDocument: 'New Speech Document',
   markActiveAsSpeech: 'Mark / Unmark Active Doc as the Speech Doc',
@@ -4845,6 +4848,7 @@ export const RIBBON_COMMAND_ALIASES: Partial<Record<RibbonCommandId, readonly st
   flipQuoteDirection: ['flip quotes', 'curly quotes', 'reverse quote direction', 'smart quote direction', 'fix apostrophe', 'quote direction'],
   deleteCurrentHeading: ['delete card', 'delete heading', 'delete current card'], // "remove …" via the delete/remove synonym group
   saveSendDoc: ['send doc', 'export send doc', 'send version'],
+  saveMarkedCards: ['marked cards', 'extract marked cards', 'export marked cards', 'save marked'],
   startFlowHost: ['warm flow', 'prewarm flow', 'flow connection', 'connect to flow', 'speed up flow'],
   toggleVoice: ['voice control', 'voice mode', 'dictation', 'speech', 'microphone', 'start voice', 'stop voice'],
   // The cutter shortcut serves double duty for its highlighting verbs, so
@@ -4967,6 +4971,7 @@ export const DEFAULT_RIBBON_KEYS: Record<RibbonCommandId, string | string[]> = {
   save: 'Mod-s',
   saveAs: 'Mod-Shift-s',
   saveSendDoc: 'Mod-Alt-s',
+  saveMarkedCards: 'Mod-Alt-m',
   toggleAutosave: '',
   // Verbatim's "Send to speech" — bare backtick (next to 1 on US
   // layouts) for at-cursor, Alt-backtick for at-end-of-doc. Same
@@ -5160,6 +5165,7 @@ export interface RibbonContext {
   save: () => void;
   saveAs: () => void;
   saveSendDoc: () => void;
+  saveMarkedCards: () => void;
   toggleAutosave: () => void;
   /** Speech-doc commands (Verbatim's `Paperless.SendToSpeech` family).
    *  All four are wired via the speech-doc registry — when the host
@@ -5300,6 +5306,7 @@ const DEFAULT_RIBBON_CONTEXT: RibbonContext = {
   save: () => {},
   saveAs: () => {},
   saveSendDoc: () => {},
+  saveMarkedCards: () => {},
   toggleAutosave: () => {},
   newSpeechDocument: () => {},
   markActiveAsSpeech: () => {},
@@ -5661,6 +5668,12 @@ function commandFor(id: RibbonCommandId, ctx: RibbonContext): Command {
       return (_state, dispatch) => {
         if (!dispatch) return true;
         ctx.saveSendDoc();
+        return true;
+      };
+    case 'saveMarkedCards':
+      return (_state, dispatch) => {
+        if (!dispatch) return true;
+        ctx.saveMarkedCards();
         return true;
       };
     case 'toggleAutosave':

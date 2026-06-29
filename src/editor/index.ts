@@ -15,7 +15,7 @@ import { baseKeymap } from 'prosemirror-commands';
 import { Node as PMNode, type Mark, DOMSerializer } from 'prosemirror-model';
 import { schema, newHeadingId } from '../schema/index.js';
 import { fromDocxFull, toDocx, serializeNative, parseNative, readDocIdFromBytes, stampDocId } from '../index.js';
-import { transformForExport } from '../export/transform-for-export.js';
+import { transformForExport, countMarkedCards } from '../export/transform-for-export.js';
 import type { Thread, Comment } from './comments-plugin.js';
 import type { LocalComment } from './learn-store.js';
 import { NavigationPanel } from './nav-panel.js';
@@ -1134,6 +1134,9 @@ const ribbonContext: RibbonContext = {
   },
   saveSendDoc: () => {
     void runSaveSendDocFlow();
+  },
+  saveMarkedCards: () => {
+    void runSaveMarkedCardsFlow();
   },
   toggleAutosave: () => {
     if (multiDocActive && multiDocToggleAutosave) {
@@ -5249,6 +5252,8 @@ async function serializeForSave(
     includeNotes?: boolean;
     /** Bake AI threads into the file as real comments (opt-in). */
     includeAiThreads?: boolean;
+    /** Keep only the cards that contain a reading marker, flat. */
+    markedCardsOnly?: boolean;
   },
   /** Stable doc identity to embed (`.cmir` field / `.docx` docProps).
    *  Omitted for derived/lossy exports, which stay clean (no identity). */
@@ -5260,6 +5265,7 @@ async function serializeForSave(
     includeAnalytics: opts.includeAnalytics,
     includeUndertags: opts.includeUndertags,
     readMode: opts.readMode,
+    markedCardsOnly: opts.markedCardsOnly ?? false,
   });
   if (view) gcOrphanThreads(view);
   const baseThreads =
@@ -5321,7 +5327,8 @@ export async function runSaveAsFlow(): Promise<boolean> {
     choice.includeUndertags &&
     !choice.readMode &&
     !choice.includeNotes &&
-    !choice.includeAiThreads;
+    !choice.includeAiThreads &&
+    !choice.markedCardsOnly;
   try {
     // A full Save As is a distinct logical doc → fork a new docId (the
     // original file keeps its own). Derived/lossy exports get no docId
@@ -5336,6 +5343,7 @@ export async function runSaveAsFlow(): Promise<boolean> {
         readMode: choice.readMode,
         includeNotes: choice.includeNotes,
         includeAiThreads: choice.includeAiThreads,
+        markedCardsOnly: choice.markedCardsOnly,
       },
       forkDocId,
     );
@@ -5480,6 +5488,79 @@ export async function runSaveSendDocFlow(): Promise<boolean> {
   } catch (err) {
     console.error('Send doc save failed:', err);
     alert(`Send doc save failed: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+}
+
+/**
+ * Save Marked Cards silently — the keyboard-bindable automation of the Save-As
+ * dialog's "Marked Cards" preset. Extracts only the cards containing a reading
+ * marker (flat — no headings, no analytics). Destination comes from settings:
+ * `markedCardsDestination` chooses the source file's folder (`sameFolder`) or a
+ * fixed folder (`markedCardsFolder`); the format follows `defaultSaveFormat`;
+ * the `MARKED_` prefix honors `prefixPresetSaveFilenames`. Same dialog fallbacks
+ * and derived-export semantics (working doc untouched) as Save Send Doc. No-ops
+ * with a toast when nothing is marked. Returns `true` when bytes hit disk.
+ */
+export async function runSaveMarkedCardsFlow(): Promise<boolean> {
+  const docToExport = view ? view.state.doc : currentDoc;
+  if (countMarkedCards(docToExport) === 0) {
+    showToast('No marked cards to save.');
+    return false;
+  }
+  const file = activeFile();
+  const format: 'cmir' | 'docx' = settings.get('defaultSaveFormat');
+  const base = basenameWithoutExt(file.filename ?? 'untitled');
+  const filename =
+    (settings.get('prefixPresetSaveFilenames') ? 'MARKED_' : '') + `${base}.${format}`;
+
+  let folder: string | null = null;
+  let siblingHandle: string | null = null;
+  if (settings.get('markedCardsDestination') === 'fixedFolder') {
+    folder = settings.get('markedCardsFolder') || null;
+  } else if (typeof file.handle === 'string' && file.handle) {
+    siblingHandle = file.handle;
+  }
+
+  try {
+    const bytes = await serializeForSave(format, {
+      includeComments: false,
+      includeAnalytics: false,
+      includeUndertags: true,
+      readMode: false,
+      markedCardsOnly: true,
+    });
+
+    const electron = getElectronHost();
+    let result: { name: string; handle?: unknown } | null = null;
+    if (electron && (folder || siblingHandle)) {
+      // Reuse the Send Doc silent-write IPC — it just writes bytes to a
+      // folder/sibling + filename, agnostic to what the bytes are.
+      const silent = await electron.saveSendDoc({ folder, siblingHandle, filename }, bytes);
+      if (silent === 'collision') {
+        result = await getHost().saveAs(filename, bytes, {
+          filters: saveFiltersForFormat(format),
+        });
+      } else {
+        result = silent;
+      }
+    } else {
+      result = await getHost().saveAs(filename, bytes, {
+        filters: saveFiltersForFormat(format),
+      });
+    }
+    if (!result) return false;
+    recordRecent({
+      handle: typeof result.handle === 'string' ? result.handle : null,
+      filename: result.name,
+      format,
+    });
+    flashSaveSuccess();
+    markNonPristineStarter();
+    return true;
+  } catch (err) {
+    console.error('Marked cards save failed:', err);
+    alert(`Marked cards save failed: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -6724,6 +6805,7 @@ async function reserializeJournalAs(
     includeAnalytics: true,
     includeUndertags: true,
     readMode: false,
+    markedCardsOnly: false,
   });
   return toDocx(
     exportDoc,

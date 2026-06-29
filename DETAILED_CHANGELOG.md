@@ -7,6 +7,30 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Save Marked Cards** (`export/transform-for-export.ts`, `editor/save-as-ui.ts`,
+  `editor/index.ts`, `editor/ribbon-commands.ts`, `editor/ribbon-groups.ts`,
+  `editor/settings.ts`, `editor/settings-ui.ts`,
+  `tests/export/transform-for-export.test.ts`). New `markedCardsOnly` branch in
+  `transformForExport` → `extractMarkedCards`: keeps only doc-level `card` nodes
+  whose subtree contains a reading-marker run (the `font_color` mark at FF0000,
+  via the exported `isReadingMarkerColor`), flat — headings, analytics, and
+  unmarked cards drop. `countMarkedCards` is exported for an empty-doc guard.
+  Threaded through `serializeForSave` (optional opt), the modal
+  (`SaveAsResult`/`buildPreset`/`confirmWith` + a new "Marked Doc" preset,
+  `MARKED_` prefix), and `runSaveAsFlow` (a derived/lossy export → working doc
+  identity untouched). New `saveMarkedCards` ribbon command (label "Save Marked
+  Cards", default `Mod-Alt-m`, File group, palette aliases) → the new
+  `runSaveMarkedCardsFlow`, modeled on `runSaveSendDocFlow`: silent write to
+  `markedCardsDestination` (`sameFolder`/`fixedFolder` → `markedCardsFolder`)
+  reusing the Send Doc IPC, with dialog fallback, `MARKED_` prefix honoring
+  `prefixPresetSaveFilenames`, and format from `defaultSaveFormat`; toasts + no-op
+  when nothing is marked. New `markedCardsDestination`/`markedCardsFolder`
+  settings (4-step + metadata, `electronOnly`) — the same/fixed-folder radio
+  editor was generalized (`buildDestinationEditor`) to serve both Send Doc and
+  Marked Cards. Tests cover marker detection anywhere in a card
+  (tag/body/cite/undertag), cards-only (analytics excluded), the flat output,
+  `countMarkedCards`, and the empty case.
+
 - **Bottom scroll runway gated on the whole pill tray, not just the dropzone**
   (`editor/index.ts`, `editor/style.css`). The editable's `padding-bottom: 4.5rem`
   runway (so the last line clears the fixed bottom-left tray) was gated on

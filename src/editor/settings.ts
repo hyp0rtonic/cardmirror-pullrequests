@@ -270,6 +270,13 @@ export interface Settings {
    *  is `fixedFolder`. Empty falls the command back to the OS save
    *  dialog. */
   sendDocFolder: string;
+  /** Where Save Marked Cards writes — same model as `sendDocDestination`:
+   *  `sameFolder` (default) drops it beside the source file, `fixedFolder`
+   *  always writes into `markedCardsFolder`. Unresolvable → Save-As dialog. */
+  markedCardsDestination: 'sameFolder' | 'fixedFolder';
+  /** Destination folder for Save Marked Cards when `markedCardsDestination`
+   *  is `fixedFolder`. Empty falls the command back to the OS save dialog. */
+  markedCardsFolder: string;
   /** When on, the highlight marks in the doc render in the colors
    *  defined by `overrideHighlightSlots` rather than their stored
    *  colors. Display-only — does NOT mutate the doc, so saving
@@ -1024,6 +1031,8 @@ const DEFAULTS: Settings = {
   prefixPresetSaveFilenames: true,
   sendDocDestination: 'sameFolder',
   sendDocFolder: '',
+  markedCardsDestination: 'sameFolder',
+  markedCardsFolder: '',
   theme: 'system',
   themeAppliesToDocument: false,
   iconSet: 'modern',
@@ -1235,6 +1244,7 @@ export interface SettingMeta {
     | 'saveFormat'
     | 'formattingGapClass'
     | 'sendDocDestination'
+    | 'markedCardsDestination'
     | 'findCategoryOrder'
     | 'color'
     | 'colorSlots'
@@ -1492,6 +1502,24 @@ export const SETTING_METADATA: SettingMeta[] = [
     label: 'Send Doc folder',
     description:
       'Destination folder for Save Send Doc when the destination above is set to "Fixed folder". Leave empty to fall back to the Save As dialog.',
+    kind: 'folder',
+    category: 'general',
+    electronOnly: true,
+  },
+  {
+    key: 'markedCardsDestination',
+    label: 'Marked Cards destination',
+    description:
+      'Where the Save Marked Cards command (and its shortcut) writes — a marked-cards doc is just the cards that contain a reading marker, flattened (no headings, no analytics), the same content the Save As dialog\'s Marked Cards preset produces. "Same folder as the document" drops it beside the source file; "Fixed folder" always writes into the folder below. Either way, a doc you haven\'t saved yet (same-folder mode) or an unset fixed folder falls back to the normal Save As dialog. Written in your default new-document format, and prefixed MARKED_ when that option is on.',
+    kind: 'markedCardsDestination',
+    category: 'general',
+    electronOnly: true,
+  },
+  {
+    key: 'markedCardsFolder',
+    label: 'Marked Cards folder',
+    description:
+      'Destination folder for Save Marked Cards when the destination above is set to "Fixed folder". Leave empty to fall back to the Save As dialog.',
     kind: 'folder',
     category: 'general',
     electronOnly: true,
@@ -2351,6 +2379,10 @@ function sanitize(s: Settings): Settings {
     sendDocDestination:
       s.sendDocDestination === 'fixedFolder' ? 'fixedFolder' : 'sameFolder',
     sendDocFolder: typeof s.sendDocFolder === 'string' ? s.sendDocFolder : '',
+    markedCardsDestination:
+      s.markedCardsDestination === 'fixedFolder' ? 'fixedFolder' : 'sameFolder',
+    markedCardsFolder:
+      typeof s.markedCardsFolder === 'string' ? s.markedCardsFolder : '',
     theme:
       s.theme === 'light' || s.theme === 'dark' ? s.theme : 'system',
     themeAppliesToDocument: !!s.themeAppliesToDocument,

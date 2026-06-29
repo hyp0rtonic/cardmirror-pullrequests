@@ -4,12 +4,14 @@
  * output reflects the user's inclusion choices without the exporter
  * itself needing per-feature flags.
  *
- * Four user options drive this:
+ * Five user options drive this:
  *   - includeComments   (no-op until comments import lands)
  *   - includeAnalytics  (strip analytic_units + in-card analytic)
  *   - includeUndertags  (strip undertag nodes wherever they live)
  *   - readMode          (mutually exclusive — replaces the above
  *                        and saves only what's visible in read mode)
+ *   - markedCardsOnly   (mutually exclusive — keep only the cards that
+ *                        contain a reading marker, flat)
  *
  * Read-mode export mirrors the read-mode plugin's keep/hide rules:
  *   - Headings (pocket / hat / block / tag / analytic): kept whole.
@@ -23,12 +25,17 @@
  */
 
 import type { Node as PMNode, Schema } from 'prosemirror-model';
+import { isReadingMarkerColor } from '../editor/reading-marker.js';
 
 export interface ExportTransformOptions {
   includeComments: boolean;
   includeAnalytics: boolean;
   includeUndertags: boolean;
   readMode: boolean;
+  /** Keep ONLY the cards that contain a reading marker, flat — no headings,
+   *  no analytics. Mutually exclusive with the other options (like readMode).
+   *  Optional / defaults off so existing callers don't have to opt in. */
+  markedCardsOnly?: boolean;
 }
 
 export function transformForExport(
@@ -36,6 +43,7 @@ export function transformForExport(
   opts: ExportTransformOptions,
 ): PMNode {
   if (opts.readMode) return applyReadModeTransform(doc);
+  if (opts.markedCardsOnly) return extractMarkedCards(doc);
 
   let out = doc;
   if (!opts.includeAnalytics) out = stripAnalytics(out);
@@ -150,6 +158,56 @@ function appendToMergeBuffer(buffer: PMNode[], next: PMNode, schema: Schema): vo
     }
   }
   buffer.push(next);
+}
+
+// --------------------------- marked cards ---------------------------
+//
+// A "marked" card is one whose subtree contains a reading-marker run — plain
+// red text (the `font_color` mark at the marker red), per reading-marker.ts.
+// Save Marked Cards extracts just those cards, flat (cards are doc-level
+// siblings; the heading hierarchy is implied by order, so dropping the headings
+// leaves a bare list of the cards the user marked). Analytics are never kept.
+
+/** True iff any text node in `node`'s subtree carries the reading-marker run. */
+function containsReadingMarker(node: PMNode): boolean {
+  let found = false;
+  node.descendants((n) => {
+    if (found) return false;
+    if (
+      n.isText &&
+      n.marks.some(
+        (m) =>
+          m.type.name === 'font_color' &&
+          isReadingMarkerColor(m.attrs['color'] as string | undefined),
+      )
+    ) {
+      found = true;
+    }
+    return !found;
+  });
+  return found;
+}
+
+/** Build a doc of just the doc-level `card` nodes containing a reading marker,
+ *  in document order. Kept whole; everything else (headings, unmarked cards,
+ *  analytics, loose blocks) drops. */
+function extractMarkedCards(doc: PMNode): PMNode {
+  const schema = doc.type.schema;
+  const out: PMNode[] = [];
+  doc.forEach((child) => {
+    if (child.type.name === 'card' && containsReadingMarker(child)) out.push(child);
+  });
+  return schema.nodes['doc']!.create(null, out);
+}
+
+/** How many doc-level cards contain a reading marker — so callers can warn
+ *  before a Save Marked Cards that would produce an empty document. */
+export function countMarkedCards(doc: PMNode): number {
+  let n = 0;
+  doc.forEach((child) => {
+    if (child.type.name === 'card' && containsReadingMarker(child)) n++;
+  });
+  return n;
 }
 
 // --------------------------- analytics ---------------------------
