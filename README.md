@@ -198,8 +198,9 @@ open one already pointing at the CardMirror folder.
 
 To make sure you're in the right directory, type `ls` (macOS / Linux) 
 or `dir` (Windows) and press Enter. You should see `package.json`, 
-`README.md`, `src`, `apps`. If you don't, your terminal is one 
-folder too high up.
+`README.md`, `src`, `apps`. If you don't, your terminal is likely one 
+folder too high up — verify your current folder with the `pwd` command
+(macOS / Linux / Windows PowerShell) or by typing `echo %cd%` (Windows, non-PowerShell).
 
 ### 4. Install dependencies
 
