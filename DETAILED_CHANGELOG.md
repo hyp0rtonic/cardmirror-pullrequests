@@ -7,6 +7,19 @@ in each release, see `CHANGELOG.md`.
 
 ## Unreleased
 
+- **Bottom scroll runway gated on the whole pill tray, not just the dropzone**
+  (`editor/index.ts`, `editor/style.css`). The editable's `padding-bottom: 4.5rem`
+  runway (so the last line clears the fixed bottom-left tray) was gated on
+  `html:not(.pmd-dropzone-pill-hidden)` — driven solely by `showDropzonePill`. But
+  the send/receive pills share that tray and are gated on `pairingEnabled`, so
+  pairing-on / dropzone-pill-off left the pills covering the last line with no
+  runway. `applyPillVisibility()` now also toggles `pmd-pill-tray-active` on
+  `<html>` = `showDropzonePill || pairingEnabled`, and both runway rules — single-
+  pane (`#editor .ProseMirror`) and multi-pane (`.pmd-pane-pill-anchored
+  .pmd-pane-editor .ProseMirror`) — gate on `html.pmd-pill-tray-active` instead.
+  `pmd-dropzone-pill-hidden` still hides the dropzone root (style.css ~3198); only
+  the runway gate moved. `positionDropzone` already tags the correct anchor pane.
+
 - **Smart quotes (typing-time) + Flip Quote Direction command**
   (`editor/smart-quotes-plugin.ts` new, `editor/flip-quote-direction.ts` new,
   `editor/index.ts`, `editor/settings.ts`, `editor/ribbon-commands.ts`,

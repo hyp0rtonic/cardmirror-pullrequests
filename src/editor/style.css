@@ -3229,17 +3229,19 @@ html.pmd-quickcards-hidden #quickcards-stack {
   pointer-events: auto;
 }
 
-/* When the dropzone pill is showing it floats over the editor's
-   bottom-left, covering whatever doc content is there — fine until you
-   scroll to the very end, where there's no further scroll to free that
-   content. Pad the bottom of the editable itself: this extends the doc
-   content's height (the same thing that drives #app's scroll for any
-   long doc), so the last line can scroll up clear of the pill. ~4.5rem
-   clears the closed pill (its ~30px bar + the gap above the status bar)
-   with breathing room. Single-doc only — multi-pane panes scroll
-   independently. (Note: #editor is `zoom`-scaled, so this padding
-   scales with the editor zoom, which is fine — more zoom, more room.) */
-html:not(.pmd-dropzone-pill-hidden) body:not(.pmd-multi-doc) #editor .ProseMirror {
+/* When any tray pill (dropzone / send / receive) is showing it floats
+   over the editor's bottom-left, covering whatever doc content is there —
+   fine until you scroll to the very end, where there's no further scroll
+   to free that content. Pad the bottom of the editable itself: this
+   extends the doc content's height (the same thing that drives #app's
+   scroll for any long doc), so the last line can scroll up clear of the
+   tray. ~4.5rem clears the closed pill (its ~30px bar + the gap above the
+   status bar) with breathing room. Single-doc only — multi-pane panes
+   scroll independently. (Note: #editor is `zoom`-scaled, so this padding
+   scales with the editor zoom, which is fine — more zoom, more room.)
+   Gated on `pmd-pill-tray-active` (ANY tray pill visible), not just the
+   dropzone — the send/receive pills occupy the same bottom-left band. */
+html.pmd-pill-tray-active body:not(.pmd-multi-doc) #editor .ProseMirror {
   padding-bottom: 4.5rem;
 }
 /* Multi-pane mirror of the runway above. The tray overlaps only the pane it
@@ -3247,7 +3249,7 @@ html:not(.pmd-dropzone-pill-hidden) body:not(.pmd-multi-doc) #editor .ProseMirro
    positionDropzone — so give just that pane's editor the same bottom runway;
    the other panes have no pill over them and stay flush. (Keep the value in
    sync with the single-doc rule above.) */
-html:not(.pmd-dropzone-pill-hidden) .pmd-pane-pill-anchored .pmd-pane-editor .ProseMirror {
+html.pmd-pill-tray-active .pmd-pane-pill-anchored .pmd-pane-editor .ProseMirror {
   padding-bottom: 4.5rem;
 }
 

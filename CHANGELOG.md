@@ -112,6 +112,13 @@ see `DETAILED_CHANGELOG.md`.
 
 ### Fixed
 
+- **The bottom scroll runway now accounts for the send/receive pills.** The
+  extra space that lets the last line of a document clear the bottom-left shelf
+  was only added when the dropzone pill was showing. With pairing enabled but the
+  dropzone pill hidden, the send/receive pills sat in that same band yet the
+  runway was missing, so the last line clipped behind them. It now appears
+  whenever any tray pill is showing — in both single-pane and multi-pane.
+
 - **Timer duration fields no longer lose focus while typing.** In the timer
   durations settings, the field used to deselect after a single digit, so you
   couldn't type a two-digit value like "10" without it jumping away. It now stays

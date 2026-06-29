@@ -2460,6 +2460,15 @@ function applyPillVisibility(): void {
     'pmd-quickcards-hidden',
     !settings.get('showQuickCardButtons'),
   );
+  // The bottom scroll runway is gated on the WHOLE tray, not just the dropzone:
+  // the send/receive pills (shown when pairing is enabled) occupy the same
+  // bottom-left band, so the last line must clear them too. Applies in both
+  // single-pane (#editor) and multi-pane (the anchored pane) — see the
+  // `html.pmd-pill-tray-active … padding-bottom` rules in style.css.
+  document.documentElement.classList.toggle(
+    'pmd-pill-tray-active',
+    settings.get('showDropzonePill') || settings.get('pairingEnabled'),
+  );
 }
 
 // Apply read-mode visual state and editing lockdown whenever the
